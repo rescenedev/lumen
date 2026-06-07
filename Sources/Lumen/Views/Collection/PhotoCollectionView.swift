@@ -43,6 +43,10 @@ struct PhotoCollectionView: NSViewRepresentable {
 
         let coord = context.coordinator
         cv.onKey = { [weak coord] key in coord?.handleKey(key) ?? false }
+        cv.onArrow = { [weak coord, weak cv] dx, dy, shift in
+            guard let coord, let cv else { return false }
+            return coord.handleArrow(dx: dx, dy: dy, shift: shift, in: cv)
+        }
         cv.menuProvider = { [weak coord, weak cv] event in
             guard let coord, let cv else { return nil }
             let pt = cv.convert(event.locationInWindow, from: nil)
@@ -172,6 +176,7 @@ struct PhotoCollectionView: NSViewRepresentable {
             if let last = cv.selectionIndexPaths.max(by: { $0.item < $1.item }), photos.indices.contains(last.item) {
                 model.selectionAnchor = photos[last.item].id
                 appliedAnchor = photos[last.item].id
+                cursorIndex = last.item
             }
         }
 
@@ -191,6 +196,63 @@ struct PhotoCollectionView: NSViewRepresentable {
             if let ip = cv.indexPathForItem(at: pt), photos.indices.contains(ip.item) {
                 model.openViewer(photos[ip.item])
             }
+        }
+
+        // The keyboard "cursor" cell — where the next arrow move starts from.
+        var cursorIndex: Int?
+
+        /// Columns currently laid out (so up/down move a true grid row, and Shift
+        /// builds a rectangle instead of an index range).
+        private func columns(_ cv: NSCollectionView) -> Int {
+            guard let layout = cv.collectionViewLayout as? AdaptiveFlowLayout, layout.itemSize.width > 0
+            else { return 1 }
+            let insets = layout.sectionInset.left + layout.sectionInset.right
+            let g = layout.minimumInteritemSpacing
+            let avail = cv.bounds.width - insets
+            return max(1, Int((avail + g) / (layout.itemSize.width + g)))
+        }
+
+        /// Grid-aware arrow navigation. Plain arrow moves a single selection;
+        /// Shift extends a RECTANGULAR block from the anchor to the cursor (so
+        /// ⇧↓ from a 2-wide selection makes a 2×2, not a full index range).
+        func handleArrow(dx: Int, dy: Int, shift: Bool, in cv: NSCollectionView) -> Bool {
+            guard !photos.isEmpty else { return false }
+            let cols = columns(cv)
+            let anchorIdx = model.selectionAnchor.flatMap { indexByID[$0] } ?? cursorIndex ?? 0
+            let cur = cursorIndex ?? anchorIdx
+            let lastRow = (photos.count - 1) / cols
+            let row = min(max(0, cur / cols + dy), lastRow)
+            let col = min(max(0, cur % cols + dx), cols - 1)
+            var next = row * cols + col
+            if next >= photos.count { next = photos.count - 1 }
+            cursorIndex = next
+
+            let indices: Set<Int>
+            if shift {
+                indices = rectBlock(anchorIdx, next, cols: cols)
+            } else {
+                indices = [next]
+                if photos.indices.contains(next) {
+                    model.selectionAnchor = photos[next].id
+                    appliedAnchor = photos[next].id
+                }
+            }
+            let sel = Set(indices.compactMap { photos.indices.contains($0) ? photos[$0].id : nil })
+            model.selection = sel
+            applySelection(cv, sel)
+            cv.scrollToItems(at: [IndexPath(item: next, section: 0)], scrollPosition: .nearestHorizontalEdge)
+            return true
+        }
+
+        private func rectBlock(_ a: Int, _ b: Int, cols: Int) -> Set<Int> {
+            let r0 = min(a / cols, b / cols), r1 = max(a / cols, b / cols)
+            let c0 = min(a % cols, b % cols), c1 = max(a % cols, b % cols)
+            var out = Set<Int>()
+            for r in r0...r1 { for c in c0...c1 {
+                let i = r * cols + c
+                if i < photos.count { out.insert(i) }
+            } }
+            return out
         }
 
         func handleKey(_ key: LumenKey) -> Bool {
@@ -253,15 +315,21 @@ final class AdaptiveFlowLayout: NSCollectionViewFlowLayout {
 /// NSCollectionView subclass routing custom keys + context menus to the coordinator.
 final class LumenCollectionView: NSCollectionView {
     var onKey: ((LumenKey) -> Bool)?
+    var onArrow: ((_ dx: Int, _ dy: Int, _ shift: Bool) -> Bool)?
     var menuProvider: ((NSEvent) -> NSMenu?)?
 
     override func keyDown(with event: NSEvent) {
-        let handled: Bool
+        let shift = event.modifierFlags.contains(.shift)
+        var handled = false
         switch event.keyCode {
-        case 49: handled = onKey?(.space) ?? false    // space
-        case 36, 76: handled = onKey?(.enter) ?? false // return / enter
+        case 49: handled = onKey?(.space) ?? false       // space
+        case 36, 76: handled = onKey?(.enter) ?? false   // return / enter
         case 51, 117: handled = onKey?(.delete) ?? false // delete / fwd-delete
-        default: handled = false
+        case 123: handled = onArrow?(-1, 0, shift) ?? false  // ←
+        case 124: handled = onArrow?(1, 0, shift) ?? false   // →
+        case 125: handled = onArrow?(0, 1, shift) ?? false   // ↓
+        case 126: handled = onArrow?(0, -1, shift) ?? false  // ↑
+        default: break
         }
         if !handled { super.keyDown(with: event) }
     }

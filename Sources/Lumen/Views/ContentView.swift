@@ -56,6 +56,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showAbout) { AboutView() }
         .sheet(isPresented: $model.showShortcuts) { ShortcutsView() }
+        .sheet(isPresented: $model.showEditor) {
+            if let target = model.editTarget { CropResizeView(photo: target) }
+        }
         .overlay(alignment: .bottom) { toastBanner }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.toast)
     }

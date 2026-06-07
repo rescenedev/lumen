@@ -14,6 +14,9 @@ struct PhotoContextMenu: View {
         if !isBatch {
             Button("Open") { model.openViewer(photo) }
             Button("Quick Look") { QuickLookPreview.shared.show(urls: [photo.url], startAt: 0) }
+            if !photo.isAsset {
+                Button("Crop & Resize…") { model.startEdit(photo) }
+            }
         }
         if targets.count == 2 {
             Button("Compare") { model.openCompare(targets) }

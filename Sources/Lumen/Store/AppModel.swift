@@ -127,6 +127,33 @@ final class AppModel {
     var showAbout = false
     var showShortcuts = false
 
+    // Crop & resize editor (non-destructive by default).
+    var editTarget: Photo?
+    var showEditor = false
+
+    /// Open the crop/resize editor for a file-backed photo. Apple Photos assets
+    /// have no editable file, so they're skipped.
+    func startEdit(_ photo: Photo) {
+        guard !photo.isAsset else { showToast("Apple Photos 항목은 편집할 수 없습니다 (파일 사진만 가능)."); return }
+        editTarget = photo
+        showEditor = true
+    }
+
+    /// Called after the editor writes. Refreshes caches/grid so the result shows.
+    func didEdit(source: URL, output: URL, overwrote: Bool) {
+        if overwrote {
+            // Same path, new pixels → drop cached decodes and force the grid to
+            // re-request thumbnails.
+            ThumbnailCache.shared.clear()
+            FullImageLoader.shared.clear()
+            allPhotos = allPhotos            // bump libraryVersion → grid reloads
+            showToast("원본을 편집본으로 덮어썼습니다 · \(source.lastPathComponent)")
+        } else {
+            rescanRoots()                    // pick up the new "(edited)" file
+            showToast("편집본 저장됨 · \(output.lastPathComponent)")
+        }
+    }
+
     // Transient status toast (friendly error/info messages).
     private(set) var toast: String?
     @ObservationIgnored private var toastWork: DispatchWorkItem?
