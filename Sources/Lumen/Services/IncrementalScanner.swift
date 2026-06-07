@@ -30,14 +30,36 @@ enum IncrementalScanner {
                 && cachedByFolder[dir.path] != nil
 
             if unchanged {
-                // Reuse cached photos; only list to find subfolders (cheap — no per-file stat).
-                photos.append(contentsOf: cachedByFolder[dir.path] ?? [])
-                let subdirs = (try? fm.contentsOfDirectory(
+                // Mtime says the folder is untouched — but the mtime cache and the
+                // photo cache are persisted separately and can drift out of sync
+                // (a stale entry then survives forever). So instead of blindly
+                // trusting the cache, reconcile it against the live listing: reuse
+                // cached metadata for files still present (NO per-file stat — the
+                // NAS win), drop files that vanished, and stat only genuinely new
+                // ones. The listing is the one readdir we already do for subfolders.
+                let listing = try? fm.contentsOfDirectory(
                     at: dir, includingPropertiesForKeys: [.isDirectoryKey],
-                    options: [.skipsHiddenFiles])) ?? []
-                for entry in subdirs where
-                    (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
-                    walk(entry)
+                    options: [.skipsHiddenFiles])
+                if let entries = listing {
+                    let cached = Dictionary(
+                        (cachedByFolder[dir.path] ?? []).map { ($0.url, $0) },
+                        uniquingKeysWith: { a, _ in a })
+                    for entry in entries {
+                        if (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                            walk(entry)
+                        } else if Photo.isSupported(entry) {
+                            if let hit = cached[entry] {
+                                photos.append(hit)                          // present — reuse, no stat
+                            } else if let values = try? entry.resourceValues(forKeys: fileKeys),
+                                      values.isRegularFile == true {
+                                photos.append(Photo(url: entry, resourceValues: values))   // new — stat just this one
+                            }
+                        }
+                    }
+                } else {
+                    // Listing failed (e.g. a transient NAS hiccup) — keep the cached
+                    // photos as-is rather than wrongly dropping the whole folder.
+                    photos.append(contentsOf: cachedByFolder[dir.path] ?? [])
                 }
             } else {
                 // Changed (or first time): full listing with file metadata prefetched.
