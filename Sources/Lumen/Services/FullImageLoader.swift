@@ -11,8 +11,8 @@ final class FullImageLoader {
     private let queue = DispatchQueue(label: "lumen.fullimage", qos: .userInitiated)
 
     private init() {
-        // ~200 MB — holds several 4096px images, evicting the oldest by cost.
-        cache.totalCostLimit = 200 * 1024 * 1024
+        // ~128 MB — holds a few 4096px images (current + neighbours), evicting oldest.
+        cache.totalCostLimit = 128 * 1024 * 1024
     }
 
     private func cost(of image: NSImage) -> Int {

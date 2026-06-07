@@ -3,7 +3,7 @@ import SwiftUI
 /// Shared right-click menu for a photo. When the clicked photo is part of a
 /// multi-selection, actions apply to the whole selection.
 struct PhotoContextMenu: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     let photo: Photo
 
     private var targets: [Photo] { model.actionTargets(for: photo) }

@@ -3,7 +3,7 @@ import SwiftUI
 /// Interactive rating / color-label / tag editor in the inspector. Edits apply
 /// to all `targets` (the current photo or the whole selection).
 struct MetadataEditor: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     let targets: [Photo]
 
     @State private var newTag = ""

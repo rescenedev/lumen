@@ -3,7 +3,7 @@ import SwiftUI
 /// Full-window single-photo viewer presented as an overlay. Supports zoom,
 /// pan, keyboard + on-screen navigation, favoriting, and a slideshow.
 struct ViewerView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     @FocusState private var focused: Bool
 
     // Zoom & pan state

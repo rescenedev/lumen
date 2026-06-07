@@ -3,7 +3,7 @@ import SwiftUI
 /// Left sidebar: library shortcuts, smart collections, albums, tags, color
 /// labels, and folders.
 struct SidebarView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     @State private var renamingAlbum: Album?
     @State private var renameText = ""
 

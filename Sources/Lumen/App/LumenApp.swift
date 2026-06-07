@@ -2,12 +2,12 @@ import SwiftUI
 
 @main
 struct LumenApp: App {
-    @StateObject private var model = AppModel()
+    @State private var model = AppModel()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(model)
+                .environment(model)
                 .frame(minWidth: 900, minHeight: 600)
         }
         .windowToolbarStyle(.unified)
@@ -69,7 +69,7 @@ struct LumenApp: App {
 
         Settings {
             SettingsView()
-                .environmentObject(model)
+                .environment(model)
         }
     }
 }

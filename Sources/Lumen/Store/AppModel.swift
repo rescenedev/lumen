@@ -1,29 +1,31 @@
 import AppKit
 import SwiftUI
+import Observation
 
 /// Central observable state for the whole app.
 @MainActor
-final class AppModel: ObservableObject {
+@Observable
+final class AppModel {
     // Library
-    @Published private(set) var allPhotos: [Photo] = [] { didSet { libraryVersion &+= 1 } }
-    @Published private(set) var rootFolders: [URL] = []
-    @Published var isScanning = false
+    private(set) var allPhotos: [Photo] = [] { didSet { libraryVersion &+= 1 } }
+    private(set) var rootFolders: [URL] = []
+    var isScanning = false
 
     // Cheap monotonic counters used to invalidate memoized derived collections.
-    private var libraryVersion = 0
-    private var albumsVersion = 0
-    private var indexVersion = 0
+    @ObservationIgnored private var libraryVersion = 0
+    @ObservationIgnored private var albumsVersion = 0
+    @ObservationIgnored private var indexVersion = 0
 
     // Navigation / filtering
     /// What the sidebar highlights — updates instantly so keyboard navigation
     /// stays responsive.
-    @Published var selectedSidebar: SidebarItem = .allPhotos {
+    var selectedSidebar: SidebarItem = .allPhotos {
         didSet { scheduleSidebarCommit() }
     }
     /// What the grid actually shows — debounced, so arrowing through folders
     /// doesn't recompute/redraw the grid on every transient selection.
-    @Published private(set) var committedSidebar: SidebarItem = .allPhotos
-    private var sidebarCommitWork: DispatchWorkItem?
+    private(set) var committedSidebar: SidebarItem = .allPhotos
+    @ObservationIgnored private var sidebarCommitWork: DispatchWorkItem?
 
     private func scheduleSidebarCommit() {
         guard selectedSidebar != committedSidebar else { return }
@@ -33,61 +35,61 @@ final class AppModel: ObservableObject {
         sidebarCommitWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
     }
-    @Published var sortOrder: SortOrder = .dateNewest
-    @Published var searchText = ""
-    @Published var thumbnailSize: Double = 170
-    @Published var filter = FilterState()
-    @Published var groupByMonth = false
+    var sortOrder: SortOrder = .dateNewest
+    var searchText = ""
+    var thumbnailSize: Double = 170
+    var filter = FilterState()
+    var groupByMonth = false
 
     // Presentation + multi-selection
-    @Published var viewMode: ViewMode = .grid { didSet { persistSettings() } }
-    @Published var selection: Set<Photo.ID> = []
-    @Published var selectionAnchor: Photo.ID?
+    var viewMode: ViewMode = .grid { didSet { persistSettings() } }
+    var selection: Set<Photo.ID> = []
+    var selectionAnchor: Photo.ID?
 
     // Viewer
-    @Published var viewerPhotos: [Photo] = []
-    @Published var viewerIndex: Int?
-    @Published var showExifOverlay = false
-    @Published var compareSecondary: Photo?
+    var viewerPhotos: [Photo] = []
+    var viewerIndex: Int?
+    var showExifOverlay = false
+    var compareSecondary: Photo?
 
     // Deletion
-    @Published var photosPendingDeletion: [Photo] = []
-    @Published var showDeleteConfirmation = false
+    var photosPendingDeletion: [Photo] = []
+    var showDeleteConfirmation = false
 
     // Sheets / dialogs
-    @Published var showNewAlbumSheet = false
-    @Published var newAlbumNameDraft = ""
-    private var newAlbumPhotos: [Photo] = []
-    @Published var showRenameSheet = false
-    @Published var renameTargets: [Photo] = []
+    var showNewAlbumSheet = false
+    var newAlbumNameDraft = ""
+    @ObservationIgnored private var newAlbumPhotos: [Photo] = []
+    var showRenameSheet = false
+    var renameTargets: [Photo] = []
 
     // Metadata
-    @Published private(set) var metaRevision = 0
-    @Published private(set) var albums: [Album] = [] { didSet { albumsVersion &+= 1 } }
+    private(set) var metaRevision = 0
+    private(set) var albums: [Album] = [] { didSet { albumsVersion &+= 1 } }
 
     // Incrementally-maintained sidebar counts (so favoriting one photo doesn't
     // rescan the whole library).
-    @Published private(set) var favoritesCount = 0
-    @Published private(set) var labelCounts: [ColorLabel: Int] = [:]
+    private(set) var favoritesCount = 0
+    private(set) var labelCounts: [ColorLabel: Int] = [:]
 
     // Background full-library thumbnail warming. In its own observable so its
     // frequent progress ticks don't re-render the grid/sidebar.
-    let warming = WarmingMonitor()
+    @ObservationIgnored let warming = WarmingMonitor()
 
     // Folder presentation (hierarchical tree by default)
-    @Published var folderTreeView = true { didSet { persistSettings() } }
+    var folderTreeView = true { didSet { persistSettings() } }
 
     // Background indexes
-    @Published private(set) var exif: [String: ExifInfo] = [:] { didSet { indexVersion &+= 1 } }
-    @Published private(set) var duplicatePaths: Set<String> = [] { didSet { indexVersion &+= 1 } }
+    private(set) var exif: [String: ExifInfo] = [:] { didSet { indexVersion &+= 1 } }
+    private(set) var duplicatePaths: Set<String> = [] { didSet { indexVersion &+= 1 } }
 
     // Settings
-    @Published var confirmBeforeDelete = true { didSet { persistSettings() } }
-    @Published var slideshowInterval: Double = 3.5 { didSet { persistSettings() } }
+    var confirmBeforeDelete = true { didSet { persistSettings() } }
+    var slideshowInterval: Double = 3.5 { didSet { persistSettings() } }
 
-    private let store = MetadataStore()
-    private var watcher: FolderWatcher?
-    private let recentKey = "lumen.recentRoots"
+    @ObservationIgnored private let store = MetadataStore()
+    @ObservationIgnored private var watcher: FolderWatcher?
+    @ObservationIgnored private let recentKey = "lumen.recentRoots"
 
     init() {
         albums = store.albums
@@ -306,14 +308,14 @@ final class AppModel: ObservableObject {
 
     // Small LRU of recent scope results so flipping between folders is instant
     // (not just the single most-recent one).
-    private var visibleCacheMap: [Int: [Photo]] = [:]
-    private var visibleCacheOrder: [Int] = []
-    private let visibleCacheCapacity = 8
+    @ObservationIgnored private var visibleCacheMap: [Int: [Photo]] = [:]
+    @ObservationIgnored private var visibleCacheOrder: [Int] = []
+    @ObservationIgnored private let visibleCacheCapacity = 4
 
     /// True when the current view's contents depend on per-photo metadata, so a
     /// favorite/rating/label edit should invalidate the cached list. Most views
     /// (All Photos, a folder) don't — so culling stays fast.
-    private var viewDependsOnMeta: Bool {
+    @ObservationIgnored private var viewDependsOnMeta: Bool {
         switch committedSidebar {
         case .favorites, .label, .tag: return true
         default: break
@@ -324,7 +326,7 @@ final class AppModel: ObservableObject {
     }
 
     /// A cheap hash of every input that affects `visiblePhotos`.
-    private var visibleSignature: Int {
+    @ObservationIgnored private var visibleSignature: Int {
         var hasher = Hasher()
         hasher.combine(libraryVersion)
         hasher.combine(albumsVersion)
@@ -357,10 +359,10 @@ final class AppModel: ObservableObject {
 
     // The library sorted once per (libraryVersion, sortOrder) — so switching
     // scope or typing a search no longer re-sorts 50k photos every keystroke.
-    private var sortedCache: [Photo] = []
-    private var sortedCacheKey = -1
+    @ObservationIgnored private var sortedCache: [Photo] = []
+    @ObservationIgnored private var sortedCacheKey = -1
 
-    private var sortedAllPhotos: [Photo] {
+    @ObservationIgnored private var sortedAllPhotos: [Photo] {
         var hasher = Hasher()
         hasher.combine(libraryVersion)
         hasher.combine(sortOrder)
@@ -397,8 +399,8 @@ final class AppModel: ObservableObject {
         var folderCounts: [URL: Int] = [:]
     }
 
-    private var statsCache = LibraryStats()
-    private var statsCacheKey = -1
+    @ObservationIgnored private var statsCache = LibraryStats()
+    @ObservationIgnored private var statsCacheKey = -1
 
     var stats: LibraryStats {
         if libraryVersion == statsCacheKey { return statsCache }
@@ -422,8 +424,8 @@ final class AppModel: ObservableObject {
 
     // MARK: - Folder tree
 
-    private var folderTreeCache: [FolderNode] = []
-    private var folderTreeCacheKey = -1
+    @ObservationIgnored private var folderTreeCache: [FolderNode] = []
+    @ObservationIgnored private var folderTreeCacheKey = -1
 
     var folderTree: [FolderNode] {
         if libraryVersion == folderTreeCacheKey { return folderTreeCache }
@@ -508,9 +510,9 @@ final class AppModel: ObservableObject {
     var selectedPhotos: [Photo] { allPhotos.filter { selection.contains($0.id) } }
 
     // O(1) photo lookup by id, rebuilt only when the library changes.
-    private var idIndexCache: [URL: Photo] = [:]
-    private var idIndexKey = -1
-    private var photoByID: [URL: Photo] {
+    @ObservationIgnored private var idIndexCache: [URL: Photo] = [:]
+    @ObservationIgnored private var idIndexKey = -1
+    @ObservationIgnored private var photoByID: [URL: Photo] {
         if libraryVersion == idIndexKey { return idIndexCache }
         idIndexCache = Dictionary(allPhotos.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
         idIndexKey = libraryVersion
@@ -521,9 +523,9 @@ final class AppModel: ObservableObject {
 
     // Photos grouped by their immediate folder, so folder scope is O(result)
     // instead of an O(library) prefix scan on every folder click.
-    private var folderIndexCache: [String: [Photo]] = [:]
-    private var folderIndexKey = -1
-    private var directPhotosByFolder: [String: [Photo]] {
+    @ObservationIgnored private var folderIndexCache: [String: [Photo]] = [:]
+    @ObservationIgnored private var folderIndexKey = -1
+    @ObservationIgnored private var directPhotosByFolder: [String: [Photo]] {
         if libraryVersion == folderIndexKey { return folderIndexCache }
         folderIndexCache = Dictionary(grouping: allPhotos) { $0.folderURL.path }
         folderIndexKey = libraryVersion
@@ -531,9 +533,9 @@ final class AppModel: ObservableObject {
     }
 
     // Pre-lowercased filenames for fast search, rebuilt only on library change.
-    private var lowerNameCache: [URL: String] = [:]
-    private var lowerNameKey = -1
-    private var lowerNames: [URL: String] {
+    @ObservationIgnored private var lowerNameCache: [URL: String] = [:]
+    @ObservationIgnored private var lowerNameKey = -1
+    @ObservationIgnored private var lowerNames: [URL: String] {
         if libraryVersion == lowerNameKey { return lowerNameCache }
         lowerNameCache = Dictionary(allPhotos.map { ($0.url, $0.filename.lowercased()) },
                                     uniquingKeysWith: { a, _ in a })
@@ -653,7 +655,7 @@ final class AppModel: ObservableObject {
         startThumbnailWarming()
     }
 
-    @Published private(set) var isIndexingExif = false
+    private(set) var isIndexingExif = false
 
     /// Index EXIF for any photos that don't have it yet — called on demand when
     /// the Map or an EXIF-based filter is first used, so a plain browse session
@@ -697,7 +699,7 @@ final class AppModel: ObservableObject {
 
     // MARK: - Duplicates (on-demand — never scans the whole NAS automatically)
 
-    @Published var isFindingDuplicates = false
+    var isFindingDuplicates = false
 
     func findDuplicates() {
         guard !isFindingDuplicates, !allPhotos.isEmpty else { return }
@@ -821,9 +823,9 @@ final class AppModel: ObservableObject {
 
     // MARK: - Folder actions
 
-    @Published var showFolderRenameSheet = false
-    @Published var folderRenameDraft = ""
-    private var folderRenameURL: URL?
+    var showFolderRenameSheet = false
+    var folderRenameDraft = ""
+    @ObservationIgnored private var folderRenameURL: URL?
 
     /// All photos in a folder and its descendants.
     func photosInFolder(_ url: URL) -> [Photo] {

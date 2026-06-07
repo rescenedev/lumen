@@ -3,7 +3,7 @@ import SwiftUI
 /// Right-hand inspector showing file info and EXIF metadata for the
 /// currently selected (or currently viewed) photo.
 struct InspectorView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     @State private var metadata: ImageMetadata?
 
     private var photo: Photo? {

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Right-click menu for a folder row in the sidebar.
 struct FolderContextMenu: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     let url: URL
 
     var body: some View {

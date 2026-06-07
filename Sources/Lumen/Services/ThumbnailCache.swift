@@ -31,7 +31,7 @@ final class ThumbnailCache {
 
     private init() {
         // Cap by bytes, not count, so memory use is bounded regardless of size.
-        memory.totalCostLimit = 300 * 1024 * 1024   // ~300 MB
+        memory.totalCostLimit = 180 * 1024 * 1024   // ~180 MB (disk cache backs the rest)
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         diskDir = base.appendingPathComponent("Lumen/Thumbnails", isDirectory: true)
         try? FileManager.default.createDirectory(at: diskDir, withIntermediateDirectories: true)

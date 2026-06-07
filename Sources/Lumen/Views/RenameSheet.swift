@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Batch-rename sheet. The pattern uses `{n}` for an incrementing number.
 struct RenameSheet: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
     @State private var pattern = "Photo {n}"

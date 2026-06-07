@@ -4,7 +4,7 @@ import MapKit
 /// Map presentation: drops a pin for every geotagged photo; clicking a pin
 /// opens it in the viewer.
 struct PhotoMapView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
 
     private struct Pin: Identifiable {
         let id: URL

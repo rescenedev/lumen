@@ -3,7 +3,7 @@ import SwiftUI
 /// Hosts either the grid or list presentation, plus the shared Finder-style
 /// bottom status bar (item / selection count + thumbnail-size slider).
 struct PhotoBrowserView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     @State private var searchInput = ""
     @State private var searchDebounce: DispatchWorkItem?
 
@@ -90,7 +90,8 @@ struct PhotoBrowserView: View {
     // MARK: - Status bar
 
     private var statusBar: some View {
-        ZStack {
+        @Bindable var model = model
+        return ZStack {
             Text(statusText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -126,7 +127,7 @@ struct PhotoBrowserView: View {
 /// Shared keyboard handling for both presentations: Space → Quick Look,
 /// Return → open viewer, ⌘A → select all, Esc → clear selection.
 struct BrowserKeyHandlers: ViewModifier {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
 
     func body(content: Content) -> some View {
         content

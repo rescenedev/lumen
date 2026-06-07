@@ -3,10 +3,11 @@ import SwiftUI
 /// List presentation backed by SwiftUI's native multi-selectable `List`,
 /// which provides ⌘/⇧-click selection and arrow-key navigation for free.
 struct PhotoListView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
-        List(selection: $model.selection) {
+        @Bindable var model = model
+        return List(selection: $model.selection) {
             ForEach(model.visiblePhotos) { photo in
                 PhotoRow(photo: photo)
                     .tag(photo.id)
@@ -28,7 +29,7 @@ struct PhotoListView: View {
 
 /// A single row: small thumbnail, filename, and file facts.
 private struct PhotoRow: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     let photo: Photo
 
     var body: some View {

@@ -3,11 +3,12 @@ import SwiftUI
 /// Root layout: sidebar + photo grid + metadata inspector, with the
 /// full-screen viewer presented as an overlay on top.
 struct ContentView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     @State private var showInspector = true
 
     var body: some View {
-        NavigationSplitView {
+        @Bindable var model = model
+        return NavigationSplitView {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
         } detail: {
@@ -64,6 +65,16 @@ struct ContentView: View {
         }
     }
 
+    private var viewModeBinding: Binding<ViewMode> {
+        Binding(get: { model.viewMode }, set: { model.viewMode = $0 })
+    }
+    private var sortOrderBinding: Binding<SortOrder> {
+        Binding(get: { model.sortOrder }, set: { model.sortOrder = $0 })
+    }
+    private var groupBinding: Binding<Bool> {
+        Binding(get: { model.groupByMonth }, set: { model.groupByMonth = $0 })
+    }
+
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
@@ -80,7 +91,7 @@ struct ContentView: View {
                 ProgressView().controlSize(.small)
             }
 
-            Picker("View", selection: $model.viewMode) {
+            Picker("View", selection: viewModeBinding) {
                 ForEach(ViewMode.allCases) { mode in
                     Image(systemName: mode.systemImage).tag(mode)
                 }
@@ -89,14 +100,14 @@ struct ContentView: View {
             .help("Switch between grid and list")
 
             Menu {
-                Picker("Sort By", selection: $model.sortOrder) {
+                Picker("Sort By", selection: sortOrderBinding) {
                     ForEach(SortOrder.allCases) { order in
                         Label(order.rawValue, systemImage: order.systemImage).tag(order)
                     }
                 }
                 .pickerStyle(.inline)
                 Divider()
-                Toggle("Group by Month", isOn: $model.groupByMonth)
+                Toggle("Group by Month", isOn: groupBinding)
             } label: {
                 Label("Sort", systemImage: "arrow.up.arrow.down")
             }

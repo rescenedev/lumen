@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Preferences window (⌘,).
 struct SettingsView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         TabView {
@@ -13,7 +13,8 @@ struct SettingsView: View {
     }
 
     private var general: some View {
-        Form {
+        @Bindable var model = model
+        return Form {
             Toggle("Confirm before moving to Trash", isOn: $model.confirmBeforeDelete)
             VStack(alignment: .leading) {
                 Text("Slideshow interval: \(model.slideshowInterval, specifier: "%.1f")s")

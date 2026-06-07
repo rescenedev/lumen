@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Onboarding shown when no photos have been imported yet.
 struct EmptyStateView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     @State private var dropTargeted = false
 
     var body: some View {

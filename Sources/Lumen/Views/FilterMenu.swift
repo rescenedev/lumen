@@ -2,10 +2,11 @@ import SwiftUI
 
 /// Toolbar filter control: a menu of attribute filters with a badge when active.
 struct FilterMenu: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
-        Menu {
+        @Bindable var model = model
+        return Menu {
             Toggle("Favorites Only", isOn: $model.filter.favoritesOnly)
                 .onAppear { model.ensureExifIndex() }   // populate camera/GPS data on open
             Toggle("Has Location", isOn: $model.filter.gpsOnly)

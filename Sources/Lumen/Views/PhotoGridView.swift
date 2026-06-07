@@ -4,7 +4,7 @@ import SwiftUI
 /// (click, ⌘-click toggle, ⇧-click range), double-click-to-open,
 /// spacebar Quick Look, and arrow-key navigation.
 struct PhotoGridView: View {
-    @EnvironmentObject var model: AppModel
+    @Environment(AppModel.self) private var model
     @FocusState private var gridFocused: Bool
 
     private var columns: [GridItem] {
