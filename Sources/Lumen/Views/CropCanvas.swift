@@ -7,8 +7,17 @@ struct CropCanvas: View {
     let image: NSImage
     @Binding var cropNorm: CGRect
     let aspect: CGFloat?
+    /// Output-content footprint relative to the crop (≤1). When set, an inset box
+    /// shows how big the saved image content is versus what's shown.
+    var indicatorScale: CGFloat? = nil
+    var indicatorLabel: String = ""
+    /// Position of the content box within the crop (0…1, top-left origin). Doubles
+    /// as the image's placement inside a padded canvas when `indicatorDraggable`.
+    @Binding var indicatorAnchor: CGPoint
+    var indicatorDraggable = false
 
     @State private var startRect: CGRect?
+    @State private var startIndicator: CGPoint?
 
     private enum Corner: CaseIterable { case tl, tr, bl, br }
 
@@ -46,8 +55,48 @@ struct CropCanvas: View {
                         .position(point(c, cr))
                         .gesture(cornerGesture(c, f))
                 }
+
+                outputIndicator(cr)            // topmost, so its drag wins over the move area
             }
         }
+    }
+
+    /// Box (sized to the output footprint) the user can drag to position the image
+    /// inside a padded canvas. When not draggable it's just a static size preview.
+    @ViewBuilder private func outputIndicator(_ cr: CGRect) -> some View {
+        if let indicatorScale {
+            let bw = max(4, cr.width * indicatorScale), bh = max(4, cr.height * indicatorScale)
+            let travelW = max(0, cr.width - bw), travelH = max(0, cr.height - bh)
+            let ox = cr.minX + indicatorAnchor.x * travelW
+            let oy = cr.minY + indicatorAnchor.y * travelH
+            ZStack {
+                Rectangle().fill(Color.accentColor.opacity(0.30))
+                    .overlay(Rectangle().stroke(Color.white, lineWidth: 1))
+                    .frame(width: bw, height: bh)
+                Text(indicatorLabel)
+                    .font(.caption2.bold().monospacedDigit())
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 3))
+                    .foregroundStyle(.white).fixedSize()
+                    .offset(y: -bh / 2 - 9)
+            }
+            .frame(width: bw, height: bh)
+            .position(x: ox + bw / 2, y: oy + bh / 2)
+            .allowsHitTesting(indicatorDraggable)
+            .gesture(indicatorDraggable ? indicatorGesture(travelW, travelH) : nil)
+        }
+    }
+
+    private func indicatorGesture(_ travelW: CGFloat, _ travelH: CGFloat) -> some Gesture {
+        DragGesture()
+            .onChanged { v in
+                let start = startIndicator ?? indicatorAnchor
+                if startIndicator == nil { startIndicator = start }
+                let nx = travelW > 0 ? start.x + v.translation.width / travelW : start.x
+                let ny = travelH > 0 ? start.y + v.translation.height / travelH : start.y
+                indicatorAnchor = CGPoint(x: min(max(0, nx), 1), y: min(max(0, ny), 1))
+            }
+            .onEnded { _ in startIndicator = nil }
     }
 
     @ViewBuilder private func thirds(_ cr: CGRect) -> some View {

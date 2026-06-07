@@ -8,33 +8,58 @@ import UniformTypeIdentifiers
 /// choice (write to temp → replace), gated behind a confirmation in the UI.
 enum ImageEditor {
     struct Edit: Equatable {
-        /// Crop in normalized, top-left-origin coords (0…1). nil = no crop.
+        /// Crop in normalized, top-left-origin coords (0…1) of the *rotated* image.
+        /// nil = no crop.
         var cropNorm: CGRect?
-        /// Target long-edge in pixels for the (cropped) result. nil = keep size.
-        var longEdge: Int?
+        /// Target output width/height in pixels. Both nil → keep the cropped size.
+        /// One set → resize to that axis (aspect preserved, never upscaled). Both
+        /// set → exact canvas of that size with the image fit inside (no upscale)
+        /// and the remainder padded with the background.
+        var targetWidth: Int?
+        var targetHeight: Int?
+        /// 90° clockwise rotations (0…3) applied before crop. Default none.
+        var rotationQuarters: Int = 0
+        /// Mirror horizontally (applied with the rotation). Default off.
+        var flipH: Bool = false
+        /// Where the image sits inside a padded canvas (0…1, top-left origin).
+        /// Only matters when both target dimensions create margins. Default center.
+        var contentAlign: CGPoint = CGPoint(x: 0.5, y: 0.5)
     }
 
     /// Final pixel dimensions for an edit applied to a source of `pixelSize`.
     /// Pure (no I/O) so it's unit-testable and drives the UI's size readout.
     static func outputSize(source pixelSize: CGSize, edit: Edit) -> CGSize {
         var w = pixelSize.width, h = pixelSize.height
+        if edit.rotationQuarters % 2 != 0 { swap(&w, &h) }   // 90°/270° swap dimensions
         if let c = edit.cropNorm {
-            w = (pixelSize.width * c.width).rounded()
-            h = (pixelSize.height * c.height).rounded()
+            w = (w * c.width).rounded()
+            h = (h * c.height).rounded()
         }
-        if let edge = edit.longEdge, edge > 0, max(w, h) > CGFloat(edge) {
-            let scale = CGFloat(edge) / max(w, h)
-            w = (w * scale).rounded()
-            h = (h * scale).rounded()
+        let cw = max(1, w), ch = max(1, h)
+        switch (edit.targetWidth, edit.targetHeight) {
+        case (nil, nil):
+            return CGSize(width: cw, height: ch)
+        case let (tw?, nil) where tw > 0:
+            let s = min(CGFloat(tw) / cw, 1)
+            return CGSize(width: (cw * s).rounded(), height: (ch * s).rounded())
+        case let (nil, th?) where th > 0:
+            let s = min(CGFloat(th) / ch, 1)
+            return CGSize(width: (cw * s).rounded(), height: (ch * s).rounded())
+        case let (tw?, th?) where tw > 0 && th > 0:
+            return CGSize(width: tw, height: th)            // exact canvas (padded as needed)
+        default:
+            return CGSize(width: cw, height: ch)
         }
-        return CGSize(width: max(1, w), height: max(1, h))
     }
 
     /// Apply `edit` to `source` and write to `dest`. Returns false on any failure
     /// (and leaves `dest` untouched). Never writes to `source`.
     @discardableResult
-    static func process(source: URL, edit: Edit, to dest: URL, quality: CGFloat = 0.92) -> Bool {
+    static func process(source: URL, edit: Edit, to dest: URL, quality: CGFloat = 0.92,
+                        background: CGColor = CGColor(gray: 1, alpha: 1)) -> Bool {
         guard var cg = orientedCGImage(source) else { return false }
+
+        if let rotated = transformed(cg, quarters: edit.rotationQuarters, flipH: edit.flipH) { cg = rotated }
 
         if let c = edit.cropNorm {
             let px = CGRect(x: (c.minX * CGFloat(cg.width)).rounded(),
@@ -46,14 +71,44 @@ enum ImageEditor {
             cg = cropped
         }
 
-        if let edge = edit.longEdge, edge > 0, max(cg.width, cg.height) > edge {
-            let scale = CGFloat(edge) / CGFloat(max(cg.width, cg.height))
-            let target = CGSize(width: (CGFloat(cg.width) * scale).rounded(),
-                                height: (CGFloat(cg.height) * scale).rounded())
-            if let resized = resize(cg, to: target) { cg = resized }
+        let cw = CGFloat(cg.width), ch = CGFloat(cg.height)
+        switch (edit.targetWidth, edit.targetHeight) {
+        case let (tw?, th?) where tw > 0 && th > 0:
+            if let canvas = paddedCanvas(cg, width: tw, height: th,
+                                         align: edit.contentAlign, background: background) { cg = canvas }
+        case let (tw?, nil) where tw > 0:
+            let s = min(CGFloat(tw) / cw, 1)
+            if s < 1, let r = resize(cg, to: CGSize(width: (cw * s).rounded(), height: (ch * s).rounded())) { cg = r }
+        case let (nil, th?) where th > 0:
+            let s = min(CGFloat(th) / ch, 1)
+            if s < 1, let r = resize(cg, to: CGSize(width: (cw * s).rounded(), height: (ch * s).rounded())) { cg = r }
+        default:
+            break
         }
 
         return write(cg, to: dest, quality: quality)
+    }
+
+    /// Fit `cg` (no upscaling) into an exact `width`×`height` canvas, positioned by
+    /// `align` (0…1, top-left origin), with the remainder filled by `background`.
+    private static func paddedCanvas(_ cg: CGImage, width: Int, height: Int,
+                                     align: CGPoint, background: CGColor) -> CGImage? {
+        guard width > 0, height > 0 else { return nil }
+        let cw = CGFloat(cg.width), ch = CGFloat(cg.height)
+        let scale = min(CGFloat(width) / cw, CGFloat(height) / ch, 1)   // never upscale
+        let dw = cw * scale, dh = ch * scale
+        let ax = min(max(align.x, 0), 1), ay = min(max(align.y, 0), 1)
+        let x = (CGFloat(width) - dw) * ax
+        let y = (CGFloat(height) - dh) * (1 - ay)                       // top-origin align → bottom-origin context
+        let cs = cg.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.setFillColor(background)
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        ctx.draw(cg, in: CGRect(x: x, y: y, width: dw, height: dh))
+        return ctx.makeImage()
     }
 
     // MARK: - Internals
@@ -83,6 +138,28 @@ enum ImageEditor {
         guard orientation != 1 else { return cg }
         let ci = CIImage(cgImage: cg).oriented(forExifOrientation: Int32(orientation))
         return CIContext().createCGImage(ci, from: ci.extent)
+    }
+
+    /// Rotate (90° clockwise steps) and/or mirror an upright image. Returns the
+    /// same image when there's nothing to do. Used by BOTH the live editor preview
+    /// and the saved output, so what the user sees is exactly what's written.
+    static func transformed(_ cg: CGImage, quarters: Int, flipH: Bool) -> CGImage? {
+        let q = ((quarters % 4) + 4) % 4
+        guard q != 0 || flipH else { return cg }
+        let w = cg.width, h = cg.height
+        let swapDims = (q % 2 != 0)
+        let outW = swapDims ? h : w, outH = swapDims ? w : h
+        let cs = cg.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(data: nil, width: outW, height: outH, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.translateBy(x: CGFloat(outW) / 2, y: CGFloat(outH) / 2)
+        if flipH { ctx.scaleBy(x: -1, y: 1) }
+        ctx.rotate(by: -CGFloat(q) * .pi / 2)            // CG rotates CCW for +; negate for clockwise
+        ctx.translateBy(x: -CGFloat(w) / 2, y: -CGFloat(h) / 2)
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return ctx.makeImage()
     }
 
     private static func resize(_ cg: CGImage, to size: CGSize) -> CGImage? {

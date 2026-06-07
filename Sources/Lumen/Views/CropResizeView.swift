@@ -9,16 +9,62 @@ struct CropResizeView: View {
     let photo: Photo
 
     @State private var image: NSImage?
+    @State private var baseCG: CGImage?            // upright, full-res — re-transformed on rotate/flip
     @State private var pixelSize: CGSize = .zero
     @State private var cropNorm = CGRect(x: 0, y: 0, width: 1, height: 1)
     @State private var aspect: AspectChoice = .free
-    @State private var longEdge: SizeChoice = .original
+    @State private var lockRatio = false
+    @State private var lockedRatio: CGFloat?       // fixed at lock time so dragging can't drift it
+    @State private var widthText = ""
+    @State private var heightText = ""
+    @State private var padBackground: PadBackground = .white
+    @State private var contentAlign = CGPoint(x: 0.5, y: 0.5)   // image position within a padded canvas
+    @State private var rotationQuarters = 0
+    @State private var flipH = false
     @State private var confirmOverwrite = false
     @State private var busy = false
 
+    private func px(_ text: String) -> Int? {
+        guard let n = Int(text.trimmingCharacters(in: .whitespaces)), n > 0 else { return nil }
+        return n
+    }
+    private var targetWidth: Int? { px(widthText) }
+    private var targetHeight: Int? { px(heightText) }
+    /// A missing axis mirrors the other → a single value makes a square canvas.
+    /// Any value at all means "canvas mode" (exact size, fit + pad + draggable).
+    private var canvasTarget: (w: Int, h: Int)? {
+        switch (targetWidth, targetHeight) {
+        case (nil, nil): return nil
+        case let (w?, nil): return (w, w)
+        case let (nil, h?): return (h, h)
+        case let (w?, h?): return (w, h)
+        }
+    }
+    private var isCanvas: Bool { canvasTarget != nil }
+
     private var edit: ImageEditor.Edit {
         ImageEditor.Edit(cropNorm: cropNorm == CGRect(x: 0, y: 0, width: 1, height: 1) ? nil : cropNorm,
-                         longEdge: longEdge.pixels)
+                         targetWidth: canvasTarget?.w, targetHeight: canvasTarget?.h,
+                         rotationQuarters: rotationQuarters, flipH: flipH,
+                         contentAlign: contentAlign)
+    }
+    /// Scale of the saved image content relative to the on-screen crop (≤1), used
+    /// to draw the size-preview box. nil when no resize is active or it's ~full.
+    private var indicatorScale: CGFloat? {
+        guard let t = canvasTarget else { return nil }
+        let s = rotatedPixelSize
+        let cw = s.width * cropNorm.width, ch = s.height * cropNorm.height
+        guard cw > 0, ch > 0 else { return nil }
+        let k = min(CGFloat(t.w) / cw, CGFloat(t.h) / ch, 1)
+        return k < 0.999 ? k : nil
+    }
+    private var indicatorLabel: String { "\(Int(outputSize.width))×\(Int(outputSize.height))" }
+
+    /// The crop's current pixel aspect ratio (w/h) in the rotated image.
+    private var currentCropRatio: CGFloat? {
+        let s = rotatedPixelSize
+        let w = cropNorm.width * s.width, h = cropNorm.height * s.height
+        return h > 0 ? w / h : nil
     }
     private var outputSize: CGSize { ImageEditor.outputSize(source: pixelSize, edit: edit) }
 
@@ -29,7 +75,9 @@ struct CropResizeView: View {
             ZStack {
                 Color.black.opacity(0.25)
                 if let image {
-                    CropCanvas(image: image, cropNorm: $cropNorm, aspect: aspect.ratio)
+                    CropCanvas(image: image, cropNorm: $cropNorm, aspect: lockRatio ? lockedRatio : nil,
+                               indicatorScale: indicatorScale, indicatorLabel: indicatorLabel,
+                               indicatorAnchor: $contentAlign, indicatorDraggable: isCanvas)
                 } else {
                     ProgressView()
                 }
@@ -62,21 +110,52 @@ struct CropResizeView: View {
 
     private var controls: some View {
         VStack(spacing: 14) {
-            HStack(spacing: 20) {
+            HStack(spacing: 16) {
                 Picker("Crop", selection: $aspect) {
                     ForEach(AspectChoice.allCases) { Text($0.label).tag($0) }
                 }
-                .pickerStyle(.menu).frame(width: 200)
-                .onChange(of: aspect) { _, new in applyAspect(new) }
-
-                Picker("Resize", selection: $longEdge) {
-                    ForEach(SizeChoice.allCases) { Text($0.label).tag($0) }
+                .pickerStyle(.menu).frame(width: 170)
+                .onChange(of: aspect) { _, new in
+                    if new == .free { lockRatio = false; lockedRatio = nil }
+                    else { applyAspect(new); lockedRatio = new.ratio(originalSize: rotatedPixelSize); lockRatio = true }
                 }
-                .pickerStyle(.menu).frame(width: 200)
 
-                Button("Reset crop") { cropNorm = .init(x: 0, y: 0, width: 1, height: 1); aspect = .free }
-                    .disabled(cropNorm == CGRect(x: 0, y: 0, width: 1, height: 1))
+                Toggle(isOn: $lockRatio) {
+                    Image(systemName: lockRatio ? "lock.fill" : "lock.open")
+                }
+                .toggleStyle(.button).help("비율 고정/해제")
+                .onChange(of: lockRatio) { _, on in lockedRatio = on ? currentCropRatio : nil }
+
+                HStack(spacing: 4) {
+                    Button { rotate(-1) } label: { Image(systemName: "rotate.left") }
+                    Button { rotate(1) } label: { Image(systemName: "rotate.right") }
+                    Button { flipH.toggle(); refreshDisplay() } label: { Image(systemName: "trapezoid.and.line.vertical") }
+                        .background(flipH ? Color.accentColor.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 5))
+                }
+                .help("Rotate / flip")
+
                 Spacer()
+
+                Text("Resize").foregroundStyle(.secondary)
+                TextField("자동", text: $widthText)
+                    .frame(width: 48).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
+                Text("×").foregroundStyle(.secondary)
+                TextField("자동", text: $heightText)
+                    .frame(width: 48).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
+                Text("px").foregroundStyle(.secondary)
+                if isCanvas {
+                    Picker("", selection: $padBackground) {
+                        ForEach(PadBackground.allCases) { Text($0.label).tag($0) }
+                    }.labelsHidden().frame(width: 96).help("여백 배경")
+                }
+
+                Button("Reset") {
+                    cropNorm = .init(x: 0, y: 0, width: 1, height: 1); aspect = .free; lockRatio = false
+                    rotationQuarters = 0; flipH = false; widthText = ""; heightText = ""
+                    contentAlign = CGPoint(x: 0.5, y: 0.5); refreshDisplay()
+                }
+                .disabled(cropNorm == CGRect(x: 0, y: 0, width: 1, height: 1)
+                          && rotationQuarters == 0 && !flipH && widthText.isEmpty && heightText.isEmpty)
             }
             HStack(spacing: 12) {
                 Spacer()
@@ -93,18 +172,46 @@ struct CropResizeView: View {
 
     private func load() async {
         let url = photo.url
-        let loaded = await Task.detached(priority: .userInitiated) { () -> (NSImage, CGSize)? in
-            guard let cg = ImageEditor.orientedCGImage(url) else { return nil }
-            let img = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
-            return (img, CGSize(width: cg.width, height: cg.height))
-        }.value
-        if let loaded { image = loaded.0; pixelSize = loaded.1 }
+        let cg = await Task.detached(priority: .userInitiated) { ImageEditor.orientedCGImage(url) }.value
+        guard let cg else { return }
+        baseCG = cg
+        pixelSize = CGSize(width: cg.width, height: cg.height)
+        refreshDisplay()
+    }
+
+    /// Rotate by ±90°; rotating changes the image frame, so reset the crop to the
+    /// full (rotated) image to avoid a now-meaningless rectangle.
+    private func rotate(_ delta: Int) {
+        rotationQuarters = ((rotationQuarters + delta) % 4 + 4) % 4
+        cropNorm = .init(x: 0, y: 0, width: 1, height: 1)
+        aspect = .free
+        refreshDisplay()
+    }
+
+    /// Re-render the canvas image from the upright base using the SAME transform
+    /// the save path uses, so preview and output never disagree.
+    private func refreshDisplay() {
+        guard let baseCG else { return }
+        let q = rotationQuarters, f = flipH
+        Task {
+            let img = await Task.detached(priority: .userInitiated) { () -> NSImage? in
+                guard let t = ImageEditor.transformed(baseCG, quarters: q, flipH: f) else { return nil }
+                return NSImage(cgImage: t, size: NSSize(width: t.width, height: t.height))
+            }.value
+            if let img { image = img }
+        }
+    }
+
+    /// Image dimensions as currently displayed (90°/270° rotation swaps them).
+    private var rotatedPixelSize: CGSize {
+        rotationQuarters % 2 != 0 ? CGSize(width: pixelSize.height, height: pixelSize.width) : pixelSize
     }
 
     private func applyAspect(_ choice: AspectChoice) {
-        guard let ratio = choice.ratio(originalSize: pixelSize) else { return }   // free → nil
+        let size = rotatedPixelSize
+        guard let ratio = choice.ratio(originalSize: size) else { return }   // free → nil
         // Fit the largest centered crop of `ratio` (w/h) inside the current image.
-        let imgRatio = pixelSize.width / max(1, pixelSize.height)
+        let imgRatio = size.width / max(1, size.height)
         var w: CGFloat = 1, h: CGFloat = 1
         if ratio > imgRatio { h = imgRatio / ratio } else { w = ratio / imgRatio }
         cropNorm = CGRect(x: (1 - w) / 2, y: (1 - h) / 2, width: w, height: h)
@@ -115,16 +222,17 @@ struct CropResizeView: View {
         let dest = overwrite ? photo.url : ImageEditor.editedCopyURL(for: photo.url)
         let current = edit
         let src = photo.url
+        let bg = padBackground.cgColor
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
                 if overwrite {
                     let tmp = FileManager.default.temporaryDirectory
                         .appendingPathComponent("lumen-edit-\(UUID().uuidString).\(src.pathExtension)")
-                    guard ImageEditor.process(source: src, edit: current, to: tmp) else { return false }
+                    guard ImageEditor.process(source: src, edit: current, to: tmp, background: bg) else { return false }
                     do { _ = try FileManager.default.replaceItemAt(src, withItemAt: tmp); return true }
                     catch { try? FileManager.default.removeItem(at: tmp); return false }
                 }
-                return ImageEditor.process(source: src, edit: current, to: dest)
+                return ImageEditor.process(source: src, edit: current, to: dest, background: bg)
             }.value
             busy = false
             if ok {
@@ -138,6 +246,26 @@ struct CropResizeView: View {
 }
 
 // MARK: - Choices
+
+/// Fill for the margins when the output canvas is larger than the image.
+enum PadBackground: String, CaseIterable, Identifiable {
+    case white, black, transparent
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .white: return "여백: 흰색"
+        case .black: return "여백: 검정"
+        case .transparent: return "여백: 투명"
+        }
+    }
+    var cgColor: CGColor {
+        switch self {
+        case .white: return CGColor(gray: 1, alpha: 1)
+        case .black: return CGColor(gray: 0, alpha: 1)
+        case .transparent: return CGColor(gray: 0, alpha: 0)
+        }
+    }
+}
 
 enum AspectChoice: String, CaseIterable, Identifiable {
     case free, original, square, r43, r169, r32
@@ -168,23 +296,3 @@ enum AspectChoice: String, CaseIterable, Identifiable {
     }
 }
 
-enum SizeChoice: String, CaseIterable, Identifiable {
-    case original, px4096, px2048, px1024
-    var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .original: return "Resize: Original"
-        case .px4096: return "Resize: 4096 px"
-        case .px2048: return "Resize: 2048 px"
-        case .px1024: return "Resize: 1024 px"
-        }
-    }
-    var pixels: Int? {
-        switch self {
-        case .original: return nil
-        case .px4096: return 4096
-        case .px2048: return 2048
-        case .px1024: return 1024
-        }
-    }
-}
