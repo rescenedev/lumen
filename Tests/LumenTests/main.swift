@@ -17,5 +17,7 @@ exporterTests()
 metadataStoreTests()
 offlineRootTests()
 photoAssetTests()
+imageEditorTests()
+incrementalScannerTests()
 
 exit(Harness.finish())

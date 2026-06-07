@@ -283,6 +283,9 @@ struct ViewerView: View {
                 QuickLookPreview.shared.show(urls: [photo.url], startAt: 0)
             }
             toolButton("info.circle") { showExifOverlayToggle() }
+            if !photo.isAsset {
+                toolButton("crop") { model.startEdit(photo) }
+            }
             toolButton("folder") { model.revealInFinder([photo]) }
             toolButton("trash") { deleteCurrent() }
         }

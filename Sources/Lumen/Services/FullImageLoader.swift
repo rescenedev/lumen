@@ -19,6 +19,9 @@ final class FullImageLoader {
         Int(image.size.width * image.size.height) * 4
     }
 
+    /// Drop all cached full images (e.g. after an in-place edit changed pixels).
+    func clear() { cache.removeAllObjects() }
+
     func image(for url: URL) async -> NSImage? {
         let cacheKey = url.path as NSString
         if let hit = cache.object(forKey: cacheKey) { return hit }

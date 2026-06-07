@@ -4,6 +4,7 @@ import AppKit
 private enum Badge {
     static let heart = tinted("heart.fill", .white, pointSize: 12)
     static let star = tinted("star.fill", .systemYellow, pointSize: 9)
+    static let check = tinted("checkmark", .white, pointSize: 12)
     static let placeholder = tinted("photo", NSColor(white: 1, alpha: 0.16), pointSize: 44)
 
     static func tinted(_ name: String, _ color: NSColor, pointSize: CGFloat) -> NSImage {
@@ -30,6 +31,7 @@ final class PhotoGridCellView: NSView {
     var rating = 0
     var labelColor: NSColor?
     var selected = false
+    var selectionActive = false   // any photo selected → dim the non-selected ones
     var thumbSize: CGFloat = 170
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -47,44 +49,70 @@ final class PhotoGridCellView: NSView {
         let thumbRect = NSRect(x: 1, y: capH + 1, width: s - 2, height: s - 2)
         let clip = NSBezierPath(roundedRect: thumbRect, xRadius: radius, yRadius: radius)
 
-        // Loading placeholder: a faint card with a small photo glyph — reads as
-        // "loading", not an ugly gray slab or an empty ghost.
+        // When selected, the photo shrinks a little to reveal an accent frame
+        // (Apple Photos style); a checkmark makes it unmistakable.
+        let inset: CGFloat = selected ? 6 : 0
+        let photoRect = thumbRect.insetBy(dx: inset, dy: inset)
+        let photoRadius: CGFloat = max(3, radius - inset * 0.5)
+        let photoClip = NSBezierPath(roundedRect: photoRect, xRadius: photoRadius, yRadius: photoRadius)
+
+        if selected {
+            NSColor.controlAccentColor.setFill()
+            clip.fill()                       // accent frame behind the inset photo
+        }
+
+        // Loading placeholder.
         if image == nil {
             NSColor.white.withAlphaComponent(0.045).setFill()
-            clip.fill()
+            photoClip.fill()
             let g = Badge.placeholder
             let gs = min(s * 0.30, 56)
-            g.draw(in: NSRect(x: thumbRect.midX - gs / 2, y: thumbRect.midY - gs / 2, width: gs, height: gs))
+            g.draw(in: NSRect(x: photoRect.midX - gs / 2, y: photoRect.midY - gs / 2, width: gs, height: gs))
         }
 
         if let image {
             NSGraphicsContext.saveGraphicsState()
-            clip.addClip()
+            photoClip.addClip()
             let isz = image.size
             if isz.width > 0, isz.height > 0 {
-                let scale = max(thumbRect.width / isz.width, thumbRect.height / isz.height)
+                let scale = max(photoRect.width / isz.width, photoRect.height / isz.height)
                 let dw = isz.width * scale, dh = isz.height * scale
-                let r = NSRect(x: thumbRect.midX - dw / 2, y: thumbRect.midY - dh / 2, width: dw, height: dh)
+                let r = NSRect(x: photoRect.midX - dw / 2, y: photoRect.midY - dh / 2, width: dw, height: dh)
                 image.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1)
             }
             NSGraphicsContext.restoreGraphicsState()
         }
 
-        if selected {
-            NSColor.controlAccentColor.setStroke()
-            let ring = NSBezierPath(roundedRect: thumbRect.insetBy(dx: 1.5, dy: 1.5), xRadius: radius, yRadius: radius)
-            ring.lineWidth = 3
-            ring.stroke()
-        } else {
-            NSColor.black.withAlphaComponent(0.10).setStroke()
-            clip.lineWidth = 1
-            clip.stroke()
+        // Dim the non-selected photos while a selection is active.
+        if selectionActive && !selected {
+            NSColor.black.withAlphaComponent(0.5).setFill()
+            photoClip.fill()
         }
 
-        // Favorite badge — top-right of the thumbnail.
+        if selected {
+            // Checkmark badge (top-left) — only while multi-selecting, so a single
+            // "view this one" selection stays clean (just the accent frame).
+            if selectionActive {
+                let bs: CGFloat = 22
+                let br = NSRect(x: photoRect.minX + 6, y: photoRect.maxY - bs - 6, width: bs, height: bs)
+                NSColor.white.setFill()
+                NSBezierPath(ovalIn: br.insetBy(dx: -1.5, dy: -1.5)).fill()
+                NSColor.controlAccentColor.setFill()
+                NSBezierPath(ovalIn: br).fill()
+                let c = Badge.check
+                c.draw(in: NSRect(x: br.midX - c.size.width / 2, y: br.midY - c.size.height / 2,
+                                  width: c.size.width, height: c.size.height))
+            }
+        } else {
+            NSColor.black.withAlphaComponent(0.10).setStroke()
+            photoClip.lineWidth = 1
+            photoClip.stroke()
+        }
+
+        // Favorite badge — top-right of the photo.
         if favorite {
             let bs: CGFloat = 24
-            let br = NSRect(x: thumbRect.maxX - bs - 5, y: thumbRect.maxY - bs - 5, width: bs, height: bs)
+            let br = NSRect(x: photoRect.maxX - bs - 5, y: photoRect.maxY - bs - 5, width: bs, height: bs)
             NSColor.systemPink.setFill()
             NSBezierPath(ovalIn: br).fill()
             let h = Badge.heart
@@ -92,24 +120,23 @@ final class PhotoGridCellView: NSView {
                               width: h.size.width, height: h.size.height))
         }
 
-        // Color label — small dot in the thumbnail's bottom-left corner.
+        // Color label — dot in the photo's bottom-left corner.
         if let labelColor {
             let d: CGFloat = 11
-            let dr = NSRect(x: thumbRect.minX + 6, y: thumbRect.minY + 6, width: d, height: d)
+            let dr = NSRect(x: photoRect.minX + 6, y: photoRect.minY + 6, width: d, height: d)
             NSColor.white.withAlphaComponent(0.85).setFill()
             NSBezierPath(ovalIn: dr.insetBy(dx: -1.5, dy: -1.5)).fill()
             labelColor.setFill()
             NSBezierPath(ovalIn: dr).fill()
         }
 
-        // Rating — small overlay at the thumbnail's bottom-center (keeps the
-        // caption band short so rows can sit close together).
+        // Rating — overlay at the photo's bottom-center.
         if rating > 0 {
             let star = Badge.star
             let sw = star.size.width + 1
             let totalW = CGFloat(rating) * sw
-            let startX = thumbRect.midX - totalW / 2
-            let y = thumbRect.minY + 7
+            let startX = photoRect.midX - totalW / 2
+            let y = photoRect.minY + 7
             let pill = NSRect(x: startX - 5, y: y - 3, width: totalW + 9, height: star.size.height + 6)
             NSColor.black.withAlphaComponent(0.45).setFill()
             NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
@@ -143,13 +170,14 @@ final class PhotoCollectionItem: NSCollectionViewItem {
 
     override func loadView() { view = cell }
 
-    func configure(photo: Photo, size: CGFloat, selected: Bool,
+    func configure(photo: Photo, size: CGFloat, selected: Bool, selectionActive: Bool,
                    favorite: Bool, rating: Int, label: ColorLabel) {
         cell.filename = photo.filename
         cell.favorite = favorite
         cell.rating = rating
         cell.labelColor = label.nsColor
         cell.selected = selected
+        cell.selectionActive = selectionActive
         cell.thumbSize = size
         cell.image = nil
 
@@ -170,6 +198,13 @@ final class PhotoCollectionItem: NSCollectionViewItem {
 
     func updateSize(_ size: CGFloat) {
         cell.thumbSize = size
+        cell.needsDisplay = true
+    }
+
+    /// Update the "a selection exists" dim state without reloading the image.
+    func setSelectionActive(_ active: Bool) {
+        guard cell.selectionActive != active else { return }
+        cell.selectionActive = active
         cell.needsDisplay = true
     }
 

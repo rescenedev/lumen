@@ -27,9 +27,15 @@ enum PhotoMenuBuilder {
             menu.addItem(ClosureMenuItem("Quick Look") {
                 QuickLookPreview.shared.show(urls: [photo.url], startAt: 0)
             })
+            if !photo.isAsset {
+                menu.addItem(ClosureMenuItem("Crop & Resize…") { model.startEdit(photo) })
+            }
         }
         if targets.count == 2 {
             menu.addItem(ClosureMenuItem("Compare") { model.openCompare(targets) })
+        }
+        if isBatch && targets.contains(where: { !$0.isAsset }) {
+            menu.addItem(ClosureMenuItem("Combine into One…") { model.startCombine(targets) })
         }
         menu.addItem(.separator())
 
