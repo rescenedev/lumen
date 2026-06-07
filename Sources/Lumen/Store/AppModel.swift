@@ -653,6 +653,16 @@ final class AppModel {
 
     /// Reconcile the in-memory library with what's on disk for the given roots.
     /// Photos under offline roots (e.g. an unmounted NAS) are left untouched.
+    /// Whether a (currently missing) root sits on a network/NAS volume, in which
+    /// case it's treated as temporarily offline rather than renamed/moved away.
+    /// An unmounted volume can't be stat'd, so we fall back to the path shape.
+    nonisolated static func isOfflineNetworkRoot(_ root: URL) -> Bool {
+        if let local = try? root.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal {
+            return local == false
+        }
+        return root.path.hasPrefix("/Volumes/")
+    }
+
     private func reconcile(roots: [URL]) async {
         guard !roots.isEmpty else { return }
 
@@ -675,18 +685,39 @@ final class AppModel {
         let scannedURLs = Set(scanned.map { $0.url })
         let removed = allPhotos.filter { underScannedRoot($0) && !scannedURLs.contains($0.url) }
 
+        // Photos not under any *currently scanned* root split into two groups:
+        //   • genuinely offline — their root is an unreachable network/NAS volume
+        //     (e.g. unmounted). Keep these so the library still shows them.
+        //   • orphaned — their root is a *local* folder that no longer exists,
+        //     i.e. it was renamed/moved/deleted in Finder. The old paths are
+        //     phantoms; keeping them leaves stale, fractured sidebar folders.
+        //     Prune them (the new paths come back in as `added`).
+        let missingRoots = rootFolders.filter { !roots.contains($0) }
+        let preservableRoots = missingRoots.filter(Self.isOfflineNetworkRoot)
+        func isPreservableOffline(_ photo: Photo) -> Bool {
+            preservableRoots.contains { photo.url.path.hasPrefix($0.path + "/") }
+        }
+        let offline = allPhotos.filter { !underScannedRoot($0) && isPreservableOffline($0) }
+        let prunedLocal = allPhotos.filter { !underScannedRoot($0) && !isPreservableOffline($0) }
+
         // Only mutate the library when something actually changed — otherwise a
         // no-op launch reconcile would bump the version and force the grid to
         // reload (throwing away in-flight thumbnail decodes).
-        if !added.isEmpty || !removed.isEmpty {
-            if !removed.isEmpty {
-                for photo in removed { exif.removeValue(forKey: photo.url.path) }
-                duplicatePaths.subtract(removed.map { $0.url.path })
-            }
-            let offline = allPhotos.filter { !underScannedRoot($0) }
+        if !added.isEmpty || !removed.isEmpty || !prunedLocal.isEmpty {
+            let dropped = removed + prunedLocal
+            for photo in dropped { exif.removeValue(forKey: photo.url.path) }
+            duplicatePaths.subtract(dropped.map { $0.url.path })
             allPhotos = offline + scanned
             recomputeMetaCounts()
             persistLibraryCache()
+        }
+
+        // Forget vanished *local* roots so they stop being re-watched/persisted
+        // and disappear from the sidebar. Network roots stay — they may remount.
+        let vanishedLocalRoots = missingRoots.filter { !Self.isOfflineNetworkRoot($0) }
+        if !vanishedLocalRoots.isEmpty {
+            rootFolders.removeAll { vanishedLocalRoots.contains($0) }
+            persistRecentFolders()
         }
         watcher?.watch(roots)
 

@@ -15,5 +15,6 @@ renamePatternTests()
 duplicateFinderTests()
 exporterTests()
 metadataStoreTests()
+offlineRootTests()
 
 exit(Harness.finish())

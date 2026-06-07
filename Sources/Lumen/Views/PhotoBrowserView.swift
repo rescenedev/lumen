@@ -87,7 +87,8 @@ struct PhotoBrowserView: View {
                     metaVersion: model.metaRevision,
                     thumbnailSize: model.thumbnailSize,
                     selection: model.selection,
-                    anchor: model.selectionAnchor
+                    anchor: model.selectionAnchor,
+                    viewerActive: model.viewerIndex != nil
                 )
             }
         } else {

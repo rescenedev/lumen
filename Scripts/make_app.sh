@@ -11,7 +11,9 @@ APP_BUNDLE="$ROOT/dist/$APP_NAME.app"
 CONTENTS="$APP_BUNDLE/Contents"
 
 echo "==> Building release binary…"
-swift build -c release
+# Build only the app product. A bare `swift build` would also try to compile the
+# LumenTests target, which uses `@testable import` and can't build in release.
+swift build -c release --product Lumen
 
 echo "==> Assembling app bundle…"
 rm -rf "$APP_BUNDLE"

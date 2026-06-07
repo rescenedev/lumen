@@ -11,6 +11,7 @@ struct PhotoCollectionView: NSViewRepresentable {
     let thumbnailSize: Double
     let selection: Set<Photo.ID>
     let anchor: Photo.ID?
+    let viewerActive: Bool         // true while the full-screen viewer is open
 
     private static let captionHeight: CGFloat = 20
 
@@ -89,6 +90,18 @@ struct PhotoCollectionView: NSViewRepresentable {
             cv.animator().scrollToItems(at: [IndexPath(item: idx, section: 0)],
                                         scrollPosition: .nearestHorizontalEdge)
         }
+
+        // When the viewer closes, the grid must reclaim keyboard focus or its
+        // built-in arrow-key navigation stays dead (SwiftUI's viewer overlay
+        // had taken first responder and never hands it back). Defer so it runs
+        // after SwiftUI finishes tearing down the overlay's focus.
+        if coord.appliedViewerActive && !viewerActive {
+            DispatchQueue.main.async { [weak cv] in
+                guard let cv, let window = cv.window else { return }
+                if window.firstResponder !== cv { window.makeFirstResponder(cv) }
+            }
+        }
+        coord.appliedViewerActive = viewerActive
     }
 
     // MARK: - Coordinator
@@ -103,6 +116,7 @@ struct PhotoCollectionView: NSViewRepresentable {
         var appliedMetaVersion = -1
         var appliedSelection: Set<Photo.ID> = []
         var appliedAnchor: Photo.ID?
+        var appliedViewerActive = false
         private var syncingSelection = false
 
         init(model: AppModel) { self.model = model }
