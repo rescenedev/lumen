@@ -34,17 +34,31 @@ open dist/Lumen.app
 swift Scripts/make_samples.swift "$HOME/LumenSamples"   # EXIF/GPS 심긴 샘플 15장
 ```
 
+## 테스트
+
+```bash
+./Scripts/test.sh        # 또는: swift run LumenTests
+```
+
+> **`swift test`가 아닌 이유:** macOS Command Line Tools(Xcode 미설치)에는 XCTest도 swift-testing도 들어있지 않아 `swift test`가 동작하지 않습니다. 그래서 테스트는 **의존성 없는 초경량 어서션 하니스**(`Tests/LumenTests/Harness.swift`)를 쓰는 **실행 타깃**으로 두었고, `swift run LumenTests`로 돌립니다. 실패 시 종료 코드가 0이 아니라 CI에도 그대로 쓸 수 있습니다.
+
+테스트는 순수 로직과 데이터 안전성 표면에 집중합니다: 정렬·필터·리네임 패턴·확장자 인식·중복 탐지(실파일)·내보내기(원본 불변)·메타데이터 store(격리된 인메모리 SQLite, 재시작 후 영속성 포함). 앱 코드는 `LumenKit` 라이브러리에 있고 얇은 `Lumen` 실행 타깃이 이를 띄웁니다 — 덕분에 테스트가 코드와 링크됩니다.
+
 ## 프로젝트 구조
 
 ```
-Sources/Lumen/
-  App/        LumenApp.swift              @main 씬 + 메뉴 커맨드
-  Models/     불변 값 타입 (Photo, PhotoMeta, Album, ExifInfo, FilterState, …)
+Sources/Lumen/      ← LumenKit 라이브러리 (앱의 모든 코드, 테스트가 링크하는 대상)
+  App/        LumenApp.swift(씬 + 메뉴) · AppLauncher.swift(runLumenApp 진입 브리지)
+  Models/     불변 값 타입 (Photo, PhotoMeta, Album, ExifInfo, FilterState, RenamePattern, …)
   Store/      AppModel(중앙 상태) · MetadataStore(SQLite) · AppDatabase · WarmingMonitor
   Services/   스캐너, 썸네일/이미지 캐시, EXIF 인덱서, 내보내기, 중복탐지, iCloud, …
   Views/      SwiftUI 뷰 + Views/Collection/ (AppKit NSCollectionView 그리드)
-Scripts/      make_app.sh · make_icon.swift · make_samples.swift · Info.plist
+Sources/LumenMain/  ← Lumen 실행 타깃 (runLumenApp() 호출만 하는 2줄 main.swift)
+Tests/LumenTests/   ← 테스트 실행 타깃 + 초경량 하니스 (swift test 대신 swift run)
+Scripts/      make_app.sh · test.sh · make_icon.swift · make_samples.swift · Info.plist
 ```
+
+> **왜 라이브러리 + 얇은 실행 타깃?** SwiftPM에서 실행(executable) 타깃은 다른 타깃이 링크할 수 없습니다. 그래서 모든 코드를 `LumenKit` 라이브러리에 두고, 앱(`Lumen`)과 테스트(`LumenTests`)가 각각 이를 링크합니다.
 
 ## 아키텍처 한눈에
 
@@ -75,7 +89,7 @@ Scripts/      make_app.sh · make_icon.swift · make_samples.swift · Info.plist
 ## 기여 절차
 
 1. 레포를 **포크**하고 브랜치 생성: `git checkout -b feat/my-feature`
-2. 변경 후 **빌드가 깨지지 않는지** 확인: `swift build`
+2. 변경 후 **빌드 + 테스트** 확인: `swift build && ./Scripts/test.sh`
 3. 실제 앱으로 **동작 검증**: `./Scripts/make_app.sh && open dist/Lumen.app`
 4. **커밋 메시지**는 conventional commits 형식:
    ```
@@ -100,7 +114,7 @@ Scripts/      make_app.sh · make_icon.swift · make_samples.swift · Info.plist
 - 📊 스캔 진행률 표시
 
 **품질 / 배포**
-- ✅ 단위 테스트 (스캐너·정렬·메타 store)
+- ✅ 테스트 확대 — 스캐너(`PhotoScanner`/`IncrementalScanner`)·EXIF 인덱서·AppModel 필터링 로직 (현재는 정렬·필터·리네임·중복·내보내기·메타 store를 커버)
 - 🔏 노타라이즈 자동화 (Developer ID 서명 + notarytool)
 - 🧹 엣지 케이스 하드닝 (손상 이미지, 권한 거부, NAS 끊김)
 

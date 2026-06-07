@@ -46,9 +46,7 @@ struct RenameSheet: View {
     private var previews: [String] {
         let sorted = model.sortOrder.sorted(targets)
         return sorted.prefix(3).enumerated().map { offset, photo in
-            let ext = photo.url.pathExtension
-            let base = pattern.replacingOccurrences(of: "{n}", with: String(startIndex + offset))
-            return ext.isEmpty ? base : "\(base).\(ext)"
+            RenamePattern.filename(pattern: pattern, index: startIndex + offset, ext: photo.url.pathExtension)
         }
     }
 }

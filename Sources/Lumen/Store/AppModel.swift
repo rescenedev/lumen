@@ -991,8 +991,8 @@ final class AppModel {
         var index = startIndex
         for photo in sortOrder.sorted(photos) {
             let ext = photo.url.pathExtension
-            let base = pattern.replacingOccurrences(of: "{n}", with: String(index))
-            let newURL = photo.folderURL.appendingPathComponent(ext.isEmpty ? base : "\(base).\(ext)")
+            let newName = RenamePattern.filename(pattern: pattern, index: index, ext: ext)
+            let newURL = photo.folderURL.appendingPathComponent(newName)
             index += 1
             guard newURL != photo.url, !FileManager.default.fileExists(atPath: newURL.path) else { continue }
             do {

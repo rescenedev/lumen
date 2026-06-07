@@ -20,10 +20,19 @@ final class AppDatabase {
         config.busyMode = .timeout(5)
         // swiftlint:disable:next force_try
         queue = try! DatabaseQueue(path: fileURL.path, configuration: config)
-        try? migrate()
+        try? Self.migrate(queue)
     }
 
-    private func migrate() throws {
+    /// An isolated in-memory database carrying the current schema. Used by tests
+    /// so they never touch the user's real `lumen.sqlite`.
+    static func inMemoryQueue() throws -> DatabaseQueue {
+        let queue = try DatabaseQueue()
+        try migrate(queue)
+        return queue
+    }
+
+    /// Apply the schema migrations to a queue (shared by the live DB and tests).
+    static func migrate(_ queue: DatabaseQueue) throws {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1") { db in
             try db.execute(sql: """

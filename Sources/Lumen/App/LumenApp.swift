@@ -1,6 +1,5 @@
 import SwiftUI
 
-@main
 struct LumenApp: App {
     @State private var model = AppModel()
 

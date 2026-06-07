@@ -82,8 +82,8 @@ open dist/Lumen.app                                      # ⌘O로 폴더 선택
 ## 프로젝트 구조
 
 ```
-Sources/Lumen/
-  App/          LumenApp.swift          @main 씬 + 메뉴 커맨드
+Sources/Lumen/  (LumenKit 라이브러리 — 얇은 Sources/LumenMain 실행 타깃이 띄움)
+  App/          LumenApp.swift          씬 + 메뉴 커맨드 · AppLauncher.swift 진입점
   Models/       Photo, SortOrder, SidebarItem, ViewMode, PhotoMeta, Album, ExifInfo, FilterState, FolderNode
   Store/        AppModel(중앙 상태), MetadataStore, WarmingMonitor
   Services/     PhotoScanner, IncrementalScanner, ThumbnailCache, FullImageLoader,

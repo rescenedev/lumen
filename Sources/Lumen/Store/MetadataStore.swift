@@ -6,13 +6,21 @@ import GRDB
 /// stays a dictionary lookup) while writes go to the DB one row at a time —
 /// no full-file rewrites. The image files are never modified.
 final class MetadataStore {
-    private let db = AppDatabase.shared.queue
+    private let db: DatabaseQueue
     private var itemsCache: [String: PhotoMeta] = [:]
     private var albumsCache: [Album] = []
 
     init() {
+        db = AppDatabase.shared.queue
         load()
         migrateLegacyJSONIfNeeded()
+    }
+
+    /// Test seam: run against an isolated database, skipping the one-time
+    /// migration from the legacy `library.json` (which reads real user files).
+    init(queue: DatabaseQueue) {
+        db = queue
+        load()
     }
 
     // MARK: - Access
