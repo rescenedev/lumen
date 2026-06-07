@@ -22,6 +22,12 @@ final class FullImageLoader {
     func image(for url: URL) async -> NSImage? {
         let cacheKey = url.path as NSString
         if let hit = cache.object(forKey: cacheKey) { return hit }
+        // Photos-library asset: fetch via PhotoKit (downloads from iCloud if needed).
+        if url.scheme == Photo.assetScheme {
+            let image = await PhotosImageLoader.shared.fullImage(for: url)
+            if let image { cache.setObject(image, forKey: cacheKey, cost: cost(of: image)) }
+            return image
+        }
         return await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 let image = Self.decode(url: url)
@@ -33,7 +39,7 @@ final class FullImageLoader {
 
     /// Warm neighbouring images so paging next/prev is instant.
     func prefetch(_ urls: [URL]) {
-        for url in urls {
+        for url in urls where url.scheme != Photo.assetScheme {   // asset paging warms via PhotoKit on view
             let key = url.path as NSString
             if cache.object(forKey: key) != nil { continue }
             queue.async { [weak self] in

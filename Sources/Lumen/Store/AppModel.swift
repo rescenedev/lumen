@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Observation
+import Photos
 
 /// Central observable state for the whole app.
 @MainActor
@@ -12,10 +13,16 @@ final class AppModel {
     var isScanning = false
     private(set) var isLoadingLibrary = false
 
+    // Photos Library (Apple Photos / iCloud) — kept physically separate from the
+    // file/NAS `allPhotos` so reconcile/folder-tree/watcher never touch assets.
+    private(set) var assetPhotos: [Photo] = [] { didSet { assetsVersion &+= 1 } }
+    private(set) var photosAccess: PhotosAccessState = .unknown
+
     // Cheap monotonic counters used to invalidate memoized derived collections.
     @ObservationIgnored private var libraryVersion = 0
     @ObservationIgnored private var albumsVersion = 0
     @ObservationIgnored private var indexVersion = 0
+    @ObservationIgnored private var assetsVersion = 0
 
     // Navigation / filtering
     /// What the sidebar highlights — updates instantly so keyboard navigation
@@ -25,7 +32,11 @@ final class AppModel {
     }
     /// What the grid actually shows — debounced, so arrowing through folders
     /// doesn't recompute/redraw the grid on every transient selection.
-    private(set) var committedSidebar: SidebarItem = .allPhotos
+    private(set) var committedSidebar: SidebarItem = .allPhotos {
+        didSet {
+            if committedSidebar.isPhotosLibrarySource { loadPhotosLibraryIfNeeded() }
+        }
+    }
     @ObservationIgnored private var sidebarCommitWork: DispatchWorkItem?
 
     private func scheduleSidebarCommit() {
@@ -35,6 +46,30 @@ final class AppModel {
         let work = DispatchWorkItem { [weak self] in self?.committedSidebar = target }
         sidebarCommitWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    /// Photos to draw from for the current scope: the Apple Photos library for a
+    /// Photos source, otherwise the file/NAS library.
+    private var sourcePhotos: [Photo] {
+        committedSidebar.isPhotosLibrarySource ? assetPhotos : allPhotos
+    }
+
+    /// Lazily request access and load the Photos library the first time a Photos
+    /// source is opened. Idempotent; safe to call repeatedly.
+    func loadPhotosLibraryIfNeeded() {
+        guard assetPhotos.isEmpty, photosAccess != .loading, photosAccess != .denied else { return }
+        photosAccess = .loading
+        Task {
+            let status = await PhotosLibraryService.authorize()
+            switch status {
+            case .authorized, .limited:
+                let photos = await PhotosLibraryService.fetchAllImages()
+                self.assetPhotos = photos
+                self.photosAccess = (status == .limited) ? .limited : .authorized
+            default:
+                self.photosAccess = .denied
+            }
+        }
     }
     var sortOrder: SortOrder = .dateNewest
     var searchText = ""
@@ -251,7 +286,7 @@ final class AppModel {
     /// its own manual order.
     private func scoped(_ photos: [Photo]) -> [Photo] {
         switch committedSidebar {
-        case .allPhotos:
+        case .allPhotos, .photosLibrary:
             return photos
         case .favorites:
             return photos.filter { isFavorite($0) }
@@ -334,6 +369,7 @@ final class AppModel {
     @ObservationIgnored private var visibleSignature: Int {
         var hasher = Hasher()
         hasher.combine(libraryVersion)
+        hasher.combine(assetsVersion)
         hasher.combine(albumsVersion)
         hasher.combine(committedSidebar)
         hasher.combine(sortOrder)
@@ -359,7 +395,7 @@ final class AppModel {
 
     /// Scope + filter + search WITHOUT sorting (cheap; safe on the main thread).
     private func gatherUnsorted() -> [Photo] {
-        var result = filtered(scoped(allPhotos))
+        var result = filtered(scoped(sourcePhotos))
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if !query.isEmpty {
             let names = lowerNames
@@ -1015,12 +1051,14 @@ final class AppModel {
     // MARK: - Batch rename
 
     func startRename(_ photos: [Photo]) {
-        renameTargets = photos; showRenameSheet = true
+        renameTargets = photos.filter { !$0.isAsset }   // assets have no file to rename
+        guard !renameTargets.isEmpty else { return }
+        showRenameSheet = true
     }
 
     func rename(_ photos: [Photo], pattern: String, startIndex: Int) {
         var index = startIndex
-        for photo in sortOrder.sorted(photos) {
+        for photo in sortOrder.sorted(photos) where !photo.isAsset {
             let ext = photo.url.pathExtension
             let newName = RenamePattern.filename(pattern: pattern, index: index, ext: ext)
             let newURL = photo.folderURL.appendingPathComponent(newName)
@@ -1048,6 +1086,9 @@ final class AppModel {
     }
 
     func requestDeletion(_ photos: [Photo]) {
+        // Photos-library assets aren't files — Phase 1 is read-only, so never
+        // route them to Trash. (Phase 4 may add PhotoKit deletion.)
+        let photos = photos.filter { !$0.isAsset }
         guard !photos.isEmpty else { return }
         photosPendingDeletion = photos
         if confirmBeforeDelete {

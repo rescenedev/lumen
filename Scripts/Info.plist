@@ -28,5 +28,7 @@
     <string>public.app-category.photography</string>
     <key>NSHumanReadableCopyright</key>
     <string>Lumen — prototype photo viewer.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Lumen reads your Photos library so you can browse and view it alongside your files and NAS. Your photos are never modified.</string>
 </dict>
 </plist>

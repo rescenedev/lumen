@@ -13,6 +13,7 @@ struct SidebarView: View {
             set: { if let value = $0 { model.selectedSidebar = value } }
         )) {
             librarySection
+            photosLibrarySection
             albumsSection
             tagsSection
             labelsSection
@@ -38,6 +39,34 @@ struct SidebarView: View {
             if !model.duplicatePaths.isEmpty {
                 row(.duplicates, "Duplicates", .orange, count: model.duplicatePaths.count)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var photosLibrarySection: some View {
+        Section("Photos") {
+            Label {
+                HStack {
+                    Text("Photos Library").lineLimit(1)
+                    Spacer()
+                    switch model.photosAccess {
+                    case .loading:
+                        ProgressView().controlSize(.small)
+                    case .denied:
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                            .help("Photos access denied — enable in System Settings › Privacy › Photos.")
+                    default:
+                        if !model.assetPhotos.isEmpty {
+                            Text("\(model.assetPhotos.count)")
+                                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                }
+            } icon: {
+                Image(systemName: SidebarItem.photosLibrary.systemImage).foregroundStyle(Color.accentColor)
+            }
+            .tag(SidebarItem.photosLibrary)
         }
     }
 

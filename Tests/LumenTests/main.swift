@@ -16,5 +16,6 @@ duplicateFinderTests()
 exporterTests()
 metadataStoreTests()
 offlineRootTests()
+photoAssetTests()
 
 exit(Harness.finish())

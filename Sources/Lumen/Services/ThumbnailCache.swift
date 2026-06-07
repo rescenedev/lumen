@@ -93,6 +93,16 @@ final class ThumbnailCache {
             completion(hit)
             return
         }
+        // Photos-library assets have no file to decode — route to PhotoKit.
+        // (Asset thumbnails aren't written to the disk cache; PhotoKit caches.)
+        if url.scheme == Photo.assetScheme {
+            Task { [weak self] in
+                let image = await PhotosImageLoader.shared.thumbnail(for: url, maxPixel: maxPixel)
+                if let self, let image { self.memory.setObject(image, forKey: key, cost: self.cost(of: image)) }
+                await MainActor.run { completion(image) }
+            }
+            return
+        }
         decodeQueue.addOperation { [weak self] in
             let image = self?.loadAndCache(url: url, maxPixel: maxPixel, key: key)
             DispatchQueue.main.async { completion(image) }
