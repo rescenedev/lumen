@@ -53,6 +53,21 @@ the native-macOS patterns from
 > crop/rotate/adjust. Everything above is non-destructive (Trash is recoverable; rename
 > only changes filenames).
 
+## Install (Homebrew)
+
+```bash
+# Private tap needs a token:
+export HOMEBREW_GITHUB_API_TOKEN=$(gh auth token)
+
+brew tap rescenedev/tap
+brew install --cask lumen-photos
+```
+
+The cask token is `lumen-photos` (the plain `lumen` name is already taken by a
+different app in homebrew-cask). Lumen is ad-hoc signed (not notarized): on
+first launch, right-click → Open, or run
+`xattr -dr com.apple.quarantine "/Applications/Lumen.app"`.
+
 ## Build & run
 
 ```bash
