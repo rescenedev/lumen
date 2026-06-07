@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lumen — 대용량 사진 라이브러리를 위한 macOS 뷰어</title>
-<meta name="description" content="로컬·NAS·Apple Photos를 한 앱에서. 6만 장 넘는 라이브러리도 휙휙 넘기는 네이티브 macOS 사진 뷰어 & 매니저. 비파괴 안전 설계.">
+<meta name="description" content="로컬·NAS·Apple Photos를 한 앱에서. 6만 장 넘는 라이브러리도 휙휙 넘기는 네이티브 macOS 사진 뷰어 & 매니저. 크롭·회전·합치기·워터마크까지 전부 비파괴.">
 <meta property="og:title" content="Lumen — 대용량 사진 라이브러리를 위한 macOS 뷰어">
 <meta property="og:description" content="로컬·NAS·Apple Photos를 한 앱에서. 6만 장+ 라이브러리도 가볍게.">
 <meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
@@ -196,7 +196,7 @@
     <div class="why">
       <div class="card reveal"><div class="badge">⚡</div><h3>대용량에 진심</h3><p>6만 장 넘는 NAS 라이브러리로 실사용 테스트. 셀 재사용 그리드, 2단 썸네일 캐시, 백그라운드 워밍으로 어느 폴더든 즉시 열립니다.</p></div>
       <div class="card reveal"><div class="badge">🗂️</div><h3>모든 소스를 한 곳에</h3><p>로컬 폴더, <b>NAS</b>, 그리고 <b>Apple Photos(iCloud)</b>까지 한 창에서. 사진앱이 못 보는 NAS와, 뷰어가 못 보는 iCloud를 동시에.</p></div>
-      <div class="card reveal"><div class="badge">🛡️</div><h3>비파괴가 기본</h3><p>크롭·리사이즈도 <b>새 파일로 저장</b>해 원본을 보존합니다(덮어쓰기는 확인 후 선택). 즐겨찾기·태그·별점은 원본과 분리 저장 · 모든 동작 복구 가능.</p></div>
+      <div class="card reveal"><div class="badge">🛡️</div><h3>비파괴가 기본</h3><p>크롭·리사이즈·회전·합치기·워터마크까지 <b>전부 새 파일로 저장</b>해 원본을 보존합니다(덮어쓰기는 확인 후 선택). 즐겨찾기·태그·별점은 원본과 분리 저장.</p></div>
     </div>
   </div>
 </section>
@@ -204,7 +204,7 @@
 <section id="features">
   <div class="wrap">
     <p class="eyebrow reveal">기능</p>
-    <h2 class="stitle reveal">보고, 찾고, 정리하는 데 필요한 전부</h2>
+    <h2 class="stitle reveal">보고, 찾고, 정리하고, 다듬는 데 필요한 전부</h2>
 
     <div class="feat">
       <div class="feat-text reveal">
@@ -227,8 +227,8 @@
         <p>풀스크린으로 몰입. 그리고 사진가를 위한 가장 빠른 컬링 동작:</p>
         <ul>
           <li><b>Space</b> = 즐겨찾기 + 바로 다음 사진 — 손 안 떼고 수천 장을 순식간에 리뷰</li>
-          <li>좌우 썸네일 미리보기 · EXIF 오버레이 · 2장 비교 · 슬라이드쇼</li>
-          <li>핀치/스크롤/더블클릭 줌 · 드래그 팬 · 별점(1–5)</li>
+          <li>키보드 컬링: <b>별점 1–5</b> · 즐겨찾기(F) · <b>거부(X)</b> — 그리드·뷰어 어디서나. 거부 숨김 필터로 골라낸 컷만</li>
+          <li>좌우 썸네일 미리보기 · EXIF 오버레이 · 2장 비교 · 슬라이드쇼 · 줌/팬</li>
         </ul>
       </div>
       <div class="feat-media reveal" style="padding:0;background:none;border:none;box-shadow:none">
@@ -237,8 +237,11 @@
     </div>
 
     <div class="why" style="margin-top:66px">
-      <div class="card reveal"><div class="badge">🏷️</div><h3>비파괴 정리</h3><p>앨범 · 태그 · 별점 · 색상 라벨 · 스마트 모음(즐겨찾기·최근·오늘·중복). 원본은 절대 변경하지 않습니다.</p></div>
-      <div class="card reveal"><div class="badge">🔍</div><h3>검색 &amp; 필터</h3><p>파일명 · 태그 · 카메라 모델 검색. 별점 · 라벨 · 위치 · 카메라(예: SONY)로 필터.</p></div>
+      <div class="card reveal"><div class="badge">✂️</div><h3>가벼운 비파괴 편집</h3><p>크롭(비율 고정·자유) · 회전/뒤집기 · <b>수평 맞추기</b> · 리사이즈/정사각 캔버스(여백 채움). 큰 편집창에서 <b>줌·정밀 크롭</b>, 결과 크기 미리보기까지. 전부 새 파일로.</p></div>
+      <div class="card reveal"><div class="badge">🧩</div><h3>합치기 &amp; 워터마크</h3><p>여러 장을 <b>가로/세로/그리드</b>로 한 장에(드래그로 순서·행 지정). 텍스트·로고 <b>워터마크</b>(위치·색·투명도) — 편집·합치기·<b>배치</b> 어디서나.</p></div>
+      <div class="card reveal"><div class="badge">🚀</div><h3>배치 처리</h3><p>여러 장을 한 번에 같은 크기·캔버스·워터마크로 리사이즈해 폴더로 내보내기. 원본은 그대로.</p></div>
+      <div class="card reveal"><div class="badge">🏷️</div><h3>비파괴 정리</h3><p>앨범 · 태그 · 별점 · 색상 라벨 · 거부 플래그 · 스마트 모음(즐겨찾기·최근·오늘·중복). 원본은 절대 변경하지 않습니다.</p></div>
+      <div class="card reveal"><div class="badge">🔍</div><h3>검색 &amp; 필터</h3><p>파일명 · 태그 · 카메라 모델 검색. 별점 · 라벨 · 위치 · 카메라(예: SONY) · 거부 숨김으로 필터.</p></div>
       <div class="card reveal"><div class="badge">📤</div><h3>공유 · 내보내기</h3><p>시스템 공유, 원본/리사이즈/zip 내보내기, 일괄 이름변경, 배경화면 설정.</p></div>
     </div>
   </div>
