@@ -19,6 +19,9 @@ enum ImageEditor {
         var targetHeight: Int?
         /// 90° clockwise rotations (0…3) applied before crop. Default none.
         var rotationQuarters: Int = 0
+        /// Fine straighten angle in degrees (clockwise). Auto-crops to remove the
+        /// blank corners the rotation exposes. Default none.
+        var straightenDegrees: Double = 0
         /// Mirror horizontally (applied with the rotation). Default off.
         var flipH: Bool = false
         /// Where the image sits inside a padded canvas (0…1, top-left origin).
@@ -31,6 +34,10 @@ enum ImageEditor {
     static func outputSize(source pixelSize: CGSize, edit: Edit) -> CGSize {
         var w = pixelSize.width, h = pixelSize.height
         if edit.rotationQuarters % 2 != 0 { swap(&w, &h) }   // 90°/270° swap dimensions
+        if edit.straightenDegrees != 0 {                     // auto-crop removes blank corners
+            let s = straightenCropSize(w, h, degrees: edit.straightenDegrees)
+            w = s.width.rounded(); h = s.height.rounded()
+        }
         if let c = edit.cropNorm {
             w = (w * c.width).rounded()
             h = (h * c.height).rounded()
@@ -60,6 +67,7 @@ enum ImageEditor {
         guard var cg = orientedCGImage(source) else { return false }
 
         if let rotated = transformed(cg, quarters: edit.rotationQuarters, flipH: edit.flipH) { cg = rotated }
+        if edit.straightenDegrees != 0, let s = straightened(cg, degrees: edit.straightenDegrees) { cg = s }
 
         if let c = edit.cropNorm {
             let px = CGRect(x: (c.minX * CGFloat(cg.width)).rounded(),
@@ -160,6 +168,56 @@ enum ImageEditor {
         ctx.translateBy(x: -CGFloat(w) / 2, y: -CGFloat(h) / 2)
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
         return ctx.makeImage()
+    }
+
+    /// Largest centered, axis-aligned rectangle that still fits inside a w×h
+    /// rectangle rotated by `degrees` — i.e. the straighten auto-crop, so there
+    /// are no blank corners. (Standard rotate-and-crop geometry.)
+    static func straightenCropSize(_ w: CGFloat, _ h: CGFloat, degrees: Double) -> CGSize {
+        let a = abs(degrees) * .pi / 180
+        guard a > 0.0001, w > 0, h > 0 else { return CGSize(width: w, height: h) }
+        let sinA = abs(sin(a)), cosA = abs(cos(a))
+        let widthIsLonger = w >= h
+        let long = widthIsLonger ? w : h, short = widthIsLonger ? h : w
+        var wr: CGFloat, hr: CGFloat
+        if short <= 2 * sinA * cosA * long || abs(sinA - cosA) < 1e-10 {
+            let x = 0.5 * short
+            if widthIsLonger { wr = x / sinA; hr = x / cosA } else { wr = x / cosA; hr = x / sinA }
+        } else {
+            let cos2a = cosA * cosA - sinA * sinA
+            wr = (w * cosA - h * sinA) / cos2a
+            hr = (h * cosA - w * sinA) / cos2a
+        }
+        return CGSize(width: max(1, min(wr, w)), height: max(1, min(hr, h)))
+    }
+
+    /// Rotate by a fine `degrees` and crop to the inscribed rectangle (no blank
+    /// corners). Used by straightening — preview and save share this.
+    static func straightened(_ cg: CGImage, degrees: Double) -> CGImage? {
+        guard abs(degrees) > 0.001 else { return cg }
+        let w = CGFloat(cg.width), h = CGFloat(cg.height)
+        let crop = straightenCropSize(w, h, degrees: degrees)
+        let cw = max(1, Int(crop.width.rounded())), ch = max(1, Int(crop.height.rounded()))
+        let cs = cg.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(data: nil, width: cw, height: ch, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.translateBy(x: CGFloat(cw) / 2, y: CGFloat(ch) / 2)
+        ctx.rotate(by: CGFloat(degrees) * .pi / 180)         // undo the tilt (clockwise input)
+        ctx.translateBy(x: -w / 2, y: -h / 2)
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return ctx.makeImage()
+    }
+
+    /// Downscale `cg` so its long edge ≤ `maxPixel` (returns it unchanged if it's
+    /// already small). For building a light preview base the editor re-transforms.
+    static func downsampled(_ cg: CGImage, maxPixel: Int) -> CGImage {
+        let long = max(cg.width, cg.height)
+        guard long > maxPixel, maxPixel > 0 else { return cg }
+        let scale = CGFloat(maxPixel) / CGFloat(long)
+        return resize(cg, to: CGSize(width: (CGFloat(cg.width) * scale).rounded(),
+                                     height: (CGFloat(cg.height) * scale).rounded())) ?? cg
     }
 
     private static func resize(_ cg: CGImage, to size: CGSize) -> CGImage? {
