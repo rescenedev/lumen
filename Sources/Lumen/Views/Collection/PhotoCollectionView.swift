@@ -290,6 +290,10 @@ struct PhotoCollectionView: NSViewRepresentable {
                 guard !targets.isEmpty else { return false }
                 model.requestDeletion(targets)
                 return true
+            case .escape:
+                guard !model.selection.isEmpty else { return false }
+                model.clearSelection()
+                return true
             }
         }
 
@@ -343,6 +347,7 @@ final class LumenCollectionView: NSCollectionView {
         case 49: handled = onKey?(.space) ?? false       // space
         case 36, 76: handled = onKey?(.enter) ?? false   // return / enter
         case 51, 117: handled = onKey?(.delete) ?? false // delete / fwd-delete
+        case 53: handled = onKey?(.escape) ?? false      // esc
         case 123: handled = onArrow?(-1, 0, shift) ?? false  // ←
         case 124: handled = onArrow?(1, 0, shift) ?? false   // →
         case 125: handled = onArrow?(0, 1, shift) ?? false   // ↓
@@ -357,4 +362,4 @@ final class LumenCollectionView: NSCollectionView {
     }
 }
 
-enum LumenKey { case space, enter, delete }
+enum LumenKey { case space, enter, delete, escape }
