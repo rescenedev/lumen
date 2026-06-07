@@ -8,6 +8,13 @@ struct PhotoCombineView: View {
 
     let photos: [Photo]
 
+    init(photos: [Photo]) {
+        self.photos = photos
+        _ordered = State(initialValue: photos)
+    }
+
+    @State private var ordered: [Photo]            // drag-reorderable source order
+    @State private var dragging: Photo?
     @State private var layout: ImageEditor.CombineLayout = .horizontal
     @State private var gapPercent: Double = 1.5
     @State private var background: BackgroundChoice = .white
@@ -18,7 +25,7 @@ struct PhotoCombineView: View {
     @State private var busy = false
     @State private var renderToken = 0
 
-    private var sources: [URL] { photos.map(\.url) }
+    private var sources: [URL] { ordered.map(\.url) }
     private var gapFraction: CGFloat { CGFloat(min(max(gapPercent, 0), 20)) / 100 }
 
     /// User types the number of rows. Empty or invalid → auto (nil = square-ish).
@@ -61,6 +68,9 @@ struct PhotoCombineView: View {
             .frame(minHeight: 360)
             Divider()
 
+            reorderStrip
+            Divider()
+
             VStack(spacing: 14) {
                 // Every control on one line: layout · background · (rows) · spacing · resolution.
                 HStack(spacing: 12) {
@@ -99,12 +109,39 @@ struct PhotoCombineView: View {
             }
             .padding(16)
         }
-        .frame(width: 860, height: 660)
+        .frame(width: 860, height: 720)
         .onAppear { instantPreview() }
         .task(id: renderKey) { await renderPreview() }
     }
 
-    private var renderKey: String { "\(layout.rawValue)|\(gapPercent)|\(background.rawValue)|\(gridRows ?? 0)" }
+    /// Horizontal strip of source thumbnails; drag to reorder how they're joined.
+    private var reorderStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(ordered.enumerated()), id: \.element.id) { index, photo in
+                    AsyncThumbnail(url: photo.url)
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(alignment: .topLeading) {
+                            Text("\(index + 1)").font(.caption2.bold().monospacedDigit())
+                                .padding(2).frame(minWidth: 16)
+                                .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 4))
+                                .foregroundStyle(.white).padding(2)
+                        }
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.15)))
+                        .opacity(dragging == photo ? 0.35 : 1)
+                        .onDrag { dragging = photo; return NSItemProvider(object: photo.url.absoluteString as NSString) }
+                        .onDrop(of: [.text], delegate: CombineReorderDrop(item: photo, ordered: $ordered, dragging: $dragging))
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+        }
+        .frame(height: 72)
+    }
+
+    private var renderKey: String {
+        "\(layout.rawValue)|\(gapPercent)|\(background.rawValue)|\(gridRows ?? 0)|\(ordered.map(\.url.path).joined(separator: ">"))"
+    }
 
     /// Composite the grid thumbnails already in memory (512px) — instant, no disk
     /// decode — so opening the sheet never stutters. The async pass below refines.
@@ -141,7 +178,7 @@ struct PhotoCombineView: View {
     private func save() {
         busy = true
         let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows
-        let dir = photos[0].url.deletingLastPathComponent()
+        let dir = ordered[0].url.deletingLastPathComponent()
         let ext = background == .transparent ? "png" : "jpg"
         let dest = ImageEditor.uniqueFileURL(in: dir, base: "Combined", ext: ext)
         let maxPixel = resolution.pixels
@@ -178,6 +215,24 @@ enum CombineSize: String, CaseIterable, Identifiable {
         case .original: return nil
         }
     }
+}
+
+/// Reorders the source list as a dragged thumbnail passes over another.
+private struct CombineReorderDrop: DropDelegate {
+    let item: Photo
+    @Binding var ordered: [Photo]
+    @Binding var dragging: Photo?
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging, dragging != item,
+              let from = ordered.firstIndex(of: dragging),
+              let to = ordered.firstIndex(of: item) else { return }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            ordered.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+        }
+    }
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func performDrop(info: DropInfo) -> Bool { dragging = nil; return true }
 }
 
 enum BackgroundChoice: String, CaseIterable, Identifiable {
