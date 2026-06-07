@@ -96,3 +96,7 @@ Scripts/        make_app.sh, make_icon.swift, make_samples.swift, Info.plist
 ```
 
 아키텍처: 중앙 `AppModel` 하나가 라이브러리와 뷰 상태를 소유, 서비스는 무상태/캐시 헬퍼, 뷰는 작게 분리. `Photo`는 불변 값 타입.
+
+## 기여 & 라이선스
+
+기여 환영합니다 — [CONTRIBUTING.md](CONTRIBUTING.md)를 봐주세요. [MIT 라이선스](LICENSE).
