@@ -23,6 +23,7 @@ struct PhotoContextMenu: View {
         }
         if isBatch && targets.contains(where: { !$0.isAsset }) {
             Button("Combine into One…") { model.startCombine(targets) }
+            Button("Batch Resize…") { model.startBatchResize(targets) }
         }
 
         Divider()

@@ -36,6 +36,7 @@ enum PhotoMenuBuilder {
         }
         if isBatch && targets.contains(where: { !$0.isAsset }) {
             menu.addItem(ClosureMenuItem("Combine into One…") { model.startCombine(targets) })
+            menu.addItem(ClosureMenuItem("Batch Resize…") { model.startBatchResize(targets) })
         }
         menu.addItem(.separator())
 

@@ -158,6 +158,25 @@ final class AppModel {
         showToast("합친 이미지 저장됨 · \(output.deletingLastPathComponent().lastPathComponent)/\(output.lastPathComponent)")
     }
 
+    // Batch resize/canvas → export many photos at once (non-destructive copies).
+    var batchTargets: [Photo] = []
+    var showBatchResize = false
+
+    func startBatchResize(_ photos: [Photo]) {
+        let files = photos.filter { !$0.isAsset }
+        guard !files.isEmpty else {
+            showToast("리사이즈할 파일 사진을 선택하세요 (Apple Photos 제외).")
+            return
+        }
+        batchTargets = files
+        showBatchResize = true
+    }
+
+    func didBatchResize(count: Int, folder: URL) {
+        showToast("\(count)장 내보냄 · \(folder.lastPathComponent)")
+        NSWorkspace.shared.activateFileViewerSelecting([folder])
+    }
+
     /// Make a just-written file visible: add it to the library, jump to All Photos
     /// (a file scope — the result won't show under an Apple Photos source), and
     /// select + scroll to it.
