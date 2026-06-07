@@ -6,6 +6,7 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @State private var renamingAlbum: Album?
     @State private var renameText = ""
+    @State private var photoAlbumsExpanded = false
 
     var body: some View {
         List(selection: Binding(
@@ -13,6 +14,7 @@ struct SidebarView: View {
             set: { if let value = $0 { model.selectedSidebar = value } }
         )) {
             librarySection
+            photosLibrarySection
             albumsSection
             tagsSection
             labelsSection
@@ -39,6 +41,65 @@ struct SidebarView: View {
                 row(.duplicates, "Duplicates", .orange, count: model.duplicatePaths.count)
             }
         }
+    }
+
+    @ViewBuilder
+    private var photosLibrarySection: some View {
+        Section("Photos") {
+            Label {
+                HStack {
+                    Text("Photos Library").lineLimit(1)
+                    Spacer()
+                    switch model.photosAccess {
+                    case .loading:
+                        ProgressView().controlSize(.small)
+                    case .denied:
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                            .help("Photos access denied — enable in System Settings › Privacy › Photos.")
+                    default:
+                        if !model.assetPhotos.isEmpty {
+                            Text("\(model.assetPhotos.count)")
+                                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                }
+            } icon: {
+                Image(systemName: SidebarItem.photosLibrary.systemImage).foregroundStyle(Color.accentColor)
+            }
+            .tag(SidebarItem.photosLibrary)
+
+            // Favorites stays pinned; the (often long) user-album list collapses.
+            if let faves = model.photosAlbums.first(where: { $0.isFavorites }) {
+                photosAlbumRow(faves)
+            }
+            let userAlbums = model.photosAlbums.filter { !$0.isFavorites }
+            if !userAlbums.isEmpty {
+                DisclosureGroup(isExpanded: $photoAlbumsExpanded) {
+                    ForEach(userAlbums) { album in photosAlbumRow(album) }
+                } label: {
+                    Label("Albums (\(userAlbums.count))", systemImage: "rectangle.stack")
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) {
+                            withAnimation { photoAlbumsExpanded.toggle() }
+                        }
+                }
+            }
+        }
+    }
+
+    private func photosAlbumRow(_ album: PhotosAlbumRef) -> some View {
+        Label {
+            HStack {
+                Text(album.title).lineLimit(1)
+                Spacer()
+                Text("\(album.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            }
+        } icon: {
+            Image(systemName: album.isFavorites ? "heart.fill" : "rectangle.stack")
+                .foregroundStyle(album.isFavorites ? Color.pink : Color.accentColor)
+        }
+        .tag(SidebarItem.photosAlbum(album.id))
     }
 
     private var albumsSection: some View {

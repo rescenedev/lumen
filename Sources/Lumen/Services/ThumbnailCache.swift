@@ -93,6 +93,16 @@ final class ThumbnailCache {
             completion(hit)
             return
         }
+        // Photos-library assets have no file to decode — route to PhotoKit.
+        // (Asset thumbnails aren't written to the disk cache; PhotoKit caches.)
+        if url.scheme == Photo.assetScheme {
+            Task { [weak self] in
+                let image = await PhotosImageLoader.shared.thumbnail(for: url, maxPixel: maxPixel)
+                if let self, let image { self.memory.setObject(image, forKey: key, cost: self.cost(of: image)) }
+                await MainActor.run { completion(image) }
+            }
+            return
+        }
         decodeQueue.addOperation { [weak self] in
             let image = self?.loadAndCache(url: url, maxPixel: maxPixel, key: key)
             DispatchQueue.main.async { completion(image) }
@@ -111,7 +121,11 @@ final class ThumbnailCache {
     /// any prior prefetch batch so we don't chase a stale viewport.
     func prefetch(_ urls: [URL], maxPixel: Int = gridMaxPixel) {
         prefetchQueue.cancelAllOperations()
-        for url in urls.prefix(1000) {
+        // Skip Photos-library assets: prefetch uses the file decode path
+        // (loadAndCache → QuickLook), which for a synthetic asset URL returns the
+        // generic document ICON and poisons the cache. Assets load via PhotoKit
+        // in `thumbnail(...)`; warming them here isn't needed.
+        for url in urls.prefix(1000) where url.scheme != Photo.assetScheme {
             let key = memKey(url, maxPixel)
             if memory.object(forKey: key) != nil { continue }
             let op = BlockOperation()
@@ -209,6 +223,9 @@ final class ThumbnailCache {
     /// memory and on disk. The single shared load path for display and prefetch.
     @discardableResult
     private func loadAndCache(url: URL, maxPixel: Int, key: NSString) -> NSImage? {
+        // Never run the file/QuickLook decode path on a Photos-library asset — it
+        // would return the generic document icon. Assets only load via PhotoKit.
+        if url.scheme == Photo.assetScheme { return nil }
         let disk = diskURL(url, maxPixel)
         if let data = try? Data(contentsOf: disk), let image = NSImage(data: data) {
             memory.setObject(image, forKey: key, cost: cost(of: image))

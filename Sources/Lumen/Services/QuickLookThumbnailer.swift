@@ -11,7 +11,9 @@ enum QuickLookThumbnailer {
             fileAt: url,
             size: CGSize(width: maxPixel, height: maxPixel),
             scale: 1,
-            representationTypes: .all
+            // Thumbnails only — never the generic document *icon* (.all includes
+            // .icon, which renders as a blank white page with a folded corner).
+            representationTypes: [.thumbnail, .lowQualityThumbnail]
         )
 
         let semaphore = DispatchSemaphore(value: 0)

@@ -11,6 +11,8 @@ enum SidebarItem: Hashable, Identifiable {
     case album(UUID)
     case tag(String)
     case folder(URL)
+    case photosLibrary              // Apple Photos / iCloud Photos: all images
+    case photosAlbum(String)        // a Photos-library album (collection localIdentifier)
 
     var id: String {
         switch self {
@@ -23,6 +25,8 @@ enum SidebarItem: Hashable, Identifiable {
         case .album(let uuid): return "album:\(uuid.uuidString)"
         case .tag(let t): return "tag:\(t)"
         case .folder(let url): return "folder:\(url.path)"
+        case .photosLibrary: return "photosLibrary"
+        case .photosAlbum(let id): return "photosAlbum:\(id)"
         }
     }
 
@@ -37,6 +41,16 @@ enum SidebarItem: Hashable, Identifiable {
         case .album: return "rectangle.stack"
         case .tag: return "tag"
         case .folder: return "folder"
+        case .photosLibrary: return "photo.stack"
+        case .photosAlbum: return "rectangle.stack"
+        }
+    }
+
+    /// True for sources backed by the Apple Photos library rather than files.
+    var isPhotosLibrarySource: Bool {
+        switch self {
+        case .photosLibrary, .photosAlbum: return true
+        default: return false
         }
     }
 }

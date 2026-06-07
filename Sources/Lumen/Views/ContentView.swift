@@ -58,7 +58,9 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        if model.totalCount == 0 {
+        if model.committedSidebar.isPhotosLibrarySource {
+            photosLibraryContent
+        } else if model.totalCount == 0 {
             if model.isLoadingLibrary {
                 ProgressView("Loading your photos…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -66,6 +68,29 @@ struct ContentView: View {
                 EmptyStateView()
             }
         } else {
+            PhotoBrowserView()
+        }
+    }
+
+    @ViewBuilder
+    private var photosLibraryContent: some View {
+        switch model.photosAccess {
+        case .loading where model.assetPhotos.isEmpty:
+            ProgressView("Loading Photos library…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .denied:
+            ContentUnavailableView {
+                Label("Photos Access Needed", systemImage: "lock")
+            } description: {
+                Text("Enable Photos access in System Settings › Privacy & Security › Photos to browse your library here.")
+            } actions: {
+                Button("Open System Settings") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Photos") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
+        default:
             PhotoBrowserView()
         }
     }
