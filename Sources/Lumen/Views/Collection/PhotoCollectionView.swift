@@ -7,19 +7,20 @@ struct PhotoCollectionView: NSViewRepresentable {
     let model: AppModel
     let token: Int                 // visibleSignature — changes when the list changes
     let isSorting: Bool            // true while a big scope sorts off-main
+    let metaVersion: Int           // changes when favorites/ratings/labels change
     let thumbnailSize: Double
     let selection: Set<Photo.ID>
     let anchor: Photo.ID?
 
-    private static let captionHeight: CGFloat = 36
+    private static let captionHeight: CGFloat = 28
 
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
 
     func makeNSView(context: Context) -> NSScrollView {
         let layout = AdaptiveFlowLayout()
-        layout.minimumInteritemSpacing = 8
-        layout.minimumLineSpacing = 10
-        layout.sectionInset = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        layout.minimumInteritemSpacing = 6
+        layout.minimumLineSpacing = 5
+        layout.sectionInset = NSEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
         layout.captionHeight = Self.captionHeight
         layout.targetItemWidth = thumbnailSize
 
@@ -73,8 +74,11 @@ struct PhotoCollectionView: NSViewRepresentable {
             coord.reload(cv)
         } else if coord.appliedSorting && !isSorting {
             coord.reload(cv)            // async sort just landed — refresh content
+        } else if metaVersion != coord.appliedMetaVersion {
+            coord.refreshVisibleBadges(cv)   // favorites/ratings/labels — no reload
         }
         coord.appliedSorting = isSorting
+        coord.appliedMetaVersion = metaVersion
 
         if selection != coord.appliedSelection {
             coord.applySelection(cv, selection)
@@ -96,6 +100,7 @@ struct PhotoCollectionView: NSViewRepresentable {
         var indexByID: [Photo.ID: Int] = [:]
         var appliedToken = -1
         var appliedSorting = false
+        var appliedMetaVersion = -1
         var appliedSelection: Set<Photo.ID> = []
         var appliedAnchor: Photo.ID?
         private var syncingSelection = false
@@ -124,6 +129,18 @@ struct PhotoCollectionView: NSViewRepresentable {
                            favorite: model.isFavorite(photo),
                            rating: model.rating(photo), label: model.label(photo))
             return item
+        }
+
+        /// Update favorite/rating/label badges on the visible cells in place,
+        /// without a reload (so in-flight/loaded thumbnails are preserved).
+        func refreshVisibleBadges(_ cv: NSCollectionView) {
+            for ip in cv.indexPathsForVisibleItems() {
+                guard photos.indices.contains(ip.item),
+                      let item = cv.item(at: ip) as? PhotoCollectionItem else { continue }
+                let photo = photos[ip.item]
+                item.updateBadges(favorite: model.isFavorite(photo),
+                                  rating: model.rating(photo), label: model.label(photo))
+            }
         }
 
         func collectionView(_ cv: NSCollectionView, didSelectItemsAt indexPaths: Set<IndexPath>) {

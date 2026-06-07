@@ -59,7 +59,12 @@ struct ContentView: View {
     @ViewBuilder
     private var detailContent: some View {
         if model.totalCount == 0 {
-            EmptyStateView()
+            if model.isLoadingLibrary {
+                ProgressView("Loading your photos…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                EmptyStateView()
+            }
         } else {
             PhotoBrowserView()
         }

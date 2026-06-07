@@ -32,6 +32,7 @@ struct PhotoBrowserView: View {
     /// Warm thumbnails for the current list so cells appear instantly on scroll.
     private func prefetch() {
         guard model.viewMode != .map else { return }
+        ThumbnailCache.shared.yieldWarmingToBrowsing()
         ThumbnailCache.shared.prefetch(model.visiblePhotos.map { $0.url })
     }
 
@@ -83,6 +84,7 @@ struct PhotoBrowserView: View {
                     model: model,
                     token: model.visibleToken,
                     isSorting: model.isSortingVisible,
+                    metaVersion: model.metaRevision,
                     thumbnailSize: model.thumbnailSize,
                     selection: model.selection,
                     anchor: model.selectionAnchor

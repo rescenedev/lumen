@@ -25,7 +25,7 @@ struct Photo: Identifiable, Hashable, Sendable, Codable {
         self.modificationDate = resourceValues.contentModificationDate
     }
 
-    private init(url: URL, byteSize: Int64, creationDate: Date?, modificationDate: Date?) {
+    init(url: URL, byteSize: Int64, creationDate: Date?, modificationDate: Date?) {
         self.url = url
         self.filename = url.lastPathComponent
         self.fileExtension = url.pathExtension.lowercased()

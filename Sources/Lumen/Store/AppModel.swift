@@ -10,6 +10,7 @@ final class AppModel {
     private(set) var allPhotos: [Photo] = [] { didSet { libraryVersion &+= 1 } }
     private(set) var rootFolders: [URL] = []
     var isScanning = false
+    private(set) var isLoadingLibrary = false
 
     // Cheap monotonic counters used to invalidate memoized derived collections.
     @ObservationIgnored private var libraryVersion = 0
@@ -37,7 +38,7 @@ final class AppModel {
     }
     var sortOrder: SortOrder = .dateNewest
     var searchText = ""
-    var thumbnailSize: Double = 170
+    var thumbnailSize: Double = 320
     var filter = FilterState()
     var groupByMonth = false
 
@@ -321,16 +322,24 @@ final class AppModel {
         return !searchText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    /// True when the current view's contents depend on the EXIF index — so a
+    /// background indexing pass shouldn't reload a plain folder/All-Photos grid.
+    @ObservationIgnored private var viewDependsOnExif: Bool {
+        if case .duplicates = committedSidebar { return true }
+        if filter.gpsOnly || filter.camera != nil { return true }
+        return !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     /// A cheap hash of every input that affects `visiblePhotos`.
     @ObservationIgnored private var visibleSignature: Int {
         var hasher = Hasher()
         hasher.combine(libraryVersion)
         hasher.combine(albumsVersion)
-        hasher.combine(indexVersion)
         hasher.combine(committedSidebar)
         hasher.combine(sortOrder)
         hasher.combine(searchText)
         hasher.combine(filter)
+        if viewDependsOnExif { hasher.combine(indexVersion) }
         if viewDependsOnMeta { hasher.combine(metaRevision) }
         return hasher.finalize()
     }
@@ -666,19 +675,22 @@ final class AppModel {
         let scannedURLs = Set(scanned.map { $0.url })
         let removed = allPhotos.filter { underScannedRoot($0) && !scannedURLs.contains($0.url) }
 
-        // Offline photos kept; everything under the scanned roots refreshed.
-        let offline = allPhotos.filter { !underScannedRoot($0) }
-        allPhotos = offline + scanned
-
-        if !removed.isEmpty {
-            for photo in removed { exif.removeValue(forKey: photo.url.path) }
-            duplicatePaths.subtract(removed.map { $0.url.path })
+        // Only mutate the library when something actually changed — otherwise a
+        // no-op launch reconcile would bump the version and force the grid to
+        // reload (throwing away in-flight thumbnail decodes).
+        if !added.isEmpty || !removed.isEmpty {
+            if !removed.isEmpty {
+                for photo in removed { exif.removeValue(forKey: photo.url.path) }
+                duplicatePaths.subtract(removed.map { $0.url.path })
+            }
+            let offline = allPhotos.filter { !underScannedRoot($0) }
+            allPhotos = offline + scanned
+            recomputeMetaCounts()
+            persistLibraryCache()
         }
-        recomputeMetaCounts()
-        persistLibraryCache()
         watcher?.watch(roots)
 
-        if !exif.isEmpty { await indexExif(for: added) }  // full index is deferred until needed
+        if !exif.isEmpty, !added.isEmpty { await indexExif(for: added) }
         startThumbnailWarming()
     }
 
@@ -1076,18 +1088,22 @@ final class AppModel {
         // now — so it's never forgotten and reloads automatically when it's back.
         let urls = paths.map { URL(fileURLWithPath: $0) }
         rootFolders = urls
+        isLoadingLibrary = true
 
-        // Instant: show the last-known library + EXIF from cache (no disk scan).
-        if let cached = LibraryCache.loadPhotos(), !cached.isEmpty {
-            allPhotos = cached
-            if let cachedExif = LibraryCache.loadExif() { exif = cachedExif }
-            recomputeMetaCounts()
+        // Window appears immediately; load the cached library off the main thread.
+        Task {
+            let cached = await Task.detached(priority: .userInitiated) { LibraryCache.loadPhotos() }.value
+            let cachedExif = await Task.detached(priority: .userInitiated) { LibraryCache.loadExif() }.value
+            if let cached, !cached.isEmpty {
+                allPhotos = cached
+                if let cachedExif { exif = cachedExif }
+                recomputeMetaCounts()
+            }
+            isLoadingLibrary = false
+
+            let available = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+            if !available.isEmpty { await reconcile(roots: available) }
         }
-
-        // Background: reconcile with disk for whatever roots are online.
-        let available = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
-        guard !available.isEmpty else { return }
-        Task { await reconcile(roots: available) }
     }
 
     private func loadSettings() {

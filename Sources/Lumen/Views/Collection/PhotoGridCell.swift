@@ -4,6 +4,7 @@ import AppKit
 private enum Badge {
     static let heart = tinted("heart.fill", .white, pointSize: 12)
     static let star = tinted("star.fill", .systemYellow, pointSize: 9)
+    static let placeholder = tinted("photo", NSColor(white: 1, alpha: 0.16), pointSize: 44)
 
     static func tinted(_ name: String, _ color: NSColor, pointSize: CGFloat) -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
@@ -46,8 +47,15 @@ final class PhotoGridCellView: NSView {
         let thumbRect = NSRect(x: 1, y: capH + 1, width: s - 2, height: s - 2)
         let clip = NSBezierPath(roundedRect: thumbRect, xRadius: radius, yRadius: radius)
 
-        NSColor.quaternaryLabelColor.withAlphaComponent(0.4).setFill()
-        clip.fill()
+        // Loading placeholder: a faint card with a small photo glyph — reads as
+        // "loading", not an ugly gray slab or an empty ghost.
+        if image == nil {
+            NSColor.white.withAlphaComponent(0.045).setFill()
+            clip.fill()
+            let g = Badge.placeholder
+            let gs = min(s * 0.30, 56)
+            g.draw(in: NSRect(x: thumbRect.midX - gs / 2, y: thumbRect.midY - gs / 2, width: gs, height: gs))
+        }
 
         if let image {
             NSGraphicsContext.saveGraphicsState()
@@ -84,30 +92,35 @@ final class PhotoGridCellView: NSView {
                               width: h.size.width, height: h.size.height))
         }
 
-        // Caption band (below the thumbnail): filename on top, rating beneath.
-        var textX: CGFloat = 3
-        let nameY = capH - 18
+        // Color label — small dot in the thumbnail's bottom-left corner.
         if let labelColor {
+            let d: CGFloat = 11
+            let dr = NSRect(x: thumbRect.minX + 6, y: thumbRect.minY + 6, width: d, height: d)
+            NSColor.white.withAlphaComponent(0.85).setFill()
+            NSBezierPath(ovalIn: dr.insetBy(dx: -1.5, dy: -1.5)).fill()
             labelColor.setFill()
-            NSBezierPath(ovalIn: NSRect(x: 3, y: nameY + 4, width: 7, height: 7)).fill()
-            textX = 14
+            NSBezierPath(ovalIn: dr).fill()
         }
 
+        // Caption band (below the thumbnail): filename centered, rating beneath.
+        let nameY = capH - 16
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingMiddle
+        para.alignment = .center
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11),
             .foregroundColor: selected ? NSColor.labelColor : NSColor.secondaryLabelColor,
             .paragraphStyle: para
         ]
-        (filename as NSString).draw(in: NSRect(x: textX, y: nameY, width: s - textX - 3, height: 15),
+        (filename as NSString).draw(in: NSRect(x: 3, y: nameY, width: s - 6, height: 15),
                                     withAttributes: attrs)
 
         if rating > 0 {
             let star = Badge.star
             let sw = star.size.width + 1
+            let startX = (s - CGFloat(rating) * sw) / 2
             for i in 0..<rating {
-                star.draw(at: NSPoint(x: 3 + CGFloat(i) * sw, y: nameY - 12), from: .zero,
+                star.draw(at: NSPoint(x: startX + CGFloat(i) * sw, y: max(0, nameY - 11)), from: .zero,
                           operation: .sourceOver, fraction: 1)
             }
         }
@@ -151,6 +164,15 @@ final class PhotoCollectionItem: NSCollectionViewItem {
 
     func updateSize(_ size: CGFloat) {
         cell.thumbSize = size
+        cell.needsDisplay = true
+    }
+
+    /// Update favorite/rating/label/selection badges without reloading the image.
+    func updateBadges(favorite: Bool, rating: Int, label: ColorLabel) {
+        guard cell.favorite != favorite || cell.rating != rating || cell.labelColor != label.nsColor else { return }
+        cell.favorite = favorite
+        cell.rating = rating
+        cell.labelColor = label.nsColor
         cell.needsDisplay = true
     }
 

@@ -1,50 +1,49 @@
 import Foundation
+import GRDB
 
-/// Persists Lumen-owned metadata (favorites, ratings, labels, tags, albums)
-/// to a JSON file in Application Support. The image files are never modified.
+/// Persists Lumen-owned metadata (favorites, ratings, labels, tags, albums) in
+/// SQLite. Keeps an in-memory mirror for fast reads (so counting over 60k photos
+/// stays a dictionary lookup) while writes go to the DB one row at a time —
+/// no full-file rewrites. The image files are never modified.
 final class MetadataStore {
-    private struct Payload: Codable {
-        var version: Int = 1
-        var items: [String: PhotoMeta] = [:]
-        var albums: [Album] = []
-    }
-
-    private var payload = Payload()
-    private let fileURL: URL
+    private let db = AppDatabase.shared.queue
+    private var itemsCache: [String: PhotoMeta] = [:]
+    private var albumsCache: [Album] = []
 
     init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = base.appendingPathComponent("Lumen", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        fileURL = dir.appendingPathComponent("library.json")
         load()
-        migrateLegacyFavoritesIfNeeded()
+        migrateLegacyJSONIfNeeded()
     }
 
     // MARK: - Access
 
-    var items: [String: PhotoMeta] { payload.items }
-    var albums: [Album] { payload.albums }
+    var items: [String: PhotoMeta] { itemsCache }
+    var albums: [Album] { albumsCache }
 
-    func meta(for path: String) -> PhotoMeta {
-        payload.items[path] ?? PhotoMeta()
-    }
+    func meta(for path: String) -> PhotoMeta { itemsCache[path] ?? PhotoMeta() }
 
     func update(_ path: String, _ transform: (inout PhotoMeta) -> Void) {
-        var meta = payload.items[path] ?? PhotoMeta()
+        var meta = itemsCache[path] ?? PhotoMeta()
         transform(&meta)
         if meta.isEmpty {
-            payload.items.removeValue(forKey: path)
+            itemsCache.removeValue(forKey: path)
+            try? db.write { try $0.execute(sql: "DELETE FROM photo_meta WHERE path = ?", arguments: [path]) }
         } else {
-            payload.items[path] = meta
+            itemsCache[path] = meta
+            let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8)) ?? "[]"
+            try? db.write {
+                try $0.execute(sql: """
+                    INSERT INTO photo_meta (path, favorite, rating, label, tags) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET favorite=excluded.favorite, rating=excluded.rating,
+                        label=excluded.label, tags=excluded.tags
+                    """, arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags ?? "[]"])
+            }
         }
-        save()
     }
 
-    /// Every tag in use, with a count, sorted by name.
     func allTags() -> [(tag: String, count: Int)] {
         var counts: [String: Int] = [:]
-        for meta in payload.items.values {
+        for meta in itemsCache.values {
             for tag in meta.tags { counts[tag, default: 0] += 1 }
         }
         return counts.map { ($0.key, $0.value) }
@@ -55,94 +54,171 @@ final class MetadataStore {
 
     func addAlbum(named name: String) -> Album {
         let album = Album(name: name)
-        payload.albums.append(album)
-        save()
+        albumsCache.append(album)
+        let pos = albumsCache.count - 1
+        try? db.write {
+            try $0.execute(sql: "INSERT INTO album (id, name, position) VALUES (?, ?, ?)",
+                           arguments: [album.id.uuidString, name, pos])
+        }
         return album
     }
 
     func renameAlbum(_ id: UUID, to name: String) {
-        guard let index = payload.albums.firstIndex(where: { $0.id == id }) else { return }
-        payload.albums[index].name = name
-        save()
+        guard let index = albumsCache.firstIndex(where: { $0.id == id }) else { return }
+        albumsCache[index].name = name
+        try? db.write {
+            try $0.execute(sql: "UPDATE album SET name = ? WHERE id = ?", arguments: [name, id.uuidString])
+        }
     }
 
     func deleteAlbum(_ id: UUID) {
-        payload.albums.removeAll { $0.id == id }
-        save()
+        albumsCache.removeAll { $0.id == id }
+        try? db.write {
+            try $0.execute(sql: "DELETE FROM album WHERE id = ?", arguments: [id.uuidString])
+            try $0.execute(sql: "DELETE FROM album_photo WHERE album_id = ?", arguments: [id.uuidString])
+        }
     }
 
     func addToAlbum(_ id: UUID, paths: [String]) {
-        guard let index = payload.albums.firstIndex(where: { $0.id == id }) else { return }
-        var existing = payload.albums[index].photoPaths
-        for path in paths where !existing.contains(path) { existing.append(path) }
-        payload.albums[index].photoPaths = existing
-        save()
+        guard let index = albumsCache.firstIndex(where: { $0.id == id }) else { return }
+        var existing = albumsCache[index].photoPaths
+        let added = paths.filter { !existing.contains($0) }
+        existing.append(contentsOf: added)
+        albumsCache[index].photoPaths = existing
+        try? db.write { db in
+            for (offset, path) in existing.enumerated() {
+                try db.execute(sql: """
+                    INSERT INTO album_photo (album_id, path, position) VALUES (?, ?, ?)
+                    ON CONFLICT(album_id, path) DO UPDATE SET position=excluded.position
+                    """, arguments: [id.uuidString, path, offset])
+            }
+        }
     }
 
     func removeFromAlbum(_ id: UUID, paths: [String]) {
-        guard let index = payload.albums.firstIndex(where: { $0.id == id }) else { return }
-        payload.albums[index].photoPaths.removeAll { paths.contains($0) }
-        save()
+        guard let index = albumsCache.firstIndex(where: { $0.id == id }) else { return }
+        albumsCache[index].photoPaths.removeAll { paths.contains($0) }
+        try? db.write { db in
+            for path in paths {
+                try db.execute(sql: "DELETE FROM album_photo WHERE album_id = ? AND path = ?",
+                               arguments: [id.uuidString, path])
+            }
+        }
     }
 
     /// Move metadata + album membership when a file is renamed.
     func rename(from: String, to: String) {
-        if let meta = payload.items.removeValue(forKey: from) {
-            payload.items[to] = meta
+        if let meta = itemsCache.removeValue(forKey: from) { itemsCache[to] = meta }
+        for index in albumsCache.indices {
+            albumsCache[index].photoPaths = albumsCache[index].photoPaths.map { $0 == from ? to : $0 }
         }
-        for index in payload.albums.indices {
-            payload.albums[index].photoPaths = payload.albums[index].photoPaths.map { $0 == from ? to : $0 }
+        try? db.write { db in
+            try db.execute(sql: "UPDATE OR REPLACE photo_meta SET path = ? WHERE path = ?", arguments: [to, from])
+            try db.execute(sql: "UPDATE OR REPLACE album_photo SET path = ? WHERE path = ?", arguments: [to, from])
         }
-        save()
     }
 
-    /// Remap all item + album paths under `oldPrefix` to `newPrefix` (folder rename).
+    /// Remap metadata + album paths under `oldPrefix` to `newPrefix` (folder rename).
     func renamePrefix(from oldPrefix: String, to newPrefix: String) {
         func remap(_ path: String) -> String {
             path.hasPrefix(oldPrefix) ? newPrefix + path.dropFirst(oldPrefix.count) : path
         }
         var newItems: [String: PhotoMeta] = [:]
-        for (path, meta) in payload.items { newItems[remap(path)] = meta }
-        payload.items = newItems
-        for index in payload.albums.indices {
-            payload.albums[index].photoPaths = payload.albums[index].photoPaths.map(remap)
+        for (path, meta) in itemsCache { newItems[remap(path)] = meta }
+        itemsCache = newItems
+        for index in albumsCache.indices {
+            albumsCache[index].photoPaths = albumsCache[index].photoPaths.map(remap)
         }
-        save()
+        try? db.write { db in
+            let pattern = oldPrefix + "%"
+            try db.execute(sql: "UPDATE photo_meta SET path = ? || substr(path, ?) WHERE path LIKE ?",
+                           arguments: [newPrefix, oldPrefix.count + 1, pattern])
+            try db.execute(sql: "UPDATE album_photo SET path = ? || substr(path, ?) WHERE path LIKE ?",
+                           arguments: [newPrefix, oldPrefix.count + 1, pattern])
+        }
     }
 
     /// Drop metadata + album membership for deleted files.
     func forget(paths: [String]) {
-        for path in paths { payload.items.removeValue(forKey: path) }
-        for index in payload.albums.indices {
-            payload.albums[index].photoPaths.removeAll { paths.contains($0) }
+        for path in paths { itemsCache.removeValue(forKey: path) }
+        for index in albumsCache.indices {
+            albumsCache[index].photoPaths.removeAll { paths.contains($0) }
         }
-        save()
+        try? db.write { db in
+            for path in paths {
+                try db.execute(sql: "DELETE FROM photo_meta WHERE path = ?", arguments: [path])
+                try db.execute(sql: "DELETE FROM album_photo WHERE path = ?", arguments: [path])
+            }
+        }
     }
 
-    // MARK: - Persistence
+    // MARK: - Loading
 
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode(Payload.self, from: data) else { return }
-        payload = decoded
-    }
+        try? db.read { db in
+            let metaRows = try Row.fetchAll(db, sql: "SELECT path, favorite, rating, label, tags FROM photo_meta")
+            for row in metaRows {
+                let path: String = row["path"]
+                var meta = PhotoMeta()
+                meta.favorite = row["favorite"] != 0
+                meta.rating = row["rating"]
+                meta.label = ColorLabel(rawValue: row["label"]) ?? .none
+                if let tagsJSON: String = row["tags"],
+                   let data = tagsJSON.data(using: .utf8),
+                   let tags = try? JSONDecoder().decode([String].self, from: data) {
+                    meta.tags = tags
+                }
+                itemsCache[path] = meta
+            }
 
-    private func save() {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(payload) else { return }
-        try? data.write(to: fileURL, options: .atomic)
-    }
-
-    private func migrateLegacyFavoritesIfNeeded() {
-        let key = "lumen.favorites.paths"
-        guard let legacy = UserDefaults.standard.array(forKey: key) as? [String], !legacy.isEmpty else { return }
-        for path in legacy {
-            var meta = payload.items[path] ?? PhotoMeta()
-            meta.favorite = true
-            payload.items[path] = meta
+            let albumRows = try Row.fetchAll(db, sql: "SELECT id, name FROM album ORDER BY position")
+            for row in albumRows {
+                guard let id = UUID(uuidString: row["id"]) else { continue }
+                let name: String = row["name"]
+                let paths = try String.fetchAll(db,
+                    sql: "SELECT path FROM album_photo WHERE album_id = ? ORDER BY position",
+                    arguments: [row["id"] as String])
+                albumsCache.append(Album(id: id, name: name, photoPaths: paths))
+            }
         }
-        UserDefaults.standard.removeObject(forKey: key)
-        save()
+    }
+
+    // MARK: - One-time migration from the old JSON store
+
+    private func migrateLegacyJSONIfNeeded() {
+        guard itemsCache.isEmpty, albumsCache.isEmpty else { return }
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let url = base.appendingPathComponent("Lumen/library.json")
+        guard let data = try? Data(contentsOf: url) else { return }
+
+        struct Payload: Codable { var items: [String: PhotoMeta] = [:]; var albums: [Album] = [] }
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return }
+
+        for (path, meta) in payload.items where !meta.isEmpty {
+            itemsCache[path] = meta
+        }
+        albumsCache = payload.albums
+        persistAll()
+
+        // Keep the old file as a backup rather than deleting it.
+        try? FileManager.default.moveItem(at: url, to: url.appendingPathExtension("bak"))
+    }
+
+    private func persistAll() {
+        try? db.write { db in
+            for (path, meta) in itemsCache {
+                let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8) ?? "[]") ?? "[]"
+                try db.execute(sql: "INSERT OR REPLACE INTO photo_meta (path, favorite, rating, label, tags) VALUES (?, ?, ?, ?, ?)",
+                               arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags])
+            }
+            for (pos, album) in albumsCache.enumerated() {
+                try db.execute(sql: "INSERT OR REPLACE INTO album (id, name, position) VALUES (?, ?, ?)",
+                               arguments: [album.id.uuidString, album.name, pos])
+                for (offset, path) in album.photoPaths.enumerated() {
+                    try db.execute(sql: "INSERT OR REPLACE INTO album_photo (album_id, path, position) VALUES (?, ?, ?)",
+                                   arguments: [album.id.uuidString, path, offset])
+                }
+            }
+        }
     }
 }

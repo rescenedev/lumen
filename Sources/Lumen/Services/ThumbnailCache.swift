@@ -129,10 +129,10 @@ final class ThumbnailCache {
 
     private let warmQueue: OperationQueue = {
         let q = OperationQueue()
-        // NAS warming is network-latency bound, so more parallel reads raise
-        // throughput; low priority keeps the UI smooth.
-        q.maxConcurrentOperationCount = max(6, ProcessInfo.processInfo.activeProcessorCount - 2)
-        q.qualityOfService = .utility
+        // Keep warming gentle (few parallel reads, background priority) so it
+        // yields NAS bandwidth + CPU to thumbnails the user is actively viewing.
+        q.maxConcurrentOperationCount = 3
+        q.qualityOfService = .background
         return q
     }()
 
@@ -177,6 +177,17 @@ final class ThumbnailCache {
 
     func cancelWarming() { warmQueue.cancelAllOperations() }
 
+    // Pause warming briefly while the user is actively browsing, so the folder
+    // they're looking at gets the full decode throughput. Resumes after idle.
+    private var resumeWork: DispatchWorkItem?
+    func yieldWarmingToBrowsing() {
+        warmQueue.isSuspended = true
+        resumeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.warmQueue.isSuspended = false }
+        resumeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+    }
+
     /// Thread-safe countdown with a time-throttled "should I publish?" flag.
     private final class Counter: @unchecked Sendable {
         private var value: Int
@@ -217,13 +228,17 @@ final class ThumbnailCache {
     }
 
     private func writeDisk(_ image: NSImage, to url: URL) {
-        guard let tiff = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff),
-              let data = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) else { return }
+        // Encode straight from the CGImage (skips the slow NSImage→TIFF→bitmap
+        // round-trip) into in-memory data, then write atomically. Same JPEG output.
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return }
+        CGImageDestinationAddImage(dest, cg, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { return }
         // Ensure the shard subdirectory exists (idempotent, cheap).
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
-        try? data.write(to: url, options: .atomic)
+        try? (data as Data).write(to: url, options: .atomic)
     }
 
     private static func downsample(url: URL, maxPixel: Int) -> NSImage? {
