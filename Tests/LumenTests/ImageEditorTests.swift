@@ -8,32 +8,64 @@ func imageEditorTests() {
     let src = CGSize(width: 4000, height: 3000)
 
     test("noEditKeepsSize") {
-        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, longEdge: nil))
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil))
         check(s == src, "got \(s)")
     }
 
     test("cropOnly") {
         // Center half-size crop → half each dimension.
         let crop = CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)
-        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: crop, longEdge: nil))
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: crop))
         check(s == CGSize(width: 2000, height: 1500), "got \(s)")
     }
 
-    test("resizeDownByLongEdge") {
-        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, longEdge: 2000))
+    test("resizeByWidth") {
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, targetWidth: 2000, targetHeight: nil))
         check(s == CGSize(width: 2000, height: 1500), "got \(s)")
     }
 
-    test("resizeNeverUpscales") {
-        // longEdge larger than the source's long edge → unchanged.
-        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, longEdge: 8000))
+    test("resizeByHeight") {
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, targetWidth: nil, targetHeight: 1500))
+        check(s == CGSize(width: 2000, height: 1500), "got \(s)")
+    }
+
+    test("resizeSingleAxisNeverUpscales") {
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, targetWidth: 8000, targetHeight: nil))
         check(s == src, "got \(s)")
     }
 
-    test("cropThenResize") {
+    test("canvasIsExactSizeWithPadding") {
+        // Both dimensions → output is exactly that canvas (image fit + padded).
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, targetWidth: 5000, targetHeight: 5000))
+        check(s == CGSize(width: 5000, height: 5000), "got \(s)")
+    }
+
+    test("cropThenResizeByWidth") {
         let crop = CGRect(x: 0, y: 0, width: 0.5, height: 0.5)   // 2000×1500
-        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: crop, longEdge: 1000))
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: crop, targetWidth: 1000, targetHeight: nil))
         check(s == CGSize(width: 1000, height: 750), "got \(s)")
+    }
+
+    test("rotate90SwapsDimensions") {
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, rotationQuarters: 1))
+        check(s == CGSize(width: 3000, height: 4000), "got \(s)")
+    }
+
+    test("rotate180KeepsDimensions") {
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, rotationQuarters: 2))
+        check(s == src, "got \(s)")
+    }
+
+    test("rotateThenCropThenResize") {
+        // 4000×3000 → rotate 90° → 3000×4000 → crop half → 1500×2000 → width 1000 → 1000×1333.
+        let crop = CGRect(x: 0, y: 0, width: 0.5, height: 0.5)
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: crop, targetWidth: 1000, targetHeight: nil, rotationQuarters: 3))
+        check(s == CGSize(width: 1000, height: 1333), "got \(s)")
+    }
+
+    test("flipKeepsDimensions") {
+        let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, flipH: true))
+        check(s == src, "got \(s)")
     }
 
     test("editedCopyURLAddsSuffix") {
