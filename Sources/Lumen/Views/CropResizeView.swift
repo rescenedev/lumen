@@ -23,8 +23,15 @@ struct CropResizeView: View {
     @State private var contentAlign = CGPoint(x: 0.5, y: 0.5)   // image position within a padded canvas
     @State private var rotationQuarters = 0
     @State private var flipH = false
+    @State private var zoom: CGFloat = 1
     @State private var confirmOverwrite = false
     @State private var busy = false
+
+    /// Fill most of the screen so the crop can be placed precisely.
+    private var windowSize: CGSize {
+        let vis = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1440, height: 900)
+        return CGSize(width: min(vis.width * 0.94, 2000), height: min(vis.height * 0.94, 1400))
+    }
 
     private func px(_ text: String) -> Int? {
         guard let n = Int(text.trimmingCharacters(in: .whitespaces)), n > 0 else { return nil }
@@ -79,7 +86,7 @@ struct CropResizeView: View {
                 if let image {
                     CropCanvas(image: image, cropNorm: $cropNorm, aspect: lockRatio ? lockedRatio : nil,
                                indicatorScale: indicatorScale, indicatorLabel: indicatorLabel,
-                               indicatorAnchor: $contentAlign, indicatorDraggable: isCanvas)
+                               indicatorAnchor: $contentAlign, indicatorDraggable: isCanvas, zoom: $zoom)
                 } else {
                     ProgressView()
                 }
@@ -88,7 +95,7 @@ struct CropResizeView: View {
             Divider()
             controls
         }
-        .frame(width: 760, height: 640)
+        .frame(width: windowSize.width, height: windowSize.height)
         .task(id: photo.url) { await load() }
         .alert("Overwrite the original?", isPresented: $confirmOverwrite) {
             Button("Overwrite", role: .destructive) { save(overwrite: true) }
@@ -141,32 +148,38 @@ struct CropResizeView: View {
                     Slider(value: $straighten, in: -15...15) { editing in
                         if !editing { refreshDisplay() }       // settle to a crisp render on release
                     }
-                    .frame(width: 120)
+                    .frame(width: 130)
                     .onChange(of: straighten) { _, _ in refreshDisplay() }
                     Text(String(format: "%+.1f°", straighten)).font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary).frame(width: 42, alignment: .trailing)
+                        .foregroundStyle(.secondary).fixedSize().frame(width: 44, alignment: .trailing)
                         .onTapGesture { straighten = 0; refreshDisplay() }
                 }
-
                 Spacer()
-
-                Text("Resize").foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Button { zoom = max(1, zoom / 1.4) } label: { Image(systemName: "minus.magnifyingglass") }
+                    Text(String(format: "%.0f%%", zoom * 100)).font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary).frame(width: 44).onTapGesture { zoom = 1 }
+                    Button { zoom = min(8, zoom * 1.4) } label: { Image(systemName: "plus.magnifyingglass") }
+                }
+            }
+            HStack(spacing: 10) {
+                Text("Resize").foregroundStyle(.secondary).fixedSize()
                 TextField("자동", text: $widthText)
-                    .frame(width: 48).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
+                    .frame(width: 64).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
                 Text("×").foregroundStyle(.secondary)
                 TextField("자동", text: $heightText)
-                    .frame(width: 48).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
-                Text("px").foregroundStyle(.secondary)
+                    .frame(width: 64).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
+                Text("px").foregroundStyle(.secondary).fixedSize()
                 if isCanvas {
                     Picker("", selection: $padBackground) {
                         ForEach(PadBackground.allCases) { Text($0.label).tag($0) }
-                    }.labelsHidden().frame(width: 96).help("여백 배경")
+                    }.labelsHidden().frame(width: 110).help("여백 배경")
                 }
-
+                Spacer()
                 Button("Reset") {
                     cropNorm = .init(x: 0, y: 0, width: 1, height: 1); aspect = .free; lockRatio = false
                     rotationQuarters = 0; flipH = false; straighten = 0; widthText = ""; heightText = ""
-                    contentAlign = CGPoint(x: 0.5, y: 0.5); refreshDisplay()
+                    contentAlign = CGPoint(x: 0.5, y: 0.5); zoom = 1; refreshDisplay()
                 }
                 .disabled(cropNorm == CGRect(x: 0, y: 0, width: 1, height: 1)
                           && rotationQuarters == 0 && !flipH && straighten == 0
