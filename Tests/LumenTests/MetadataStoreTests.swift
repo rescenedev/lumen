@@ -32,6 +32,19 @@ func metadataStoreTests() {
         check(store.items.isEmpty)
     }
 
+    test("rejectedRoundTrips") {
+        let queue = try AppDatabase.inMemoryQueue()
+        let first = MetadataStore(queue: queue)
+        first.update("/cull.jpg") { $0.rejected = true }
+        check(first.meta(for: "/cull.jpg").rejected)
+        // Survives a reopen (column persisted via the v2 migration).
+        let reopened = MetadataStore(queue: queue)
+        check(reopened.meta(for: "/cull.jpg").rejected)
+        // Clearing it removes the now-empty row.
+        reopened.update("/cull.jpg") { $0.rejected = false }
+        check(reopened.meta(for: "/cull.jpg").isEmpty)
+    }
+
     test("persistsAcrossStoreInstances") {
         let queue = try AppDatabase.inMemoryQueue()
         let first = MetadataStore(queue: queue)

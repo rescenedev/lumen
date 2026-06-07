@@ -308,6 +308,19 @@ final class AppModel {
         bumpMeta()
     }
 
+    // MARK: - Culling (reject flag)
+
+    func isRejected(_ photo: Photo) -> Bool { meta(photo).rejected }
+
+    func toggleRejected(_ photos: [Photo]) {
+        guard !photos.isEmpty else { return }
+        let shouldReject = photos.contains { !isRejected($0) }
+        for photo in photos where isRejected(photo) != shouldReject {
+            store.update(photo.url.path) { $0.rejected = shouldReject }
+        }
+        bumpMeta()
+    }
+
     func setLabel(_ label: ColorLabel, for photos: [Photo]) {
         for photo in photos {
             let old = self.label(photo)
@@ -459,6 +472,7 @@ final class AppModel {
             if filter.minRating > 0, m.rating < filter.minRating { return false }
             if let label = filter.label, m.label != label { return false }
             if filter.favoritesOnly, !m.favorite { return false }
+            if filter.hideRejected, m.rejected { return false }
             if filter.gpsOnly, !(exif[photo.url.path]?.hasGPS ?? false) { return false }
             if let camera = filter.camera, exif[photo.url.path]?.cameraDisplay != camera { return false }
             return true

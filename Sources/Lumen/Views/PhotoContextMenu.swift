@@ -30,6 +30,9 @@ struct PhotoContextMenu: View {
 
         Button(favoriteLabel + suffix) { model.toggleFavorites(targets) }
 
+        let rejectLabel = isBatch ? "Toggle Reject" : (model.isRejected(photo) ? "Unreject" : "Reject")
+        Button(rejectLabel + suffix) { model.toggleRejected(targets) }
+
         Menu("Rating") {
             Button("None") { model.setRating(0, for: targets) }
             ForEach(1...5, id: \.self) { n in

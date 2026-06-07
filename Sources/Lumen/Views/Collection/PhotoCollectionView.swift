@@ -43,6 +43,7 @@ struct PhotoCollectionView: NSViewRepresentable {
 
         let coord = context.coordinator
         cv.onKey = { [weak coord] key in coord?.handleKey(key) ?? false }
+        cv.onChar = { [weak coord] ch in coord?.handleChar(ch) ?? false }
         cv.onArrow = { [weak coord, weak cv] dx, dy, shift in
             guard let coord, let cv else { return false }
             return coord.handleArrow(dx: dx, dy: dy, shift: shift, in: cv)
@@ -146,7 +147,8 @@ struct PhotoCollectionView: NSViewRepresentable {
                            selected: model.selection.contains(photo.id),
                            selectionActive: model.selection.count > 1,
                            favorite: model.isFavorite(photo),
-                           rating: model.rating(photo), label: model.label(photo))
+                           rating: model.rating(photo), label: model.label(photo),
+                           rejected: model.isRejected(photo))
             return item
         }
 
@@ -158,7 +160,8 @@ struct PhotoCollectionView: NSViewRepresentable {
                       let item = cv.item(at: ip) as? PhotoCollectionItem else { continue }
                 let photo = photos[ip.item]
                 item.updateBadges(favorite: model.isFavorite(photo),
-                                  rating: model.rating(photo), label: model.label(photo))
+                                  rating: model.rating(photo), label: model.label(photo),
+                                  rejected: model.isRejected(photo))
             }
         }
 
@@ -297,6 +300,26 @@ struct PhotoCollectionView: NSViewRepresentable {
             }
         }
 
+        /// Fast culling on the selected photos: 0–5 sets the rating, X toggles the
+        /// reject flag, F toggles favorite.
+        func handleChar(_ ch: Character) -> Bool {
+            let targets = model.selectedPhotos
+            guard !targets.isEmpty else { return false }
+            switch ch {
+            case "0"..."5":
+                model.setRating(Int(String(ch)) ?? 0, for: targets)
+                return true
+            case "x", "X":
+                model.toggleRejected(targets)
+                return true
+            case "f", "F":
+                model.toggleFavorites(targets)
+                return true
+            default:
+                return false
+            }
+        }
+
         func menu(at indexPath: IndexPath?, in cv: NSCollectionView) -> NSMenu? {
             guard let indexPath, photos.indices.contains(indexPath.item) else { return nil }
             let photo = photos[indexPath.item]
@@ -338,6 +361,7 @@ final class AdaptiveFlowLayout: NSCollectionViewFlowLayout {
 final class LumenCollectionView: NSCollectionView {
     var onKey: ((LumenKey) -> Bool)?
     var onArrow: ((_ dx: Int, _ dy: Int, _ shift: Bool) -> Bool)?
+    var onChar: ((Character) -> Bool)?         // culling: 0–5 rate, x reject, f favorite
     var menuProvider: ((NSEvent) -> NSMenu?)?
 
     override func keyDown(with event: NSEvent) {
@@ -353,6 +377,11 @@ final class LumenCollectionView: NSCollectionView {
         case 125: handled = onArrow?(0, 1, shift) ?? false   // ↓
         case 126: handled = onArrow?(0, -1, shift) ?? false  // ↑
         default: break
+        }
+        // Plain character keys (no Command) drive fast culling.
+        if !handled, !event.modifierFlags.contains(.command),
+           let ch = event.charactersIgnoringModifiers?.first {
+            handled = onChar?(ch) ?? false
         }
         if !handled { super.keyDown(with: event) }
     }

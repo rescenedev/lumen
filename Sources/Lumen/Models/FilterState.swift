@@ -7,11 +7,12 @@ struct FilterState: Equatable, Hashable, Sendable {
     var label: ColorLabel? = nil
     var favoritesOnly: Bool = false
     var gpsOnly: Bool = false
+    var hideRejected: Bool = false    // culling: hide photos flagged as rejected
     var camera: String? = nil
 
     var isActive: Bool {
         fileType != nil || minRating > 0 || label != nil ||
-        favoritesOnly || gpsOnly || camera != nil
+        favoritesOnly || gpsOnly || hideRejected || camera != nil
     }
 
     /// Human-readable chips describing the active filters.
@@ -22,6 +23,7 @@ struct FilterState: Equatable, Hashable, Sendable {
         if let label, let _ = label.color { result.append(label.title) }
         if favoritesOnly { result.append("Favorites") }
         if gpsOnly { result.append("Has Location") }
+        if hideRejected { result.append("거부 숨김") }
         if let camera { result.append(camera) }
         return result
     }

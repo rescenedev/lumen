@@ -73,6 +73,9 @@ final class AppDatabase {
                 );
                 """)
         }
+        migrator.registerMigration("v2-rejected") { db in
+            try db.execute(sql: "ALTER TABLE photo_meta ADD COLUMN rejected INTEGER NOT NULL DEFAULT 0;")
+        }
         try migrator.migrate(queue)
     }
 }
