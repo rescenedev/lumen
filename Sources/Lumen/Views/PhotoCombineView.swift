@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Combine several photos into one new image (non-destructive). Strips join the
 /// photos side-by-side / stacked; the grid makes a square collage.
@@ -22,7 +23,14 @@ struct PhotoCombineView: View {
     @State private var gridRowsText: String = ""
     @State private var captionText = ""
     @State private var captionPos: ImageEditor.Caption.Position = .bottomRight
-    @State private var captionColor: CaptionColor = .white
+    @State private var captionColor: Color = .white
+    @State private var captionHex: String = "FFFFFF"
+    @State private var captionNorm: CGPoint?       // free drag placement (nil = use preset)
+    @State private var logoImage: CGImage?
+    @State private var logoName = ""
+    @State private var logoPos: ImageEditor.Caption.Position = .bottomLeft
+    @State private var logoSize: Double = 12      // % of canvas short edge
+    @State private var logoOpacity: Double = 100  // %
     @State private var preview: NSImage?
     @State private var rendering = false
     @State private var busy = false
@@ -34,7 +42,43 @@ struct PhotoCombineView: View {
     private var caption: ImageEditor.Caption? {
         let t = captionText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return nil }
-        return ImageEditor.Caption(text: t, position: captionPos, color: captionColor.cgColor, sizeFraction: 0.045)
+        let cg = NSColor(captionColor).usingColorSpace(.sRGB)?.cgColor ?? CGColor(gray: 1, alpha: 1)
+        return ImageEditor.Caption(text: t, position: captionPos, color: cg,
+                                   sizeFraction: 0.045, normPosition: captionNorm)
+    }
+    private var logo: ImageEditor.Logo? {
+        guard let logoImage else { return nil }
+        return ImageEditor.Logo(image: logoImage, position: logoPos,
+                                sizeFraction: CGFloat(logoSize) / 100, opacity: CGFloat(logoOpacity) / 100)
+    }
+
+    /// Aspect-fit `imageSize` inside `container` (minus `inset` padding), centered
+    /// — mirrors `.scaledToFit().padding()` so the drag overlay lines up.
+    static func fitRect(_ imageSize: NSSize, in container: CGSize, inset: CGFloat) -> CGRect {
+        let avail = CGSize(width: max(1, container.width - inset * 2), height: max(1, container.height - inset * 2))
+        guard imageSize.width > 0, imageSize.height > 0 else { return CGRect(origin: .zero, size: avail) }
+        let s = min(avail.width / imageSize.width, avail.height / imageSize.height)
+        let w = imageSize.width * s, h = imageSize.height * s
+        return CGRect(x: (container.width - w) / 2, y: (container.height - h) / 2, width: w, height: h)
+    }
+
+    private let captionSwatches: [Color] = [.white, .black, .red, .yellow, .green, .blue]
+
+    private func setCaptionColor(_ c: Color) { captionColor = c; captionHex = hexString(c) }
+
+    private func hexString(_ c: Color) -> String {
+        guard let ns = NSColor(c).usingColorSpace(.sRGB) else { return "FFFFFF" }
+        return String(format: "%02X%02X%02X",
+                      Int((ns.redComponent * 255).rounded()),
+                      Int((ns.greenComponent * 255).rounded()),
+                      Int((ns.blueComponent * 255).rounded()))
+    }
+    private func color(fromHex raw: String) -> Color? {
+        var s = raw.trimmingCharacters(in: .whitespaces).uppercased()
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = Int(s, radix: 16) else { return nil }
+        return Color(.sRGB, red: Double((v >> 16) & 0xFF) / 255,
+                     green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
     }
 
     /// User types the number of rows. Empty or invalid → auto (nil = square-ish).
@@ -64,7 +108,20 @@ struct PhotoCombineView: View {
             ZStack {
                 Color.black.opacity(0.25)
                 if let preview {
-                    Image(nsImage: preview).resizable().scaledToFit().padding(16)
+                    GeometryReader { geo in
+                        let rect = Self.fitRect(preview.size, in: geo.size, inset: 16)
+                        Image(nsImage: preview).resizable().scaledToFit().padding(16)
+                        // Drag anywhere on the image to place the caption freely.
+                        if caption != nil {
+                            Color.clear.contentShape(Rectangle()).frame(width: rect.width, height: rect.height)
+                                .position(x: rect.midX, y: rect.midY)
+                                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                                    let nx = (v.location.x - rect.minX) / max(1, rect.width)
+                                    let ny = (v.location.y - rect.minY) / max(1, rect.height)
+                                    captionNorm = CGPoint(x: min(max(nx, 0), 1), y: min(max(ny, 0), 1))
+                                })
+                        }
+                    }
                 } else {
                     ProgressView()
                 }
@@ -111,13 +168,51 @@ struct PhotoCombineView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "textformat").foregroundStyle(.secondary)
                     TextField("캡션/워터마크 (선택)", text: $captionText)
-                        .textFieldStyle(.roundedBorder).frame(maxWidth: 300)
+                        .textFieldStyle(.roundedBorder).frame(maxWidth: 220)
                     Picker("", selection: $captionPos) {
                         ForEach(ImageEditor.Caption.Position.allCases) { Text(positionLabel($0)).tag($0) }
-                    }.labelsHidden().frame(width: 110).disabled(captionText.isEmpty)
-                    Picker("", selection: $captionColor) {
-                        ForEach(CaptionColor.allCases) { Text($0.label).tag($0) }
-                    }.labelsHidden().frame(width: 90).disabled(captionText.isEmpty)
+                    }
+                    .labelsHidden().frame(width: 84).disabled(captionText.isEmpty)
+                    .onChange(of: captionPos) { _, _ in captionNorm = nil }   // preset clears free drag
+                    if captionNorm != nil {
+                        Image(systemName: "hand.draw.fill").foregroundStyle(.secondary)
+                            .help("미리보기에서 끌어 위치를 정함")
+                    }
+
+                    Text("색").foregroundStyle(.secondary).disabled(captionText.isEmpty)
+                    ColorPicker("", selection: $captionColor, supportsOpacity: false)
+                        .labelsHidden().disabled(captionText.isEmpty)
+                    ForEach(captionSwatches, id: \.self) { c in
+                        Button { setCaptionColor(c) } label: {
+                            Circle().fill(c).frame(width: 16, height: 16)
+                                .overlay(Circle().strokeBorder(.white.opacity(0.4)))
+                        }.buttonStyle(.plain).disabled(captionText.isEmpty)
+                    }
+                    Text("#").foregroundStyle(.secondary)
+                    TextField("HEX", text: $captionHex)
+                        .frame(width: 70).textFieldStyle(.roundedBorder).disabled(captionText.isEmpty)
+                        .onChange(of: captionHex) { _, v in if let c = color(fromHex: v) { captionColor = c } }
+                    Spacer()
+                }
+                .onChange(of: captionColor) { _, c in
+                    let h = hexString(c); if h != captionHex { captionHex = h }
+                }
+                HStack(spacing: 10) {
+                    Image(systemName: "photo.badge.plus").foregroundStyle(.secondary)
+                    if logoImage == nil {
+                        Button("이미지 워터마크…") { pickLogo() }
+                    } else {
+                        Text(logoName).lineLimit(1).truncationMode(.middle).frame(maxWidth: 150, alignment: .leading)
+                        Button { logoImage = nil; logoName = "" } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                        Picker("", selection: $logoPos) {
+                            ForEach(ImageEditor.Caption.Position.allCases) { Text(positionLabel($0)).tag($0) }
+                        }.labelsHidden().frame(width: 90)
+                        Text("크기").foregroundStyle(.secondary)
+                        Slider(value: $logoSize, in: 3...40).frame(width: 80)
+                        Text("투명").foregroundStyle(.secondary)
+                        Slider(value: $logoOpacity, in: 10...100).frame(width: 80)
+                    }
                     Spacer()
                 }
                 HStack {
@@ -130,7 +225,7 @@ struct PhotoCombineView: View {
             }
             .padding(16)
         }
-        .frame(width: 860, height: 760)
+        .frame(width: 860, height: 810)
         .onAppear { instantPreview() }
         .task(id: renderKey) { await renderPreview() }
     }
@@ -161,7 +256,9 @@ struct PhotoCombineView: View {
     }
 
     private var renderKey: String {
-        "\(layout.rawValue)|\(gapPercent)|\(background.rawValue)|\(gridRows ?? 0)|\(captionText)|\(captionPos.rawValue)|\(captionColor.rawValue)|\(ordered.map(\.url.path).joined(separator: ">"))"
+        let cap = "\(captionText)|\(captionPos.rawValue)|\(captionHex)|\(captionNorm?.x ?? -1),\(captionNorm?.y ?? -1)"
+        let lg = "\(logoName)|\(logoPos.rawValue)|\(logoSize)|\(logoOpacity)"
+        return "\(layout.rawValue)|\(gapPercent)|\(background.rawValue)|\(gridRows ?? 0)|\(cap)|\(lg)|\(ordered.map(\.url.path).joined(separator: ">"))"
     }
 
     /// Composite the grid thumbnails already in memory (512px) — instant, no disk
@@ -173,7 +270,8 @@ struct PhotoCombineView: View {
         }
         guard imgs.count == sources.count,
               let cg = ImageEditor.composite(imgs, layout: layout, gapFraction: gapFraction,
-                                             background: background.cgColor, gridRows: gridRows, caption: caption)
+                                             background: background.cgColor, gridRows: gridRows,
+                                             caption: caption, logo: logo)
         else { return }
         preview = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
@@ -182,12 +280,12 @@ struct PhotoCombineView: View {
         renderToken += 1
         let token = renderToken
         rendering = true
-        let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows, cap = caption
+        let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows, cap = caption, lg = logo
         let img = await Task.detached(priority: .userInitiated) { () -> NSImage? in
             // Downsample sources for a fast preview (no full-res decode).
             guard let cg = ImageEditor.renderCombined(sources: srcs, layout: lay, gapFraction: gap,
                                                       background: bg, sourceMaxPixel: 900, longEdge: 1400,
-                                                      gridRows: gr, caption: cap)
+                                                      gridRows: gr, caption: cap, logo: lg)
             else { return nil }
             return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         }.value
@@ -196,9 +294,21 @@ struct PhotoCombineView: View {
         rendering = false
     }
 
+    private func pickLogo() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.png, .jpeg, .tiff, .heic, .image]
+        panel.prompt = "워터마크로 사용"
+        guard panel.runModal() == .OK, let url = panel.url,
+              let cg = ImageEditor.orientedCGImage(url) else { return }
+        logoImage = cg
+        logoName = url.lastPathComponent
+    }
+
     private func save() {
         busy = true
-        let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows, cap = caption
+        let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows, cap = caption, lg = logo
         let dir = ordered[0].url.deletingLastPathComponent()
         let ext = background == .transparent ? "png" : "jpg"
         let dest = ImageEditor.uniqueFileURL(in: dir, base: "Combined", ext: ext)
@@ -206,7 +316,8 @@ struct PhotoCombineView: View {
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
                 ImageEditor.combine(sources: srcs, layout: lay, gapFraction: gap,
-                                    background: bg, sourceMaxPixel: maxPixel, to: dest, gridRows: gr, caption: cap)
+                                    background: bg, sourceMaxPixel: maxPixel, to: dest, gridRows: gr,
+                                    caption: cap, logo: lg)
             }.value
             busy = false
             if ok { model.didCombine(output: dest); dismiss() }
@@ -248,14 +359,6 @@ private func positionLabel(_ p: ImageEditor.Caption.Position) -> String {
     case .topRight: return "우상"
     case .center: return "중앙"
     }
-}
-
-/// Caption text color.
-enum CaptionColor: String, CaseIterable, Identifiable {
-    case white, black
-    var id: String { rawValue }
-    var label: String { self == .white ? "흰색" : "검정" }
-    var cgColor: CGColor { self == .white ? CGColor(gray: 1, alpha: 1) : CGColor(gray: 0, alpha: 1) }
 }
 
 /// Reorders the source list as a dragged thumbnail passes over another.

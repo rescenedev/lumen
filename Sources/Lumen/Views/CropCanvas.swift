@@ -15,21 +15,38 @@ struct CropCanvas: View {
     /// as the image's placement inside a padded canvas when `indicatorDraggable`.
     @Binding var indicatorAnchor: CGPoint
     var indicatorDraggable = false
+    /// Magnification of the fitted image (1 = fit). Lets the user zoom in to crop
+    /// precisely; panning (drag outside the crop) reveals the rest.
+    @Binding var zoom: CGFloat
 
     @State private var startRect: CGRect?
     @State private var startIndicator: CGPoint?
+    @State private var panOffset: CGSize = .zero
+    @State private var panStart: CGSize?
+    @State private var zoomBase: CGFloat = 1
 
     private enum Corner: CaseIterable { case tl, tr, bl, br }
 
     var body: some View {
         GeometryReader { geo in
-            let f = Self.fit(image.size, in: geo.size)
+            let base = Self.fit(image.size, in: geo.size)
+            let fw = base.width * zoom, fh = base.height * zoom
+            let f = CGRect(x: base.midX - fw / 2 + panOffset.width,
+                           y: base.midY - fh / 2 + panOffset.height, width: fw, height: fh)
             let cr = viewRect(in: f)
             ZStack(alignment: .topLeading) {
                 Image(nsImage: image)
                     .resizable()
                     .frame(width: f.width, height: f.height)
                     .position(x: f.midX, y: f.midY)
+
+                // Pan layer (only when zoomed): sits above the image but below the
+                // crop move/handles, so dragging OUTSIDE the crop pans the image.
+                if zoom > 1.001 {
+                    Color.clear.contentShape(Rectangle())
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .gesture(panGesture)
+                }
 
                 Path { p in p.addRect(f); p.addRect(cr) }
                     .fill(Color.black.opacity(0.55), style: FillStyle(eoFill: true))
@@ -58,7 +75,27 @@ struct CropCanvas: View {
 
                 outputIndicator(cr)            // topmost, so its drag wins over the move area
             }
+            .contentShape(Rectangle())
+            .simultaneousGesture(MagnificationGesture()
+                .onChanged { v in zoom = min(max(zoomBase * v, 1), 8) }
+                .onEnded { _ in zoomBase = zoom })
+            .onTapGesture(count: 2) { zoom = 1; zoomBase = 1; panOffset = .zero }
+            .onChange(of: zoom) { _, z in
+                zoomBase = z
+                if z <= 1.001 { panOffset = .zero }
+            }
         }
+    }
+
+    private var panGesture: some Gesture {
+        DragGesture()
+            .onChanged { v in
+                let start = panStart ?? panOffset
+                if panStart == nil { panStart = start }
+                panOffset = CGSize(width: start.width + v.translation.width,
+                                   height: start.height + v.translation.height)
+            }
+            .onEnded { _ in panStart = nil }
     }
 
     /// Box (sized to the output footprint) the user can drag to position the image

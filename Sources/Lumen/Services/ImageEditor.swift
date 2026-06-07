@@ -258,11 +258,53 @@ enum ImageEditor {
         var color: CGColor
         /// Font height as a fraction of the canvas's short edge (so it scales).
         var sizeFraction: CGFloat
+        /// Free placement (0…1, top-left origin) — overrides `position` when set,
+        /// so the user can drag the caption anywhere on the preview.
+        var normPosition: CGPoint? = nil
 
         enum Position: String, CaseIterable, Identifiable {
             case bottomLeft, bottomCenter, bottomRight, topLeft, topCenter, topRight, center
             var id: String { rawValue }
         }
+    }
+
+    /// An image (logo) watermark burned into the combined image.
+    struct Logo {
+        var image: CGImage
+        var position: Caption.Position
+        /// Logo height as a fraction of the canvas's short edge.
+        var sizeFraction: CGFloat
+        var opacity: CGFloat
+    }
+
+    /// Draw `logo` into a y-up CGContext sized `w`×`h`, scaled to a fraction of
+    /// the short edge and inset from the chosen corner with the given opacity.
+    private static func drawLogo(_ ctx: CGContext, _ logo: Logo, w: Int, h: Int) {
+        let lw = CGFloat(logo.image.width), lh = CGFloat(logo.image.height)
+        guard lw > 0, lh > 0 else { return }
+        let canvasShort = CGFloat(min(w, h))
+        let dh = max(8, canvasShort * logo.sizeFraction)
+        let scale = dh / lh
+        let dw = lw * scale
+        let pad = canvasShort * 0.035
+        let cw = CGFloat(w), ch = CGFloat(h)
+        let x: CGFloat
+        switch logo.position {
+        case .bottomLeft, .topLeft: x = pad
+        case .bottomRight, .topRight: x = cw - pad - dw
+        case .bottomCenter, .topCenter, .center: x = (cw - dw) / 2
+        }
+        let y: CGFloat
+        switch logo.position {
+        case .bottomLeft, .bottomCenter, .bottomRight: y = pad
+        case .topLeft, .topCenter, .topRight: y = ch - pad - dh
+        case .center: y = (ch - dh) / 2
+        }
+        ctx.saveGState()
+        ctx.setAlpha(min(max(logo.opacity, 0), 1))
+        ctx.interpolationQuality = .high
+        ctx.draw(logo.image, in: CGRect(x: x, y: y, width: dw, height: dh))
+        ctx.restoreGState()
     }
 
     /// Draw `caption` into a y-up CGContext sized `w`×`h` (CoreText, with a soft
@@ -280,17 +322,26 @@ enum ImageEditor {
         let pad = canvasShort * 0.035
         let cw = CGFloat(w), ch = CGFloat(h)
 
+        let textH = ascent + descent
         let x: CGFloat
-        switch caption.position {
-        case .bottomLeft, .topLeft: x = pad
-        case .bottomRight, .topRight: x = cw - pad - lineW
-        case .bottomCenter, .topCenter, .center: x = (cw - lineW) / 2
-        }
         let yBaseline: CGFloat
-        switch caption.position {
-        case .bottomLeft, .bottomCenter, .bottomRight: yBaseline = pad + descent
-        case .topLeft, .topCenter, .topRight: yBaseline = ch - pad - ascent
-        case .center: yBaseline = (ch - (ascent + descent)) / 2 + descent
+        if let n = caption.normPosition {
+            // Free placement: center the text on the point, clamped on-canvas.
+            let cx = n.x * cw, cy = (1 - n.y) * ch        // top-left origin → y-up
+            x = min(max(cx - lineW / 2, pad), max(pad, cw - pad - lineW))
+            let baseFromCenter = cy - textH / 2 + descent
+            yBaseline = min(max(baseFromCenter, pad + descent), ch - pad - ascent)
+        } else {
+            switch caption.position {
+            case .bottomLeft, .topLeft: x = pad
+            case .bottomRight, .topRight: x = cw - pad - lineW
+            case .bottomCenter, .topCenter, .center: x = (cw - lineW) / 2
+            }
+            switch caption.position {
+            case .bottomLeft, .bottomCenter, .bottomRight: yBaseline = pad + descent
+            case .topLeft, .topCenter, .topRight: yBaseline = ch - pad - ascent
+            case .center: yBaseline = (ch - textH) / 2 + descent
+            }
         }
 
         ctx.saveGState()
@@ -374,17 +425,17 @@ enum ImageEditor {
     /// are square and aspect-fill (cropped) for a clean collage.
     static func renderCombined(sources: [URL], layout: CombineLayout, gapFraction: CGFloat,
                                background: CGColor, sourceMaxPixel: Int?, longEdge: Int? = nil,
-                               gridRows: Int? = nil, caption: Caption? = nil) -> CGImage? {
+                               gridRows: Int? = nil, caption: Caption? = nil, logo: Logo? = nil) -> CGImage? {
         let imgs = sources.compactMap { loadCGImage($0, maxPixel: sourceMaxPixel) }
         return composite(imgs, layout: layout, gapFraction: gapFraction, background: background,
-                         longEdge: longEdge, gridRows: gridRows, caption: caption)
+                         longEdge: longEdge, gridRows: gridRows, caption: caption, logo: logo)
     }
 
     /// Composite already-decoded images into one. Lets callers reuse cached
     /// thumbnails for an instant preview (no disk decode on open).
     static func composite(_ imgs: [CGImage], layout: CombineLayout, gapFraction: CGFloat,
                           background: CGColor, longEdge: Int? = nil, gridRows: Int? = nil,
-                          caption: Caption? = nil) -> CGImage? {
+                          caption: Caption? = nil, logo: Logo? = nil) -> CGImage? {
         guard imgs.count >= 2 else { return nil }
         let sizes = imgs.map { CGSize(width: $0.width, height: $0.height) }
         let (canvas, rects) = combinedLayout(sizes, layout: layout, gapFraction: gapFraction, gridRows: gridRows)
@@ -412,6 +463,7 @@ enum ImageEditor {
             ctx.draw(img, in: CGRect(x: dest.midX - dw / 2, y: dest.midY - dh / 2, width: dw, height: dh))
             ctx.restoreGState()
         }
+        if let logo { drawLogo(ctx, logo, w: cw, h: ch) }
         if let caption { drawCaption(ctx, caption, w: cw, h: ch) }
         return ctx.makeImage()
     }
@@ -419,10 +471,10 @@ enum ImageEditor {
     @discardableResult
     static func combine(sources: [URL], layout: CombineLayout, gapFraction: CGFloat,
                         background: CGColor, sourceMaxPixel: Int?, to dest: URL,
-                        gridRows: Int? = nil, caption: Caption? = nil) -> Bool {
+                        gridRows: Int? = nil, caption: Caption? = nil, logo: Logo? = nil) -> Bool {
         guard let cg = renderCombined(sources: sources, layout: layout, gapFraction: gapFraction,
                                       background: background, sourceMaxPixel: sourceMaxPixel,
-                                      gridRows: gridRows, caption: caption) else { return false }
+                                      gridRows: gridRows, caption: caption, logo: logo) else { return false }
         return write(cg, to: dest, quality: 0.92)
     }
 
