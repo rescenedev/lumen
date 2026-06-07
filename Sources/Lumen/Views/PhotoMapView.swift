@@ -38,7 +38,7 @@ struct PhotoMapView: View {
     @ViewBuilder
     private var content: some View {
         if isPhotosScope {
-            // Show the map immediately; pins appear as locations are found.
+            // Show the map immediately; pins appear (and cluster) as found.
             mapView
                 .overlay(alignment: .top) { banner }
         } else if isLoading && pins.isEmpty {
@@ -52,23 +52,10 @@ struct PhotoMapView: View {
     }
 
     private var mapView: some View {
-        Map(initialPosition: .automatic) {
-            ForEach(pins) { pin in
-                Annotation(pin.photo.filename, coordinate: pin.coordinate) {
-                    Button {
-                        model.openViewer(pin.photo)
-                    } label: {
-                        AsyncThumbnail(url: pin.photo.url)
-                            .frame(width: 46, height: 46)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white, lineWidth: 2))
-                            .shadow(radius: 3)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .mapStyle(.standard(elevation: .realistic))
+        ClusteredPhotoMap(
+            pins: isPhotosScope ? model.assetMapPins : model.geotaggedPhotos,
+            onOpen: { model.openViewer($0) }
+        )
     }
 
     @ViewBuilder

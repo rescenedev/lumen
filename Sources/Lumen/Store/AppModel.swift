@@ -602,10 +602,10 @@ final class AppModel {
 
     // MARK: - Photos-library map (computed off-main; assets carry location in PhotoKit)
 
-    /// Max pins rendered on the map for a Photos source. The library can hold tens
-    /// of thousands of geotagged assets; MapKit (and per-pin thumbnails) can't take
-    /// that, so we cap. Real clustering is a later phase.
-    static let assetMapPinLimit = 500
+    /// Max pins fed to the map for a Photos source. MapKit clustering collapses
+    /// dense areas, so we can show many; the cap just bounds the upfront annotation
+    /// build (and the off-main location scan) for pathological libraries.
+    static let assetMapPinLimit = 10000
 
     private(set) var assetMapPins: [(photo: Photo, latitude: Double, longitude: Double)] = []
     private(set) var isLoadingAssetMap = false
