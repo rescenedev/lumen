@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lumen — macOS 사진 뷰어 & 매니저</title>
+<meta name="description" content="대용량(6만 장+) NAS 라이브러리도 가볍게 다루는 네이티브 macOS 사진 뷰어/매니저. SwiftUI로 제작.">
+<meta property="og:title" content="Lumen — macOS 사진 뷰어 & 매니저">
+<meta property="og:description" content="대용량 NAS 라이브러리도 가볍게. 그리드·리스트·지도 뷰, 앨범/태그/별점, 빠른 썸네일 캐싱.">
+<meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/png" href="favicon.png">
+<style>
+  :root {
+    --blue: #4b78f5;
+    --purple: #8f4dee;
+    --bg: #0b0d12;
+    --panel: #141821;
+    --panel-2: #1b2030;
+    --text: #eef1f7;
+    --muted: #9aa3b5;
+    --border: rgba(255,255,255,.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* Hero */
+  .hero {
+    position: relative;
+    text-align: center;
+    padding: 100px 24px 80px;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(800px 400px at 50% -10%, rgba(143,77,238,.28), transparent 70%),
+      radial-gradient(700px 360px at 80% 10%, rgba(75,120,245,.22), transparent 70%);
+    z-index: 0;
+  }
+  .hero > * { position: relative; z-index: 1; }
+  .app-icon {
+    width: 132px; height: 132px;
+    border-radius: 30px;
+    box-shadow: 0 20px 60px rgba(75,120,245,.35), 0 4px 14px rgba(0,0,0,.4);
+    margin-bottom: 26px;
+  }
+  h1 {
+    font-size: 64px; font-weight: 800; letter-spacing: -.03em;
+    background: linear-gradient(120deg, #fff, #b9c6ff 60%, #d6b8ff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tagline { font-size: 22px; color: var(--muted); margin-top: 14px; }
+  .badges { margin-top: 12px; font-size: 14px; color: var(--muted); }
+  .badges span { display: inline-block; margin: 0 8px; }
+
+  .cta { margin-top: 34px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 13px 22px; border-radius: 12px; font-weight: 600; font-size: 15px;
+    border: 1px solid var(--border); transition: transform .12s ease, background .2s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: linear-gradient(120deg, var(--blue), var(--purple)); border: none; }
+  .btn-ghost { background: var(--panel-2); }
+
+  /* Install snippet */
+  .install {
+    margin: 26px auto 0; max-width: 560px;
+    background: #0e1118; border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px; text-align: left; position: relative;
+  }
+  .install code {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 14px; color: #cdd6f4; display: block; white-space: pre;
+  }
+  .install .copy {
+    position: absolute; top: 12px; right: 12px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+  }
+  .install .copy:hover { color: var(--text); }
+
+  /* Sections */
+  section { padding: 70px 0; }
+  .section-title { text-align: center; font-size: 34px; font-weight: 800; letter-spacing: -.02em; }
+  .section-sub { text-align: center; color: var(--muted); margin-top: 10px; font-size: 17px; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 46px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px; transition: border-color .2s ease, transform .12s ease;
+  }
+  .card:hover { border-color: rgba(143,77,238,.4); transform: translateY(-3px); }
+  .card .ico {
+    width: 44px; height: 44px; border-radius: 11px;
+    background: linear-gradient(120deg, rgba(75,120,245,.25), rgba(143,77,238,.25));
+    display: grid; place-items: center; font-size: 22px; margin-bottom: 16px;
+  }
+  .card h3 { font-size: 18px; font-weight: 700; }
+  .card p { color: var(--muted); font-size: 15px; margin-top: 8px; }
+
+  /* Perf band */
+  .band {
+    background: linear-gradient(120deg, rgba(75,120,245,.12), rgba(143,77,238,.12));
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 40px; }
+  .stat { text-align: center; }
+  .stat .num {
+    font-size: 42px; font-weight: 800;
+    background: linear-gradient(120deg, #8fb0ff, #c69bff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .stat .lbl { color: var(--muted); margin-top: 4px; font-size: 15px; }
+
+  /* Install steps */
+  .steps { max-width: 640px; margin: 40px auto 0; }
+  .note {
+    margin-top: 18px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px; color: var(--muted); font-size: 14px;
+  }
+  .note code { background: #0e1118; padding: 2px 7px; border-radius: 6px; color: #cdd6f4; font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+
+  footer { text-align: center; padding: 50px 24px; color: var(--muted); border-top: 1px solid var(--border); font-size: 14px; }
+  footer a { color: #aab6ff; }
+
+  @media (max-width: 760px) {
+    h1 { font-size: 46px; }
+    .grid, .stats { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+  <header class="hero">
+    <img class="app-icon" src="icon.png" alt="Lumen 아이콘">
+    <h1>Lumen</h1>
+    <p class="tagline">대용량 사진 라이브러리를 가볍게 — macOS 네이티브 뷰어 &amp; 매니저</p>
+    <p class="badges">
+      <span>🖼️ 편집 없는 뷰어</span><span>·</span>
+      <span>⚡ 6만 장+ NAS 대응</span><span>·</span>
+      <span>🦅 SwiftUI</span>
+    </p>
+
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/rescenedev/lumen/releases/latest">⬇️ 다운로드</a>
+      <a class="btn btn-ghost" href="https://github.com/rescenedev/lumen">GitHub에서 보기</a>
+    </div>
+
+    <div class="install">
+      <button class="copy" onclick="copyInstall()">복사</button>
+      <code id="installCmd">brew tap rescenedev/tap
+brew install --cask lumen-photos</code>
+    </div>
+  </header>
+
+  <section>
+    <div class="wrap">
+      <h2 class="section-title">필요한 건 다, 무거운 건 없이</h2>
+      <p class="section-sub">사진을 보고 정리하는 데 필요한 기능만 — 픽셀 편집 없는 안전한 뷰어/매니저.</p>
+      <div class="grid">
+        <div class="card"><div class="ico">🗂️</div><h3>그리드 · 리스트 · 지도</h3><p>적응형 썸네일 그리드, 상세 리스트, GPS 사진을 지도 핀으로. ⌘1·2·3로 전환.</p></div>
+        <div class="card"><div class="ico">📁</div><h3>폴더 트리 &amp; 스마트 모음</h3><p>계층형 폴더, 즐겨찾기·최근 추가·오늘 날짜·중복 찾기. 폴더 우클릭으로 이름변경·앨범화.</p></div>
+        <div class="card"><div class="ico">🏷️</div><h3>앨범 · 태그 · 별점 · 라벨</h3><p>비파괴 메타데이터로 정리. Space로 즐겨찾기 후 바로 다음 사진 — 빠른 컬링.</p></div>
+        <div class="card"><div class="ico">🔍</div><h3>검색 &amp; 필터</h3><p>파일명·태그·카메라 검색. 별점·라벨·위치·카메라(예: SONY)로 필터.</p></div>
+        <div class="card"><div class="ico">👁️</div><h3>몰입형 뷰어</h3><p>줌·팬, 좌우 썸네일 미리보기, EXIF 오버레이, 2장 비교, 슬라이드쇼.</p></div>
+        <div class="card"><div class="ico">📤</div><h3>공유 · 내보내기</h3><p>시스템 공유, 원본/리사이즈/zip 내보내기, 배경화면 설정, 일괄 이름변경.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <h2 class="section-title">대용량 라이브러리를 위해 설계</h2>
+      <p class="section-sub">NAS에 흩어진 수만 장도 휙휙. 한 번 캐싱하면 어느 폴더든 즉시.</p>
+      <div class="stats">
+        <div class="stat"><div class="num">60K+</div><div class="lbl">장 라이브러리 실사용 테스트</div></div>
+        <div class="stat"><div class="num">2-tier</div><div class="lbl">메모리+디스크 썸네일 캐시 (재실행에도 유지)</div></div>
+        <div class="stat"><div class="num">즉시</div><div class="lbl">증분 스캔·캐시로 빠른 재실행</div></div>
+      </div>
+      <p class="section-sub" style="margin-top:34px; font-size:15px;">
+        메모이즈된 목록 · 폴더 인덱스 · 디바운스 내비게이션 · 백그라운드 전체 썸네일 워밍 · 지연 EXIF 인덱싱
+      </p>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2 class="section-title">설치</h2>
+      <div class="steps">
+        <div class="install" style="max-width:none; margin-top:30px;">
+          <button class="copy" onclick="copyInstall()">복사</button>
+          <code>brew tap rescenedev/tap
+brew install --cask lumen-photos</code>
+        </div>
+        <div class="note">
+          macOS 14(Sonoma) 이상. 노타라이즈되지 않은 빌드라, 첫 실행 시 Gatekeeper가 막으면
+          앱을 <b>우클릭 → 열기</b> 하거나 아래를 실행하세요:<br>
+          <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code>
+        </div>
+        <div class="note">
+          소스로 빌드: <code>git clone</code> 후 <code>./Scripts/make_app.sh</code> (Xcode 불필요, Command Line Tools만)
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Lumen · 네이티브 macOS 사진 뷰어 &amp; 매니저</p>
+    <p style="margin-top:8px;">
+      <a href="https://github.com/rescenedev/lumen">GitHub</a> ·
+      <a href="https://github.com/rescenedev/lumen/releases">릴리즈</a> ·
+      <a href="https://github.com/fayazara/macos-app-skills">macos-app-skills 기반</a>
+    </p>
+  </footer>
+
+  <script>
+    function copyInstall() {
+      navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew install --cask lumen-photos");
+      document.querySelectorAll('.copy').forEach(b => { const t=b.textContent; b.textContent='복사됨 ✓'; setTimeout(()=>b.textContent=t,1500); });
+    }
+  </script>
+</body>
+</html>
