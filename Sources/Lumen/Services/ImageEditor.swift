@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -248,6 +249,58 @@ enum ImageEditor {
         return CGImageDestinationFinalize(out)
     }
 
+    // MARK: - Caption / watermark
+
+    /// A text caption burned into the combined image.
+    struct Caption {
+        var text: String
+        var position: Position
+        var color: CGColor
+        /// Font height as a fraction of the canvas's short edge (so it scales).
+        var sizeFraction: CGFloat
+
+        enum Position: String, CaseIterable, Identifiable {
+            case bottomLeft, bottomCenter, bottomRight, topLeft, topCenter, topRight, center
+            var id: String { rawValue }
+        }
+    }
+
+    /// Draw `caption` into a y-up CGContext sized `w`×`h` (CoreText, with a soft
+    /// shadow for legibility on any background).
+    private static func drawCaption(_ ctx: CGContext, _ caption: Caption, w: Int, h: Int) {
+        let text = caption.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let canvasShort = CGFloat(min(w, h))
+        let fontSize = max(8, canvasShort * caption.sizeFraction)
+        let font = CTFontCreateWithName("HelveticaNeue-Bold" as CFString, fontSize, nil)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: caption.color]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attrs))
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        let lineW = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
+        let pad = canvasShort * 0.035
+        let cw = CGFloat(w), ch = CGFloat(h)
+
+        let x: CGFloat
+        switch caption.position {
+        case .bottomLeft, .topLeft: x = pad
+        case .bottomRight, .topRight: x = cw - pad - lineW
+        case .bottomCenter, .topCenter, .center: x = (cw - lineW) / 2
+        }
+        let yBaseline: CGFloat
+        switch caption.position {
+        case .bottomLeft, .bottomCenter, .bottomRight: yBaseline = pad + descent
+        case .topLeft, .topCenter, .topRight: yBaseline = ch - pad - ascent
+        case .center: yBaseline = (ch - (ascent + descent)) / 2 + descent
+        }
+
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -canvasShort * 0.004),
+                      blur: canvasShort * 0.008, color: CGColor(gray: 0, alpha: 0.6))
+        ctx.textPosition = CGPoint(x: x, y: yBaseline)
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
+    }
+
     // MARK: - Combine (multiple photos → one)
 
     enum CombineLayout: String, CaseIterable, Identifiable {
@@ -321,16 +374,17 @@ enum ImageEditor {
     /// are square and aspect-fill (cropped) for a clean collage.
     static func renderCombined(sources: [URL], layout: CombineLayout, gapFraction: CGFloat,
                                background: CGColor, sourceMaxPixel: Int?, longEdge: Int? = nil,
-                               gridRows: Int? = nil) -> CGImage? {
+                               gridRows: Int? = nil, caption: Caption? = nil) -> CGImage? {
         let imgs = sources.compactMap { loadCGImage($0, maxPixel: sourceMaxPixel) }
         return composite(imgs, layout: layout, gapFraction: gapFraction, background: background,
-                         longEdge: longEdge, gridRows: gridRows)
+                         longEdge: longEdge, gridRows: gridRows, caption: caption)
     }
 
     /// Composite already-decoded images into one. Lets callers reuse cached
     /// thumbnails for an instant preview (no disk decode on open).
     static func composite(_ imgs: [CGImage], layout: CombineLayout, gapFraction: CGFloat,
-                          background: CGColor, longEdge: Int? = nil, gridRows: Int? = nil) -> CGImage? {
+                          background: CGColor, longEdge: Int? = nil, gridRows: Int? = nil,
+                          caption: Caption? = nil) -> CGImage? {
         guard imgs.count >= 2 else { return nil }
         let sizes = imgs.map { CGSize(width: $0.width, height: $0.height) }
         let (canvas, rects) = combinedLayout(sizes, layout: layout, gapFraction: gapFraction, gridRows: gridRows)
@@ -358,16 +412,17 @@ enum ImageEditor {
             ctx.draw(img, in: CGRect(x: dest.midX - dw / 2, y: dest.midY - dh / 2, width: dw, height: dh))
             ctx.restoreGState()
         }
+        if let caption { drawCaption(ctx, caption, w: cw, h: ch) }
         return ctx.makeImage()
     }
 
     @discardableResult
     static func combine(sources: [URL], layout: CombineLayout, gapFraction: CGFloat,
                         background: CGColor, sourceMaxPixel: Int?, to dest: URL,
-                        gridRows: Int? = nil) -> Bool {
+                        gridRows: Int? = nil, caption: Caption? = nil) -> Bool {
         guard let cg = renderCombined(sources: sources, layout: layout, gapFraction: gapFraction,
                                       background: background, sourceMaxPixel: sourceMaxPixel,
-                                      gridRows: gridRows) else { return false }
+                                      gridRows: gridRows, caption: caption) else { return false }
         return write(cg, to: dest, quality: 0.92)
     }
 
