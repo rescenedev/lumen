@@ -12,14 +12,14 @@ struct PhotoCollectionView: NSViewRepresentable {
     let selection: Set<Photo.ID>
     let anchor: Photo.ID?
 
-    private static let captionHeight: CGFloat = 28
+    private static let captionHeight: CGFloat = 20
 
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
 
     func makeNSView(context: Context) -> NSScrollView {
         let layout = AdaptiveFlowLayout()
         layout.minimumInteritemSpacing = 6
-        layout.minimumLineSpacing = 5
+        layout.minimumLineSpacing = 4
         layout.sectionInset = NSEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
         layout.captionHeight = Self.captionHeight
         layout.targetItemWidth = thumbnailSize

@@ -9,6 +9,7 @@ struct ZoomableImage: View {
     @Binding var lastScale: CGFloat
     @Binding var offset: CGSize
     @Binding var lastOffset: CGSize
+    @Binding var loadedSize: CGSize?
 
     @State private var image: NSImage?
 
@@ -34,7 +35,19 @@ struct ZoomableImage: View {
         }
         .task(id: url) {
             image = nil
-            image = await FullImageLoader.shared.image(for: url)
+            // 1. Show the already-cached grid thumbnail instantly (local disk) so
+            //    there's no blank wait while the full-res original loads from NAS.
+            if let thumb = ThumbnailCache.shared.cached(for: url, maxPixel: ThumbnailCache.gridMaxPixel) {
+                image = thumb
+                loadedSize = thumb.size
+            } else if let thumb = await ThumbnailCache.shared.thumbnail(for: url, maxPixel: ThumbnailCache.gridMaxPixel) {
+                if image == nil { image = thumb; loadedSize = thumb.size }
+            }
+            // 2. Swap in the full-resolution image when it arrives.
+            if let full = await FullImageLoader.shared.image(for: url) {
+                image = full
+                loadedSize = full.size
+            }
         }
     }
 

@@ -102,8 +102,24 @@ final class PhotoGridCellView: NSView {
             NSBezierPath(ovalIn: dr).fill()
         }
 
-        // Caption band (below the thumbnail): filename centered, rating beneath.
-        let nameY = capH - 16
+        // Rating — small overlay at the thumbnail's bottom-center (keeps the
+        // caption band short so rows can sit close together).
+        if rating > 0 {
+            let star = Badge.star
+            let sw = star.size.width + 1
+            let totalW = CGFloat(rating) * sw
+            let startX = thumbRect.midX - totalW / 2
+            let y = thumbRect.minY + 7
+            let pill = NSRect(x: startX - 5, y: y - 3, width: totalW + 9, height: star.size.height + 6)
+            NSColor.black.withAlphaComponent(0.45).setFill()
+            NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
+            for i in 0..<rating {
+                star.draw(at: NSPoint(x: startX + CGFloat(i) * sw, y: y), from: .zero,
+                          operation: .sourceOver, fraction: 1)
+            }
+        }
+
+        // Caption band (below the thumbnail): just the filename, centered.
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingMiddle
         para.alignment = .center
@@ -112,18 +128,8 @@ final class PhotoGridCellView: NSView {
             .foregroundColor: selected ? NSColor.labelColor : NSColor.secondaryLabelColor,
             .paragraphStyle: para
         ]
-        (filename as NSString).draw(in: NSRect(x: 3, y: nameY, width: s - 6, height: 15),
+        (filename as NSString).draw(in: NSRect(x: 3, y: capH - 16, width: s - 6, height: 15),
                                     withAttributes: attrs)
-
-        if rating > 0 {
-            let star = Badge.star
-            let sw = star.size.width + 1
-            let startX = (s - CGFloat(rating) * sw) / 2
-            for i in 0..<rating {
-                star.draw(at: NSPoint(x: startX + CGFloat(i) * sw, y: max(0, nameY - 11)), from: .zero,
-                          operation: .sourceOver, fraction: 1)
-            }
-        }
     }
 }
 

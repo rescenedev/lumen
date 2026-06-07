@@ -20,6 +20,7 @@ struct ViewerView: View {
     private let timer = Timer.publish(every: 3.5, on: .main, in: .common).autoconnect()
 
     @State private var containerSize: CGSize = .zero
+    @State private var loadedImageSize: CGSize?   // actual pixel size of the shown image
 
     var body: some View {
         ZStack {
@@ -55,6 +56,7 @@ struct ViewerView: View {
         .onAppear { focused = true }
         .onChange(of: model.viewerIndex) { _, _ in
             resetZoom()
+            loadedImageSize = nil
             prefetchNeighbors()
         }
         .onAppear { prefetchNeighbors() }
@@ -86,7 +88,8 @@ struct ViewerView: View {
                       scale: $scale,
                       lastScale: $lastScale,
                       offset: $offset,
-                      lastOffset: $lastOffset)
+                      lastOffset: $lastOffset,
+                      loadedSize: $loadedImageSize)
             .id(photo.url)
             .contextMenu { PhotoContextMenu(photo: photo) }
     }
@@ -166,20 +169,20 @@ struct ViewerView: View {
     /// Width of the black bar beside a fitted portrait image, so the edge
     /// previews can grow to fill it. Returns 0 when the image fills the width.
     private var sideMargin: CGFloat {
+        // Use the actually-loaded image's size (EXIF index may be incomplete).
         guard containerSize.width > 0, containerSize.height > 0,
-              let photo = model.currentViewerPhoto,
-              let info = model.exif[photo.url.path],
-              let w = info.pixelWidth, let h = info.pixelHeight, w > 0, h > 0 else { return 0 }
-        let imageAspect = CGFloat(w) / CGFloat(h)
+              let isz = loadedImageSize, isz.width > 0, isz.height > 0 else { return 0 }
+        let imageAspect = isz.width / isz.height
         let containerAspect = containerSize.width / containerSize.height
         guard imageAspect < containerAspect else { return 0 }
         let displayedWidth = containerSize.height * imageAspect
         return max(0, (containerSize.width - displayedWidth) / 2)
     }
 
-    /// Edge-preview thumbnail size: grows to fill a wide side margin, capped.
+    /// Edge-preview thumbnail size: grows to fill a wide side margin (leaving
+    /// breathing room on both sides), capped.
     private var edgeThumbSize: CGFloat {
-        max(104, min(sideMargin - 32, 360))
+        max(120, min(sideMargin - 48, 400))
     }
 
     private var navigationButtons: some View {
@@ -192,15 +195,19 @@ struct ViewerView: View {
                 model.viewerStep(1)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 28)
     }
+
+    /// Only show the preview thumbnail when the side margin can hold it without
+    /// overlapping the main photo; otherwise show just the chevron button.
+    private var showEdgeThumb: Bool { sideMargin >= 150 }
 
     private func edgeButton(photo: Photo?, chevron: String, enabled: Bool,
                             action: @escaping () -> Void) -> some View {
         let size = edgeThumbSize
         return Button(action: action) {
             ZStack {
-                if let photo {
+                if showEdgeThumb, let photo {
                     AsyncThumbnail(url: photo.url)
                         .frame(width: size, height: size)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -213,8 +220,8 @@ struct ViewerView: View {
                 Image(systemName: chevron)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.black.opacity(0.45), in: Circle())
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
             }
         }
         .buttonStyle(.plain)
