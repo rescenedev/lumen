@@ -17,6 +17,11 @@ final class AppModel {
     // file/NAS `allPhotos` so reconcile/folder-tree/watcher never touch assets.
     private(set) var assetPhotos: [Photo] = [] { didSet { assetsVersion &+= 1 } }
     private(set) var photosAccess: PhotosAccessState = .unknown
+    private(set) var photosAlbums: [PhotosAlbumRef] = []
+    // Assets of the currently-open Photos album (loaded lazily on selection).
+    // Observed (NOT @ObservationIgnored) so the grid refreshes when it lands.
+    private var assetAlbumPhotos: [Photo] = [] { didSet { assetsVersion &+= 1 } }
+    @ObservationIgnored private var currentAssetAlbumId: String?
 
     // Cheap monotonic counters used to invalidate memoized derived collections.
     @ObservationIgnored private var libraryVersion = 0
@@ -34,7 +39,11 @@ final class AppModel {
     /// doesn't recompute/redraw the grid on every transient selection.
     private(set) var committedSidebar: SidebarItem = .allPhotos {
         didSet {
-            if committedSidebar.isPhotosLibrarySource { loadPhotosLibraryIfNeeded() }
+            switch committedSidebar {
+            case .photosLibrary: loadPhotosLibraryIfNeeded()
+            case .photosAlbum(let id): loadPhotosAlbum(id)
+            default: break
+            }
         }
     }
     @ObservationIgnored private var sidebarCommitWork: DispatchWorkItem?
@@ -48,14 +57,18 @@ final class AppModel {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
     }
 
-    /// Photos to draw from for the current scope: the Apple Photos library for a
-    /// Photos source, otherwise the file/NAS library.
+    /// Photos to draw from for the current scope: a Photos album, the whole Apple
+    /// Photos library, or the file/NAS library.
     private var sourcePhotos: [Photo] {
-        committedSidebar.isPhotosLibrarySource ? assetPhotos : allPhotos
+        switch committedSidebar {
+        case .photosAlbum: return assetAlbumPhotos
+        case .photosLibrary: return assetPhotos
+        default: return allPhotos
+        }
     }
 
-    /// Lazily request access and load the Photos library the first time a Photos
-    /// source is opened. Idempotent; safe to call repeatedly.
+    /// Lazily request access and load the Photos library (and album list) the
+    /// first time a Photos source is opened. Idempotent; safe to call repeatedly.
     func loadPhotosLibraryIfNeeded() {
         guard assetPhotos.isEmpty, photosAccess != .loading, photosAccess != .denied else { return }
         photosAccess = .loading
@@ -66,9 +79,22 @@ final class AppModel {
                 let photos = await PhotosLibraryService.fetchAllImages()
                 self.assetPhotos = photos
                 self.photosAccess = (status == .limited) ? .limited : .authorized
+                self.photosAlbums = await PhotosLibraryService.fetchAlbums()
             default:
                 self.photosAccess = .denied
             }
+        }
+    }
+
+    /// Load one Photos album's assets on demand (cached per album id).
+    func loadPhotosAlbum(_ id: String) {
+        if photosAccess == .unknown { loadPhotosLibraryIfNeeded() }
+        guard currentAssetAlbumId != id else { return }
+        currentAssetAlbumId = id
+        assetAlbumPhotos = []
+        Task {
+            let photos = await PhotosLibraryService.fetchAssets(inAlbumId: id)
+            if self.currentAssetAlbumId == id { self.assetAlbumPhotos = photos }
         }
     }
     var sortOrder: SortOrder = .dateNewest
@@ -286,7 +312,7 @@ final class AppModel {
     /// its own manual order.
     private func scoped(_ photos: [Photo]) -> [Photo] {
         switch committedSidebar {
-        case .allPhotos, .photosLibrary:
+        case .allPhotos, .photosLibrary, .photosAlbum:
             return photos
         case .favorites:
             return photos.filter { isFavorite($0) }
@@ -572,6 +598,67 @@ final class AppModel {
             guard let info = exif[photo.url.path], let lat = info.latitude, let lon = info.longitude else { return nil }
             return (photo, lat, lon)
         }
+    }
+
+    // MARK: - Photos-library map (computed off-main; assets carry location in PhotoKit)
+
+    /// Max pins rendered on the map for a Photos source. The library can hold tens
+    /// of thousands of geotagged assets; MapKit (and per-pin thumbnails) can't take
+    /// that, so we cap. Real clustering is a later phase.
+    static let assetMapPinLimit = 500
+
+    private(set) var assetMapPins: [(photo: Photo, latitude: Double, longitude: Double)] = []
+    private(set) var isLoadingAssetMap = false
+    private(set) var assetMapTruncated = false
+    @ObservationIgnored private var assetMapKey = -1
+
+    /// Scan the current Photos scope's geotagged assets on a background thread and
+    /// stream pins to the map in batches, so the map shows immediately and fills
+    /// in progressively (reading 70k `PHAsset.location`s on the main thread froze
+    /// the app). Capped at `assetMapPinLimit`.
+    func ensureAssetMapPins() {
+        guard committedSidebar.isPhotosLibrarySource else { return }
+        let key = visibleSignature
+        guard assetMapKey != key else { return }
+        assetMapKey = key
+        isLoadingAssetMap = true
+        assetMapPins = []
+        assetMapTruncated = false
+        let photos = visiblePhotos
+        let limit = Self.assetMapPinLimit
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var batch: [(photo: Photo, latitude: Double, longitude: Double)] = []
+            var total = 0
+            for photo in photos {
+                guard let c = PhotosImageLoader.shared.location(for: photo.url) else { continue }
+                batch.append((photo: photo, latitude: c.latitude, longitude: c.longitude))
+                total += 1
+                if batch.count >= 40 || total >= limit {
+                    let chunk = batch; batch = []
+                    await MainActor.run { self?.appendAssetMapPins(chunk, forKey: key) }
+                }
+                if total >= limit {
+                    await MainActor.run { self?.finishAssetMap(forKey: key, truncated: true) }
+                    return
+                }
+            }
+            let chunk = batch
+            await MainActor.run {
+                self?.appendAssetMapPins(chunk, forKey: key)
+                self?.finishAssetMap(forKey: key, truncated: false)
+            }
+        }
+    }
+
+    private func appendAssetMapPins(_ pins: [(photo: Photo, latitude: Double, longitude: Double)], forKey key: Int) {
+        guard assetMapKey == key, !pins.isEmpty else { return }   // ignore a stale scan
+        assetMapPins.append(contentsOf: pins)
+    }
+
+    private func finishAssetMap(forKey key: Int, truncated: Bool) {
+        guard assetMapKey == key else { return }
+        assetMapTruncated = truncated
+        isLoadingAssetMap = false
     }
 
     var totalCount: Int { allPhotos.count }

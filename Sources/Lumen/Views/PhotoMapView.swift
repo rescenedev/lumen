@@ -2,7 +2,9 @@ import SwiftUI
 import MapKit
 
 /// Map presentation: drops a pin for every geotagged photo; clicking a pin
-/// opens it in the viewer.
+/// opens it in the viewer. For a Photos-library scope the (potentially huge)
+/// location scan runs in the background and pins stream in progressively, so the
+/// map shows immediately instead of freezing.
 struct PhotoMapView: View {
     @Environment(AppModel.self) private var model
 
@@ -12,42 +14,77 @@ struct PhotoMapView: View {
         let coordinate: CLLocationCoordinate2D
     }
 
+    private var isPhotosScope: Bool { model.committedSidebar.isPhotosLibrarySource }
+    private var isLoading: Bool { isPhotosScope ? model.isLoadingAssetMap : model.isIndexingExif }
+
     private var pins: [Pin] {
-        model.geotaggedPhotos.map {
+        let source = isPhotosScope ? model.assetMapPins : model.geotaggedPhotos
+        return source.map {
             Pin(id: $0.photo.url, photo: $0.photo,
                 coordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude))
         }
     }
 
     var body: some View {
-        content.onAppear { model.ensureExifIndex() }
+        content.onAppear {
+            if isPhotosScope {
+                model.ensureAssetMapPins()          // background scan, streams pins
+            } else {
+                model.ensureExifIndex()             // file EXIF (NAS) index
+            }
+        }
     }
 
     @ViewBuilder
     private var content: some View {
-        if model.isIndexingExif && pins.isEmpty {
+        if isPhotosScope {
+            // Show the map immediately; pins appear as locations are found.
+            mapView
+                .overlay(alignment: .top) { banner }
+        } else if isLoading && pins.isEmpty {
             ProgressView("Reading photo locations…")
         } else if pins.isEmpty {
             ContentUnavailableView("No Locations", systemImage: "mappin.slash",
                 description: Text("None of these photos contain GPS information."))
         } else {
-            Map(initialPosition: .automatic) {
-                ForEach(pins) { pin in
-                    Annotation(pin.photo.filename, coordinate: pin.coordinate) {
-                        Button {
-                            model.openViewer(pin.photo)
-                        } label: {
-                            AsyncThumbnail(url: pin.photo.url)
-                                .frame(width: 46, height: 46)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white, lineWidth: 2))
-                                .shadow(radius: 3)
-                        }
-                        .buttonStyle(.plain)
+            mapView
+        }
+    }
+
+    private var mapView: some View {
+        Map(initialPosition: .automatic) {
+            ForEach(pins) { pin in
+                Annotation(pin.photo.filename, coordinate: pin.coordinate) {
+                    Button {
+                        model.openViewer(pin.photo)
+                    } label: {
+                        AsyncThumbnail(url: pin.photo.url)
+                            .frame(width: 46, height: 46)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white, lineWidth: 2))
+                            .shadow(radius: 3)
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .mapStyle(.standard(elevation: .realistic))
+        }
+        .mapStyle(.standard(elevation: .realistic))
+    }
+
+    @ViewBuilder
+    private var banner: some View {
+        let text: String? = {
+            if isLoading { return "Finding locations… \(pins.count)" }
+            if pins.isEmpty { return "No geotagged photos here" }
+            if model.assetMapTruncated { return "Showing first \(AppModel.assetMapPinLimit) locations" }
+            return nil
+        }()
+        if let text {
+            Text(text)
+                .font(.caption)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.top, 10)
         }
     }
 }
