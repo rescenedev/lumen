@@ -54,6 +54,25 @@ struct ContentView: View {
                 model.confirmRenameFolder()
             }
         }
+        .sheet(isPresented: $model.showAbout) { AboutView() }
+        .sheet(isPresented: $model.showShortcuts) { ShortcutsView() }
+        .overlay(alignment: .bottom) { toastBanner }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.toast)
+    }
+
+    @ViewBuilder
+    private var toastBanner: some View {
+        if let toast = model.toast {
+            Label(toast, systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(.separator))
+                .shadow(radius: 8, y: 2)
+                .padding(.bottom, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .onTapGesture { model.dismissToast() }
+        }
     }
 
     @ViewBuilder

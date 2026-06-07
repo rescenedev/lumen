@@ -19,15 +19,25 @@ struct EmptyStateView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Button {
-                model.presentOpenPanel()
-            } label: {
-                Label("Add a Folder or Photos", systemImage: "plus")
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+            HStack(spacing: 12) {
+                Button {
+                    model.presentOpenPanel()
+                } label: {
+                    Label("Add Folder…", systemImage: "folder.badge.plus")
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut("o", modifiers: .command)
+
+                Button {
+                    model.selectedSidebar = .photosLibrary
+                } label: {
+                    Label("Browse Apple Photos", systemImage: "photo.stack")
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                }
+                .buttonStyle(.bordered)
             }
             .controlSize(.large)
-            .buttonStyle(.borderedProminent)
 
             Text("…or drag images and folders anywhere in this window")
                 .font(.callout)

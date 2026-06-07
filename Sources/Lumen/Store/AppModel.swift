@@ -124,6 +124,20 @@ final class AppModel {
     @ObservationIgnored private var newAlbumPhotos: [Photo] = []
     var showRenameSheet = false
     var renameTargets: [Photo] = []
+    var showAbout = false
+    var showShortcuts = false
+
+    // Transient status toast (friendly error/info messages).
+    private(set) var toast: String?
+    @ObservationIgnored private var toastWork: DispatchWorkItem?
+    func showToast(_ message: String) {
+        toast = message
+        toastWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.toast = nil }
+        toastWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5, execute: work)
+    }
+    func dismissToast() { toastWork?.cancel(); toast = nil }
 
     // Metadata
     private(set) var metaRevision = 0
@@ -1096,6 +1110,7 @@ final class AppModel {
             try FileManager.default.moveItem(at: url, to: dest)
         } catch {
             NSLog("Lumen: folder rename failed: \(error.localizedDescription)")
+            showToast("Couldn’t rename folder: \(error.localizedDescription)")
             return
         }
 
@@ -1156,6 +1171,7 @@ final class AppModel {
                 store.rename(from: photo.url.path, to: newURL.path)
             } catch {
                 NSLog("Lumen rename failed: \(error.localizedDescription)")
+                showToast("Couldn’t rename “\(photo.filename)”: \(error.localizedDescription)")
             }
         }
         rescanRoots()
