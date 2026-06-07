@@ -15,6 +15,7 @@ struct BatchResizeView: View {
     @State private var background: PadBackground = .white
     @State private var format: BatchProcessor.Format = .jpg
     @State private var quality: Double = 0.9
+    @State private var watermark = WatermarkSettings()
     @State private var running = false
     @State private var done = 0
 
@@ -76,6 +77,9 @@ struct BatchResizeView: View {
                     Spacer()
                 }
 
+                Divider()
+                WatermarkBar(settings: $watermark)
+
                 if running {
                     ProgressView(value: Double(done), total: Double(photos.count)) {
                         Text("내보내는 중… \(done)/\(photos.count)").font(.caption)
@@ -94,7 +98,7 @@ struct BatchResizeView: View {
             }
             .padding(16)
         }
-        .frame(width: 620, height: 340)
+        .frame(width: 660, height: 440)
     }
 
     private func chooseAndRun() {
@@ -110,9 +114,11 @@ struct BatchResizeView: View {
         let urls = photos.map(\.url)
         let edit = ImageEditor.Edit(cropNorm: nil, targetWidth: canvasTarget?.w, targetHeight: canvasTarget?.h)
         let fmt = format, q = CGFloat(quality), bg = background.cgColor
+        let cap = watermark.caption, lg = watermark.logo
         Task {
             let count = await Task.detached(priority: .userInitiated) {
-                BatchProcessor.run(urls, edit: edit, format: fmt, quality: q, background: bg, into: dir) { d, _ in
+                BatchProcessor.run(urls, edit: edit, format: fmt, quality: q, background: bg, into: dir,
+                                   caption: cap, logo: lg) { d, _ in
                     Task { @MainActor in done = d }
                 }
             }.value

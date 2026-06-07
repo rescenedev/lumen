@@ -16,13 +16,15 @@ enum BatchProcessor {
     /// is called on a background thread after each file with (done, total).
     static func run(_ photos: [URL], edit: ImageEditor.Edit, format: Format,
                     quality: CGFloat, background: CGColor, into outputDir: URL,
+                    caption: ImageEditor.Caption? = nil, logo: ImageEditor.Logo? = nil,
                     progress: (Int, Int) -> Void) -> Int {
         let total = photos.count
         var done = 0, written = 0
         for url in photos {
             let base = url.deletingPathExtension().lastPathComponent
             let dest = ImageEditor.uniqueFileURL(in: outputDir, base: base, ext: format.ext)
-            if ImageEditor.process(source: url, edit: edit, to: dest, quality: quality, background: background) {
+            if ImageEditor.process(source: url, edit: edit, to: dest, quality: quality,
+                                   background: background, caption: caption, logo: logo) {
                 written += 1
             }
             done += 1

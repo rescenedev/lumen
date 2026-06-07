@@ -64,7 +64,8 @@ enum ImageEditor {
     /// (and leaves `dest` untouched). Never writes to `source`.
     @discardableResult
     static func process(source: URL, edit: Edit, to dest: URL, quality: CGFloat = 0.92,
-                        background: CGColor = CGColor(gray: 1, alpha: 1)) -> Bool {
+                        background: CGColor = CGColor(gray: 1, alpha: 1),
+                        caption: Caption? = nil, logo: Logo? = nil) -> Bool {
         guard var cg = orientedCGImage(source) else { return false }
 
         if let rotated = transformed(cg, quarters: edit.rotationQuarters, flipH: edit.flipH) { cg = rotated }
@@ -95,7 +96,23 @@ enum ImageEditor {
             break
         }
 
+        if caption != nil || logo != nil { cg = watermarked(cg, caption: caption, logo: logo) }
         return write(cg, to: dest, quality: quality)
+    }
+
+    /// Burn an optional logo and/or caption onto `cg` (used by the single-photo
+    /// and batch save paths; the combine path draws into its own canvas).
+    static func watermarked(_ cg: CGImage, caption: Caption?, logo: Logo?) -> CGImage {
+        guard caption != nil || logo != nil else { return cg }
+        let w = cg.width, h = cg.height
+        let cs = cg.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return cg }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        if let logo { drawLogo(ctx, logo, w: w, h: h) }
+        if let caption { drawCaption(ctx, caption, w: w, h: h) }
+        return ctx.makeImage() ?? cg
     }
 
     /// Fit `cg` (no upscaling) into an exact `width`×`height` canvas, positioned by

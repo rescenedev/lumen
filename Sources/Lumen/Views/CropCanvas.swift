@@ -18,6 +18,9 @@ struct CropCanvas: View {
     /// Magnification of the fitted image (1 = fit). Lets the user zoom in to crop
     /// precisely; panning (drag outside the crop) reveals the rest.
     @Binding var zoom: CGFloat
+    /// Live watermark preview, drawn over the crop region (≈ the output content).
+    var caption: ImageEditor.Caption? = nil
+    var logo: ImageEditor.Logo? = nil
 
     @State private var startRect: CGRect?
     @State private var startIndicator: CGPoint?
@@ -74,6 +77,7 @@ struct CropCanvas: View {
                 }
 
                 outputIndicator(cr)            // topmost, so its drag wins over the move area
+                watermarkOverlay(cr)
             }
             .contentShape(Rectangle())
             .simultaneousGesture(MagnificationGesture()
@@ -85,6 +89,32 @@ struct CropCanvas: View {
                 if z <= 1.001 { panOffset = .zero }
             }
         }
+    }
+
+    /// Live caption/logo preview within the crop region. Mirrors how ImageEditor
+    /// burns them in (position + size relative to the output's short edge), so the
+    /// editor shows what will be saved. Non-interactive.
+    @ViewBuilder private func watermarkOverlay(_ cr: CGRect) -> some View {
+        let shortEdge = min(cr.width, cr.height)
+        let pad = shortEdge * 0.035
+        ZStack {
+            if let logo {
+                Image(nsImage: NSImage(cgImage: logo.image, size: .zero))
+                    .resizable().scaledToFit()
+                    .frame(height: max(6, shortEdge * logo.sizeFraction))
+                    .opacity(logo.opacity)
+                    .modifier(WatermarkPlace(cr: cr, pad: pad, position: logo.position, norm: nil))
+            }
+            if let caption, !caption.text.isEmpty {
+                Text(caption.text)
+                    .font(.system(size: max(7, shortEdge * caption.sizeFraction), weight: .bold))
+                    .foregroundStyle(Color(cgColor: caption.color))
+                    .shadow(color: .black.opacity(0.6), radius: shortEdge * 0.006, y: shortEdge * 0.004)
+                    .fixedSize()
+                    .modifier(WatermarkPlace(cr: cr, pad: pad, position: caption.position, norm: caption.normPosition))
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private var panGesture: some Gesture {
@@ -213,5 +243,37 @@ struct CropCanvas: View {
         let s = min(container.width / imageSize.width, container.height / imageSize.height)
         let w = imageSize.width * s, h = imageSize.height * s
         return CGRect(x: (container.width - w) / 2, y: (container.height - h) / 2, width: w, height: h)
+    }
+}
+
+/// Places a watermark element inside the crop rect: at a free point if `norm` is
+/// set, else snapped to a corner/edge (inset by `pad`), matching the burn-in.
+private struct WatermarkPlace: ViewModifier {
+    let cr: CGRect
+    let pad: CGFloat
+    let position: ImageEditor.Caption.Position
+    let norm: CGPoint?
+
+    func body(content: Content) -> some View {
+        if let n = norm {
+            content.position(x: cr.minX + n.x * cr.width, y: cr.minY + n.y * cr.height)
+        } else {
+            content
+                .frame(width: max(1, cr.width - 2 * pad), height: max(1, cr.height - 2 * pad),
+                       alignment: Self.alignment(position))
+                .position(x: cr.midX, y: cr.midY)
+        }
+    }
+
+    static func alignment(_ p: ImageEditor.Caption.Position) -> Alignment {
+        switch p {
+        case .bottomLeft: return .bottomLeading
+        case .bottomCenter: return .bottom
+        case .bottomRight: return .bottomTrailing
+        case .topLeft: return .topLeading
+        case .topCenter: return .top
+        case .topRight: return .topTrailing
+        case .center: return .center
+        }
     }
 }
