@@ -24,6 +24,7 @@ struct CropResizeView: View {
     @State private var rotationQuarters = 0
     @State private var flipH = false
     @State private var zoom: CGFloat = 1
+    @State private var watermark = WatermarkSettings()
     @State private var confirmOverwrite = false
     @State private var busy = false
 
@@ -86,7 +87,8 @@ struct CropResizeView: View {
                 if let image {
                     CropCanvas(image: image, cropNorm: $cropNorm, aspect: lockRatio ? lockedRatio : nil,
                                indicatorScale: indicatorScale, indicatorLabel: indicatorLabel,
-                               indicatorAnchor: $contentAlign, indicatorDraggable: isCanvas, zoom: $zoom)
+                               indicatorAnchor: $contentAlign, indicatorDraggable: isCanvas, zoom: $zoom,
+                               caption: watermark.caption, logo: watermark.logo)
                 } else {
                     ProgressView()
                 }
@@ -119,11 +121,12 @@ struct CropResizeView: View {
 
     private var controls: some View {
         VStack(spacing: 14) {
-            HStack(spacing: 16) {
+            // One toolbar row: crop · rotate/straighten · resize · watermark · zoom · reset.
+            HStack(spacing: 12) {
                 Picker("Crop", selection: $aspect) {
                     ForEach(AspectChoice.allCases) { Text($0.label).tag($0) }
                 }
-                .pickerStyle(.menu).frame(width: 170)
+                .pickerStyle(.menu).frame(width: 150)
                 .onChange(of: aspect) { _, new in
                     if new == .free { lockRatio = false; lockedRatio = nil }
                     else { applyAspect(new); lockedRatio = new.ratio(originalSize: rotatedPixelSize); lockRatio = true }
@@ -148,34 +151,37 @@ struct CropResizeView: View {
                     Slider(value: $straighten, in: -15...15) { editing in
                         if !editing { refreshDisplay() }       // settle to a crisp render on release
                     }
-                    .frame(width: 130)
+                    .frame(width: 110)
                     .onChange(of: straighten) { _, _ in refreshDisplay() }
                     Text(String(format: "%+.1f°", straighten)).font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary).fixedSize().frame(width: 44, alignment: .trailing)
+                        .foregroundStyle(.secondary).fixedSize().frame(width: 42, alignment: .trailing)
                         .onTapGesture { straighten = 0; refreshDisplay() }
                 }
-                Spacer()
-                HStack(spacing: 4) {
-                    Button { zoom = max(1, zoom / 1.4) } label: { Image(systemName: "minus.magnifyingglass") }
-                    Text(String(format: "%.0f%%", zoom * 100)).font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary).frame(width: 44).onTapGesture { zoom = 1 }
-                    Button { zoom = min(8, zoom * 1.4) } label: { Image(systemName: "plus.magnifyingglass") }
-                }
-            }
-            HStack(spacing: 10) {
+
                 Text("Resize").foregroundStyle(.secondary).fixedSize()
                 TextField("자동", text: $widthText)
-                    .frame(width: 64).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
+                    .frame(width: 58).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
                 Text("×").foregroundStyle(.secondary)
                 TextField("자동", text: $heightText)
-                    .frame(width: 64).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
+                    .frame(width: 58).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
                 Text("px").foregroundStyle(.secondary).fixedSize()
                 if isCanvas {
                     Picker("", selection: $padBackground) {
                         ForEach(PadBackground.allCases) { Text($0.label).tag($0) }
                     }.labelsHidden().frame(width: 110).help("여백 배경")
                 }
-                Spacer()
+
+                Spacer(minLength: 12)
+                WatermarkCaptionRow(settings: $watermark)
+                WatermarkLogoRow(settings: $watermark)
+                Spacer(minLength: 12)
+
+                HStack(spacing: 4) {
+                    Button { zoom = max(1, zoom / 1.4) } label: { Image(systemName: "minus.magnifyingglass") }
+                    Text(String(format: "%.0f%%", zoom * 100)).font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary).frame(width: 40).onTapGesture { zoom = 1 }
+                    Button { zoom = min(8, zoom * 1.4) } label: { Image(systemName: "plus.magnifyingglass") }
+                }
                 Button("Reset") {
                     cropNorm = .init(x: 0, y: 0, width: 1, height: 1); aspect = .free; lockRatio = false
                     rotationQuarters = 0; flipH = false; straighten = 0; widthText = ""; heightText = ""
@@ -259,16 +265,19 @@ struct CropResizeView: View {
         let current = edit
         let src = photo.url
         let bg = padBackground.cgColor
+        let cap = watermark.caption, lg = watermark.logo
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
                 if overwrite {
                     let tmp = FileManager.default.temporaryDirectory
                         .appendingPathComponent("lumen-edit-\(UUID().uuidString).\(src.pathExtension)")
-                    guard ImageEditor.process(source: src, edit: current, to: tmp, background: bg) else { return false }
+                    guard ImageEditor.process(source: src, edit: current, to: tmp, background: bg,
+                                              caption: cap, logo: lg) else { return false }
                     do { _ = try FileManager.default.replaceItemAt(src, withItemAt: tmp); return true }
                     catch { try? FileManager.default.removeItem(at: tmp); return false }
                 }
-                return ImageEditor.process(source: src, edit: current, to: dest, background: bg)
+                return ImageEditor.process(source: src, edit: current, to: dest, background: bg,
+                                           caption: cap, logo: lg)
             }.value
             busy = false
             if ok {
