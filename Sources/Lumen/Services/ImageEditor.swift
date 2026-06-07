@@ -125,6 +125,13 @@ enum ImageEditor {
             case .grid: return "그리드 콜라주"
             }
         }
+        var shortLabel: String {
+            switch self {
+            case .horizontal: return "가로"
+            case .vertical: return "세로"
+            case .grid: return "그리드"
+            }
+        }
     }
 
     /// Pure geometry: where each image goes (top-left origin) and the canvas size.

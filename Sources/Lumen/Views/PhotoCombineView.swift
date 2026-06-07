@@ -19,7 +19,7 @@ struct PhotoCombineView: View {
     @State private var renderToken = 0
 
     private var sources: [URL] { photos.map(\.url) }
-    private var gapFraction: CGFloat { CGFloat(gapPercent) / 100 }
+    private var gapFraction: CGFloat { CGFloat(min(max(gapPercent, 0), 20)) / 100 }
 
     /// User types the number of rows. Empty or invalid → auto (nil = square-ish).
     /// Clamped to 1…count, and only applies to the grid layout.
@@ -62,33 +62,32 @@ struct PhotoCombineView: View {
             Divider()
 
             VStack(spacing: 14) {
-                HStack(spacing: 20) {
-                    Picker("Layout", selection: $layout) {
-                        ForEach(ImageEditor.CombineLayout.allCases) { Text($0.label).tag($0) }
-                    }.pickerStyle(.menu).frame(width: 220)
-                    if layout == .grid {
-                        HStack(spacing: 6) {
-                            Text("행").foregroundStyle(.secondary)
-                            TextField("자동", text: $gridRowsText)
-                                .frame(width: 46).multilineTextAlignment(.center)
-                                .textFieldStyle(.roundedBorder)
-                            Text("\(gridShape.rows)×\(gridShape.cols)")
-                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        }
-                    }
-                    Picker("Background", selection: $background) {
+                // Every control on one line: layout · background · (rows) · spacing · resolution.
+                HStack(spacing: 12) {
+                    Picker("", selection: $layout) {
+                        ForEach(ImageEditor.CombineLayout.allCases) { Text($0.shortLabel).tag($0) }
+                    }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                    Picker("", selection: $background) {
                         ForEach(BackgroundChoice.allCases) { Text($0.label).tag($0) }
-                    }.pickerStyle(.menu).frame(width: 170)
-                    Spacer()
-                }
-                HStack {
-                    Text("Spacing").foregroundStyle(.secondary)
-                    Slider(value: $gapPercent, in: 0...10)
-                    Text(String(format: "%.1f%%", gapPercent)).font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary).frame(width: 44, alignment: .trailing)
+                    }.labelsHidden().frame(width: 130)
+                    if layout == .grid {
+                        Text("행").foregroundStyle(.secondary)
+                        TextField("자동", text: $gridRowsText)
+                            .frame(width: 38).multilineTextAlignment(.center)
+                            .textFieldStyle(.roundedBorder)
+                        Text("\(gridShape.rows)×\(gridShape.cols)")
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Text("간격").foregroundStyle(.secondary)
+                    Slider(value: $gapPercent, in: 0...10).frame(width: 70)
+                    TextField("", value: $gapPercent, format: .number.precision(.fractionLength(0...1)))
+                        .frame(width: 38).multilineTextAlignment(.trailing)
+                        .textFieldStyle(.roundedBorder)
+                    Text("%").foregroundStyle(.secondary)
                     Picker("", selection: $resolution) {
                         ForEach(CombineSize.allCases) { Text($0.label).tag($0) }
-                    }.labelsHidden().frame(width: 150)
+                    }.labelsHidden().frame(width: 140)
                 }
                 HStack {
                     Spacer()
@@ -100,7 +99,7 @@ struct PhotoCombineView: View {
             }
             .padding(16)
         }
-        .frame(width: 760, height: 660)
+        .frame(width: 860, height: 660)
         .onAppear { instantPreview() }
         .task(id: renderKey) { await renderPreview() }
     }
