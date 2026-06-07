@@ -223,14 +223,20 @@ struct PhotoCollectionView: NSViewRepresentable {
         var cursorIndex: Int?
 
         /// Columns currently laid out (so up/down move a true grid row, and Shift
-        /// builds a rectangle instead of an index range).
+        /// builds a rectangle instead of an index range). Counted from the real
+        /// item frames — the first row's items share a Y — so it can never be off
+        /// by one the way back-computing from widths/insets could.
         private func columns(_ cv: NSCollectionView) -> Int {
-            guard let layout = cv.collectionViewLayout as? AdaptiveFlowLayout, layout.itemSize.width > 0
+            guard let layout = cv.collectionViewLayout, !photos.isEmpty,
+                  let first = layout.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))
             else { return 1 }
-            let insets = layout.sectionInset.left + layout.sectionInset.right
-            let g = layout.minimumInteritemSpacing
-            let avail = cv.bounds.width - insets
-            return max(1, Int((avail + g) / (layout.itemSize.width + g)))
+            let y0 = first.frame.minY
+            var count = 0
+            for i in 0..<min(photos.count, 256) {
+                guard let a = layout.layoutAttributesForItem(at: IndexPath(item: i, section: 0)) else { break }
+                if abs(a.frame.minY - y0) < 1 { count += 1 } else { break }
+            }
+            return max(1, count)
         }
 
         /// Grid-aware arrow navigation. Plain arrow moves a single selection;
