@@ -144,6 +144,7 @@ struct PhotoCollectionView: NSViewRepresentable {
             let photo = photos[indexPath.item]
             item.configure(photo: photo, size: CGFloat(model.thumbnailSize),
                            selected: model.selection.contains(photo.id),
+                           selectionActive: model.selection.count > 1,
                            favorite: model.isFavorite(photo),
                            rating: model.rating(photo), label: model.label(photo))
             return item
@@ -178,15 +179,32 @@ struct PhotoCollectionView: NSViewRepresentable {
                 appliedAnchor = photos[last.item].id
                 cursorIndex = last.item
             }
+            refreshSelectionActive(cv)
+        }
+
+        /// Toggle the "dim the non-selected" treatment on every visible cell when a
+        /// selection appears/disappears (cells that stay unselected don't otherwise
+        /// redraw on a selection change).
+        private func refreshSelectionActive(_ cv: NSCollectionView) {
+            let active = model.selection.count > 1   // only dim during multi-select
+            for case let item as PhotoCollectionItem in cv.visibleItems() {
+                item.setSelectionActive(active)
+            }
         }
 
         func applySelection(_ cv: NSCollectionView, _ selection: Set<Photo.ID>) {
             let ips = Set(selection.compactMap { indexByID[$0] }.map { IndexPath(item: $0, section: 0) })
             appliedSelection = selection
-            guard ips != cv.selectionIndexPaths else { return }
+            defer { refreshSelectionActive(cv) }
+            let current = cv.selectionIndexPaths
+            guard ips != current else { return }
+            // Only touch the items that actually changed — re-selecting the whole
+            // block on every Shift+arrow caused a momentary freeze.
             syncingSelection = true
-            cv.deselectItems(at: cv.selectionIndexPaths)
-            cv.selectItems(at: ips, scrollPosition: [])
+            let toRemove = current.subtracting(ips)
+            let toAdd = ips.subtracting(current)
+            if !toRemove.isEmpty { cv.deselectItems(at: toRemove) }
+            if !toAdd.isEmpty { cv.selectItems(at: toAdd, scrollPosition: []) }
             syncingSelection = false
         }
 
