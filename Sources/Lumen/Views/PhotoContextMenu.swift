@@ -21,6 +21,9 @@ struct PhotoContextMenu: View {
         if targets.count == 2 {
             Button("Compare") { model.openCompare(targets) }
         }
+        if isBatch && targets.contains(where: { !$0.isAsset }) {
+            Button("Combine into One…") { model.startCombine(targets) }
+        }
 
         Divider()
 

@@ -139,6 +139,43 @@ final class AppModel {
         showEditor = true
     }
 
+    // Combine multiple photos into one (non-destructive → new file).
+    var combineTargets: [Photo] = []
+    var showCombine = false
+
+    func startCombine(_ photos: [Photo]) {
+        let files = photos.filter { !$0.isAsset }
+        guard files.count >= 2 else {
+            showToast("합치려면 파일 사진 2장 이상을 선택하세요.")
+            return
+        }
+        combineTargets = files
+        showCombine = true
+    }
+
+    func didCombine(output: URL) {
+        revealNewFile(output)
+        showToast("합친 이미지 저장됨 · \(output.deletingLastPathComponent().lastPathComponent)/\(output.lastPathComponent)")
+    }
+
+    /// Make a just-written file visible: add it to the library, jump to All Photos
+    /// (a file scope — the result won't show under an Apple Photos source), and
+    /// select + scroll to it.
+    func revealNewFile(_ url: URL) {
+        let rv = try? url.resourceValues(forKeys: [.fileSizeKey, .creationDateKey, .contentModificationDateKey])
+        let photo = Photo(url: url,
+                          byteSize: Int64(rv?.fileSize ?? 0),
+                          creationDate: rv?.creationDate,
+                          modificationDate: rv?.contentModificationDate)
+        if !allPhotos.contains(where: { $0.url == url }) {
+            allPhotos = allPhotos + [photo]
+            persistLibraryCache()            // off-main; FSEvents watcher reconciles folder state
+        }
+        if committedSidebar.isPhotosLibrarySource { selectedSidebar = .allPhotos }
+        selectOnly(photo)
+        selectionAnchor = photo.id
+    }
+
     /// Called after the editor writes. Refreshes caches/grid so the result shows.
     func didEdit(source: URL, output: URL, overwrote: Bool) {
         if overwrote {
@@ -149,7 +186,7 @@ final class AppModel {
             allPhotos = allPhotos            // bump libraryVersion → grid reloads
             showToast("원본을 편집본으로 덮어썼습니다 · \(source.lastPathComponent)")
         } else {
-            rescanRoots()                    // pick up the new "(edited)" file
+            revealNewFile(output)            // add + select + scroll to the new copy
             showToast("편집본 저장됨 · \(output.lastPathComponent)")
         }
     }
@@ -1265,6 +1302,7 @@ final class AppModel {
         for url in trashed { exif.removeValue(forKey: url.path); duplicatePaths.remove(url.path) }
         recomputeMetaCounts()
         bumpMeta()
+        persistLibraryCache()   // save the post-delete library so a relaunch can't reload the trashed files
 
         if viewerIndex != nil {
             viewerPhotos.removeAll { trashed.contains($0.url) }

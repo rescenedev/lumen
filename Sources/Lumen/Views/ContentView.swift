@@ -59,6 +59,9 @@ struct ContentView: View {
         .sheet(isPresented: $model.showEditor) {
             if let target = model.editTarget { CropResizeView(photo: target) }
         }
+        .sheet(isPresented: $model.showCombine) {
+            PhotoCombineView(photos: model.combineTargets)
+        }
         .overlay(alignment: .bottom) { toastBanner }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.toast)
     }

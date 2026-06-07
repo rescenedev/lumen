@@ -34,6 +34,9 @@ enum PhotoMenuBuilder {
         if targets.count == 2 {
             menu.addItem(ClosureMenuItem("Compare") { model.openCompare(targets) })
         }
+        if isBatch && targets.contains(where: { !$0.isAsset }) {
+            menu.addItem(ClosureMenuItem("Combine into One…") { model.startCombine(targets) })
+        }
         menu.addItem(.separator())
 
         let favTitle = isBatch ? "Toggle Favorite" : (model.isFavorite(photo) ? "Remove from Favorites" : "Add to Favorites")
