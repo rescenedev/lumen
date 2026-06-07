@@ -36,11 +36,15 @@ enum PhotoMenuBuilder {
         }
         if isBatch && targets.contains(where: { !$0.isAsset }) {
             menu.addItem(ClosureMenuItem("Combine into One…") { model.startCombine(targets) })
+            menu.addItem(ClosureMenuItem("Batch Resize…") { model.startBatchResize(targets) })
         }
         menu.addItem(.separator())
 
         let favTitle = isBatch ? "Toggle Favorite" : (model.isFavorite(photo) ? "Remove from Favorites" : "Add to Favorites")
         menu.addItem(ClosureMenuItem(favTitle + suffix) { model.toggleFavorites(targets) })
+
+        let rejectTitle = isBatch ? "Toggle Reject" : (model.isRejected(photo) ? "Unreject" : "Reject")
+        menu.addItem(ClosureMenuItem(rejectTitle + suffix) { model.toggleRejected(targets) })
 
         // Rating
         let ratingMenu = NSMenu()

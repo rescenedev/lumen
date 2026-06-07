@@ -23,11 +23,15 @@ struct PhotoContextMenu: View {
         }
         if isBatch && targets.contains(where: { !$0.isAsset }) {
             Button("Combine into One…") { model.startCombine(targets) }
+            Button("Batch Resize…") { model.startBatchResize(targets) }
         }
 
         Divider()
 
         Button(favoriteLabel + suffix) { model.toggleFavorites(targets) }
+
+        let rejectLabel = isBatch ? "Toggle Reject" : (model.isRejected(photo) ? "Unreject" : "Reject")
+        Button(rejectLabel + suffix) { model.toggleRejected(targets) }
 
         Menu("Rating") {
             Button("None") { model.setRating(0, for: targets) }

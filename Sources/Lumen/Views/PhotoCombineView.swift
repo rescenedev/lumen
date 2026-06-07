@@ -20,6 +20,9 @@ struct PhotoCombineView: View {
     @State private var background: BackgroundChoice = .white
     @State private var resolution: CombineSize = .px2048
     @State private var gridRowsText: String = ""
+    @State private var captionText = ""
+    @State private var captionPos: ImageEditor.Caption.Position = .bottomRight
+    @State private var captionColor: CaptionColor = .white
     @State private var preview: NSImage?
     @State private var rendering = false
     @State private var busy = false
@@ -27,6 +30,12 @@ struct PhotoCombineView: View {
 
     private var sources: [URL] { ordered.map(\.url) }
     private var gapFraction: CGFloat { CGFloat(min(max(gapPercent, 0), 20)) / 100 }
+
+    private var caption: ImageEditor.Caption? {
+        let t = captionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        return ImageEditor.Caption(text: t, position: captionPos, color: captionColor.cgColor, sizeFraction: 0.045)
+    }
 
     /// User types the number of rows. Empty or invalid → auto (nil = square-ish).
     /// Clamped to 1…count, and only applies to the grid layout.
@@ -99,6 +108,18 @@ struct PhotoCombineView: View {
                         ForEach(CombineSize.allCases) { Text($0.label).tag($0) }
                     }.labelsHidden().frame(width: 140)
                 }
+                HStack(spacing: 10) {
+                    Image(systemName: "textformat").foregroundStyle(.secondary)
+                    TextField("캡션/워터마크 (선택)", text: $captionText)
+                        .textFieldStyle(.roundedBorder).frame(maxWidth: 300)
+                    Picker("", selection: $captionPos) {
+                        ForEach(ImageEditor.Caption.Position.allCases) { Text(positionLabel($0)).tag($0) }
+                    }.labelsHidden().frame(width: 110).disabled(captionText.isEmpty)
+                    Picker("", selection: $captionColor) {
+                        ForEach(CaptionColor.allCases) { Text($0.label).tag($0) }
+                    }.labelsHidden().frame(width: 90).disabled(captionText.isEmpty)
+                    Spacer()
+                }
                 HStack {
                     Spacer()
                     Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -109,7 +130,7 @@ struct PhotoCombineView: View {
             }
             .padding(16)
         }
-        .frame(width: 860, height: 720)
+        .frame(width: 860, height: 760)
         .onAppear { instantPreview() }
         .task(id: renderKey) { await renderPreview() }
     }
@@ -140,7 +161,7 @@ struct PhotoCombineView: View {
     }
 
     private var renderKey: String {
-        "\(layout.rawValue)|\(gapPercent)|\(background.rawValue)|\(gridRows ?? 0)|\(ordered.map(\.url.path).joined(separator: ">"))"
+        "\(layout.rawValue)|\(gapPercent)|\(background.rawValue)|\(gridRows ?? 0)|\(captionText)|\(captionPos.rawValue)|\(captionColor.rawValue)|\(ordered.map(\.url.path).joined(separator: ">"))"
     }
 
     /// Composite the grid thumbnails already in memory (512px) — instant, no disk
@@ -152,7 +173,7 @@ struct PhotoCombineView: View {
         }
         guard imgs.count == sources.count,
               let cg = ImageEditor.composite(imgs, layout: layout, gapFraction: gapFraction,
-                                             background: background.cgColor, gridRows: gridRows)
+                                             background: background.cgColor, gridRows: gridRows, caption: caption)
         else { return }
         preview = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
@@ -161,12 +182,12 @@ struct PhotoCombineView: View {
         renderToken += 1
         let token = renderToken
         rendering = true
-        let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows
+        let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows, cap = caption
         let img = await Task.detached(priority: .userInitiated) { () -> NSImage? in
             // Downsample sources for a fast preview (no full-res decode).
             guard let cg = ImageEditor.renderCombined(sources: srcs, layout: lay, gapFraction: gap,
                                                       background: bg, sourceMaxPixel: 900, longEdge: 1400,
-                                                      gridRows: gr)
+                                                      gridRows: gr, caption: cap)
             else { return nil }
             return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         }.value
@@ -177,7 +198,7 @@ struct PhotoCombineView: View {
 
     private func save() {
         busy = true
-        let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows
+        let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows, cap = caption
         let dir = ordered[0].url.deletingLastPathComponent()
         let ext = background == .transparent ? "png" : "jpg"
         let dest = ImageEditor.uniqueFileURL(in: dir, base: "Combined", ext: ext)
@@ -185,7 +206,7 @@ struct PhotoCombineView: View {
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
                 ImageEditor.combine(sources: srcs, layout: lay, gapFraction: gap,
-                                    background: bg, sourceMaxPixel: maxPixel, to: dest, gridRows: gr)
+                                    background: bg, sourceMaxPixel: maxPixel, to: dest, gridRows: gr, caption: cap)
             }.value
             busy = false
             if ok { model.didCombine(output: dest); dismiss() }
@@ -215,6 +236,26 @@ enum CombineSize: String, CaseIterable, Identifiable {
         case .original: return nil
         }
     }
+}
+
+private func positionLabel(_ p: ImageEditor.Caption.Position) -> String {
+    switch p {
+    case .bottomLeft: return "좌하"
+    case .bottomCenter: return "하단"
+    case .bottomRight: return "우하"
+    case .topLeft: return "좌상"
+    case .topCenter: return "상단"
+    case .topRight: return "우상"
+    case .center: return "중앙"
+    }
+}
+
+/// Caption text color.
+enum CaptionColor: String, CaseIterable, Identifiable {
+    case white, black
+    var id: String { rawValue }
+    var label: String { self == .white ? "흰색" : "검정" }
+    var cgColor: CGColor { self == .white ? CGColor(gray: 1, alpha: 1) : CGColor(gray: 0, alpha: 1) }
 }
 
 /// Reorders the source list as a dragged thumbnail passes over another.

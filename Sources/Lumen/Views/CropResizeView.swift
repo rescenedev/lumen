@@ -9,8 +9,10 @@ struct CropResizeView: View {
     let photo: Photo
 
     @State private var image: NSImage?
-    @State private var baseCG: CGImage?            // upright, full-res — re-transformed on rotate/flip
+    @State private var baseCG: CGImage?            // upright, downsampled — re-transformed on rotate/flip/straighten
     @State private var pixelSize: CGSize = .zero
+    @State private var straighten: Double = 0      // fine angle, degrees
+    @State private var displayToken = 0
     @State private var cropNorm = CGRect(x: 0, y: 0, width: 1, height: 1)
     @State private var aspect: AspectChoice = .free
     @State private var lockRatio = false
@@ -45,7 +47,7 @@ struct CropResizeView: View {
     private var edit: ImageEditor.Edit {
         ImageEditor.Edit(cropNorm: cropNorm == CGRect(x: 0, y: 0, width: 1, height: 1) ? nil : cropNorm,
                          targetWidth: canvasTarget?.w, targetHeight: canvasTarget?.h,
-                         rotationQuarters: rotationQuarters, flipH: flipH,
+                         rotationQuarters: rotationQuarters, straightenDegrees: straighten, flipH: flipH,
                          contentAlign: contentAlign)
     }
     /// Scale of the saved image content relative to the on-screen crop (≤1), used
@@ -134,6 +136,18 @@ struct CropResizeView: View {
                 }
                 .help("Rotate / flip")
 
+                HStack(spacing: 6) {
+                    Image(systemName: "level").foregroundStyle(.secondary)
+                    Slider(value: $straighten, in: -15...15) { editing in
+                        if !editing { refreshDisplay() }       // settle to a crisp render on release
+                    }
+                    .frame(width: 120)
+                    .onChange(of: straighten) { _, _ in refreshDisplay() }
+                    Text(String(format: "%+.1f°", straighten)).font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary).frame(width: 42, alignment: .trailing)
+                        .onTapGesture { straighten = 0; refreshDisplay() }
+                }
+
                 Spacer()
 
                 Text("Resize").foregroundStyle(.secondary)
@@ -151,11 +165,12 @@ struct CropResizeView: View {
 
                 Button("Reset") {
                     cropNorm = .init(x: 0, y: 0, width: 1, height: 1); aspect = .free; lockRatio = false
-                    rotationQuarters = 0; flipH = false; widthText = ""; heightText = ""
+                    rotationQuarters = 0; flipH = false; straighten = 0; widthText = ""; heightText = ""
                     contentAlign = CGPoint(x: 0.5, y: 0.5); refreshDisplay()
                 }
                 .disabled(cropNorm == CGRect(x: 0, y: 0, width: 1, height: 1)
-                          && rotationQuarters == 0 && !flipH && widthText.isEmpty && heightText.isEmpty)
+                          && rotationQuarters == 0 && !flipH && straighten == 0
+                          && widthText.isEmpty && heightText.isEmpty)
             }
             HStack(spacing: 12) {
                 Spacer()
@@ -174,8 +189,10 @@ struct CropResizeView: View {
         let url = photo.url
         let cg = await Task.detached(priority: .userInitiated) { ImageEditor.orientedCGImage(url) }.value
         guard let cg else { return }
-        baseCG = cg
         pixelSize = CGSize(width: cg.width, height: cg.height)
+        // A light base so re-transforming on every straighten tick stays smooth;
+        // the saved output still re-reads and processes the full-res source.
+        baseCG = await Task.detached(priority: .userInitiated) { ImageEditor.downsampled(cg, maxPixel: 2200) }.value
         refreshDisplay()
     }
 
@@ -188,23 +205,29 @@ struct CropResizeView: View {
         refreshDisplay()
     }
 
-    /// Re-render the canvas image from the upright base using the SAME transform
-    /// the save path uses, so preview and output never disagree.
+    /// Re-render the canvas image from the base using the SAME transforms the save
+    /// path uses, so preview and output never disagree. A token drops stale renders.
     private func refreshDisplay() {
         guard let baseCG else { return }
-        let q = rotationQuarters, f = flipH
+        displayToken += 1
+        let token = displayToken
+        let q = rotationQuarters, f = flipH, deg = straighten
         Task {
             let img = await Task.detached(priority: .userInitiated) { () -> NSImage? in
-                guard let t = ImageEditor.transformed(baseCG, quarters: q, flipH: f) else { return nil }
+                var t = ImageEditor.transformed(baseCG, quarters: q, flipH: f) ?? baseCG
+                if deg != 0, let s = ImageEditor.straightened(t, degrees: deg) { t = s }
                 return NSImage(cgImage: t, size: NSSize(width: t.width, height: t.height))
             }.value
-            if let img { image = img }
+            if token == displayToken, let img { image = img }
         }
     }
 
-    /// Image dimensions as currently displayed (90°/270° rotation swaps them).
+    /// Image dimensions as currently displayed (rotation swaps them; straighten
+    /// auto-crops them) — the space `cropNorm` is normalized against.
     private var rotatedPixelSize: CGSize {
-        rotationQuarters % 2 != 0 ? CGSize(width: pixelSize.height, height: pixelSize.width) : pixelSize
+        var s = rotationQuarters % 2 != 0 ? CGSize(width: pixelSize.height, height: pixelSize.width) : pixelSize
+        if straighten != 0 { s = ImageEditor.straightenCropSize(s.width, s.height, degrees: straighten) }
+        return s
     }
 
     private func applyAspect(_ choice: AspectChoice) {

@@ -70,6 +70,7 @@ struct ViewerView: View {
         .onKeyPress(KeyEquivalent("-")) { zoom(by: 1 / 1.4); return .handled }
         .onKeyPress(KeyEquivalent("0")) { resetZoom(); return .handled }
         .onKeyPress(KeyEquivalent("f")) { favoriteCurrent(); return .handled }
+        .onKeyPress(KeyEquivalent("x")) { rejectCurrent(); return .handled }
         .onKeyPress(KeyEquivalent("i")) { model.showExifOverlay.toggle(); return .handled }
         .onKeyPress(.delete) { deleteCurrent(); return .handled }
         .onKeyPress(keys: ["0", "1", "2", "3", "4", "5"]) { press in
@@ -313,6 +314,14 @@ struct ViewerView: View {
 
     private func favoriteCurrent() {
         if let photo = model.currentViewerPhoto { model.toggleFavorite(photo) }
+    }
+
+    /// Reject (X): flag to discard and advance, so you can cull without lifting
+    /// your hand off the keyboard.
+    private func rejectCurrent() {
+        guard let photo = model.currentViewerPhoto else { return }
+        model.toggleRejected([photo])
+        if model.canStepForward { model.viewerStep(1) }
     }
 
     private func deleteCurrent() {

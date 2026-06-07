@@ -63,6 +63,24 @@ func imageEditorTests() {
         check(s == CGSize(width: 1000, height: 1333), "got \(s)")
     }
 
+    test("straightenZeroIsNoCrop") {
+        let s = ImageEditor.straightenCropSize(4000, 3000, degrees: 0)
+        check(s == CGSize(width: 4000, height: 3000), "got \(s)")
+    }
+
+    test("straightenShrinksToInscribed") {
+        // A non-zero tilt must auto-crop to something strictly smaller, but not absurd.
+        let s = ImageEditor.straightenCropSize(4000, 3000, degrees: 10)
+        check(s.width < 4000 && s.height < 3000, "got \(s)")
+        check(s.width > 3000 && s.height > 2200, "too small: \(s)")
+    }
+
+    test("straightenAppliesInOutputSize") {
+        let plain = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil))
+        let tilted = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, straightenDegrees: 8))
+        check(tilted.width < plain.width && tilted.height < plain.height, "got \(tilted) vs \(plain)")
+    }
+
     test("flipKeepsDimensions") {
         let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil, flipH: true))
         check(s == src, "got \(s)")

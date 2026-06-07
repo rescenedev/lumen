@@ -158,6 +158,25 @@ final class AppModel {
         showToast("합친 이미지 저장됨 · \(output.deletingLastPathComponent().lastPathComponent)/\(output.lastPathComponent)")
     }
 
+    // Batch resize/canvas → export many photos at once (non-destructive copies).
+    var batchTargets: [Photo] = []
+    var showBatchResize = false
+
+    func startBatchResize(_ photos: [Photo]) {
+        let files = photos.filter { !$0.isAsset }
+        guard !files.isEmpty else {
+            showToast("리사이즈할 파일 사진을 선택하세요 (Apple Photos 제외).")
+            return
+        }
+        batchTargets = files
+        showBatchResize = true
+    }
+
+    func didBatchResize(count: Int, folder: URL) {
+        showToast("\(count)장 내보냄 · \(folder.lastPathComponent)")
+        NSWorkspace.shared.activateFileViewerSelecting([folder])
+    }
+
     /// Make a just-written file visible: add it to the library, jump to All Photos
     /// (a file scope — the result won't show under an Apple Photos source), and
     /// select + scroll to it.
@@ -286,6 +305,19 @@ final class AppModel {
 
     func setRating(_ value: Int, for photos: [Photo]) {
         for photo in photos { store.update(photo.url.path) { $0.rating = value } }
+        bumpMeta()
+    }
+
+    // MARK: - Culling (reject flag)
+
+    func isRejected(_ photo: Photo) -> Bool { meta(photo).rejected }
+
+    func toggleRejected(_ photos: [Photo]) {
+        guard !photos.isEmpty else { return }
+        let shouldReject = photos.contains { !isRejected($0) }
+        for photo in photos where isRejected(photo) != shouldReject {
+            store.update(photo.url.path) { $0.rejected = shouldReject }
+        }
         bumpMeta()
     }
 
@@ -440,6 +472,7 @@ final class AppModel {
             if filter.minRating > 0, m.rating < filter.minRating { return false }
             if let label = filter.label, m.label != label { return false }
             if filter.favoritesOnly, !m.favorite { return false }
+            if filter.hideRejected, m.rejected { return false }
             if filter.gpsOnly, !(exif[photo.url.path]?.hasGPS ?? false) { return false }
             if let camera = filter.camera, exif[photo.url.path]?.cameraDisplay != camera { return false }
             return true

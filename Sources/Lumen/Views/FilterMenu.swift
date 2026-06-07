@@ -9,6 +9,7 @@ struct FilterMenu: View {
         return Menu {
             Toggle("Favorites Only", isOn: $model.filter.favoritesOnly)
                 .onAppear { model.ensureExifIndex() }   // populate camera/GPS data on open
+            Toggle("Hide Rejected", isOn: $model.filter.hideRejected)
             Toggle("Has Location", isOn: $model.filter.gpsOnly)
 
             Picker("Minimum Rating", selection: $model.filter.minRating) {

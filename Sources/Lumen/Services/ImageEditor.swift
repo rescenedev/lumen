@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -19,6 +20,9 @@ enum ImageEditor {
         var targetHeight: Int?
         /// 90° clockwise rotations (0…3) applied before crop. Default none.
         var rotationQuarters: Int = 0
+        /// Fine straighten angle in degrees (clockwise). Auto-crops to remove the
+        /// blank corners the rotation exposes. Default none.
+        var straightenDegrees: Double = 0
         /// Mirror horizontally (applied with the rotation). Default off.
         var flipH: Bool = false
         /// Where the image sits inside a padded canvas (0…1, top-left origin).
@@ -31,6 +35,10 @@ enum ImageEditor {
     static func outputSize(source pixelSize: CGSize, edit: Edit) -> CGSize {
         var w = pixelSize.width, h = pixelSize.height
         if edit.rotationQuarters % 2 != 0 { swap(&w, &h) }   // 90°/270° swap dimensions
+        if edit.straightenDegrees != 0 {                     // auto-crop removes blank corners
+            let s = straightenCropSize(w, h, degrees: edit.straightenDegrees)
+            w = s.width.rounded(); h = s.height.rounded()
+        }
         if let c = edit.cropNorm {
             w = (w * c.width).rounded()
             h = (h * c.height).rounded()
@@ -60,6 +68,7 @@ enum ImageEditor {
         guard var cg = orientedCGImage(source) else { return false }
 
         if let rotated = transformed(cg, quarters: edit.rotationQuarters, flipH: edit.flipH) { cg = rotated }
+        if edit.straightenDegrees != 0, let s = straightened(cg, degrees: edit.straightenDegrees) { cg = s }
 
         if let c = edit.cropNorm {
             let px = CGRect(x: (c.minX * CGFloat(cg.width)).rounded(),
@@ -162,6 +171,56 @@ enum ImageEditor {
         return ctx.makeImage()
     }
 
+    /// Largest centered, axis-aligned rectangle that still fits inside a w×h
+    /// rectangle rotated by `degrees` — i.e. the straighten auto-crop, so there
+    /// are no blank corners. (Standard rotate-and-crop geometry.)
+    static func straightenCropSize(_ w: CGFloat, _ h: CGFloat, degrees: Double) -> CGSize {
+        let a = abs(degrees) * .pi / 180
+        guard a > 0.0001, w > 0, h > 0 else { return CGSize(width: w, height: h) }
+        let sinA = abs(sin(a)), cosA = abs(cos(a))
+        let widthIsLonger = w >= h
+        let long = widthIsLonger ? w : h, short = widthIsLonger ? h : w
+        var wr: CGFloat, hr: CGFloat
+        if short <= 2 * sinA * cosA * long || abs(sinA - cosA) < 1e-10 {
+            let x = 0.5 * short
+            if widthIsLonger { wr = x / sinA; hr = x / cosA } else { wr = x / cosA; hr = x / sinA }
+        } else {
+            let cos2a = cosA * cosA - sinA * sinA
+            wr = (w * cosA - h * sinA) / cos2a
+            hr = (h * cosA - w * sinA) / cos2a
+        }
+        return CGSize(width: max(1, min(wr, w)), height: max(1, min(hr, h)))
+    }
+
+    /// Rotate by a fine `degrees` and crop to the inscribed rectangle (no blank
+    /// corners). Used by straightening — preview and save share this.
+    static func straightened(_ cg: CGImage, degrees: Double) -> CGImage? {
+        guard abs(degrees) > 0.001 else { return cg }
+        let w = CGFloat(cg.width), h = CGFloat(cg.height)
+        let crop = straightenCropSize(w, h, degrees: degrees)
+        let cw = max(1, Int(crop.width.rounded())), ch = max(1, Int(crop.height.rounded()))
+        let cs = cg.colorSpace ?? CGColorSpaceCreateDeviceRGB()
+        guard let ctx = CGContext(data: nil, width: cw, height: ch, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.translateBy(x: CGFloat(cw) / 2, y: CGFloat(ch) / 2)
+        ctx.rotate(by: CGFloat(degrees) * .pi / 180)         // undo the tilt (clockwise input)
+        ctx.translateBy(x: -w / 2, y: -h / 2)
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return ctx.makeImage()
+    }
+
+    /// Downscale `cg` so its long edge ≤ `maxPixel` (returns it unchanged if it's
+    /// already small). For building a light preview base the editor re-transforms.
+    static func downsampled(_ cg: CGImage, maxPixel: Int) -> CGImage {
+        let long = max(cg.width, cg.height)
+        guard long > maxPixel, maxPixel > 0 else { return cg }
+        let scale = CGFloat(maxPixel) / CGFloat(long)
+        return resize(cg, to: CGSize(width: (CGFloat(cg.width) * scale).rounded(),
+                                     height: (CGFloat(cg.height) * scale).rounded())) ?? cg
+    }
+
     private static func resize(_ cg: CGImage, to size: CGSize) -> CGImage? {
         let w = Int(size.width), h = Int(size.height)
         guard w > 0, h > 0 else { return nil }
@@ -188,6 +247,58 @@ enum ImageEditor {
         else { return false }
         CGImageDestinationAddImage(out, cg, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
         return CGImageDestinationFinalize(out)
+    }
+
+    // MARK: - Caption / watermark
+
+    /// A text caption burned into the combined image.
+    struct Caption {
+        var text: String
+        var position: Position
+        var color: CGColor
+        /// Font height as a fraction of the canvas's short edge (so it scales).
+        var sizeFraction: CGFloat
+
+        enum Position: String, CaseIterable, Identifiable {
+            case bottomLeft, bottomCenter, bottomRight, topLeft, topCenter, topRight, center
+            var id: String { rawValue }
+        }
+    }
+
+    /// Draw `caption` into a y-up CGContext sized `w`×`h` (CoreText, with a soft
+    /// shadow for legibility on any background).
+    private static func drawCaption(_ ctx: CGContext, _ caption: Caption, w: Int, h: Int) {
+        let text = caption.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let canvasShort = CGFloat(min(w, h))
+        let fontSize = max(8, canvasShort * caption.sizeFraction)
+        let font = CTFontCreateWithName("HelveticaNeue-Bold" as CFString, fontSize, nil)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: caption.color]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attrs))
+        var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+        let lineW = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
+        let pad = canvasShort * 0.035
+        let cw = CGFloat(w), ch = CGFloat(h)
+
+        let x: CGFloat
+        switch caption.position {
+        case .bottomLeft, .topLeft: x = pad
+        case .bottomRight, .topRight: x = cw - pad - lineW
+        case .bottomCenter, .topCenter, .center: x = (cw - lineW) / 2
+        }
+        let yBaseline: CGFloat
+        switch caption.position {
+        case .bottomLeft, .bottomCenter, .bottomRight: yBaseline = pad + descent
+        case .topLeft, .topCenter, .topRight: yBaseline = ch - pad - ascent
+        case .center: yBaseline = (ch - (ascent + descent)) / 2 + descent
+        }
+
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -canvasShort * 0.004),
+                      blur: canvasShort * 0.008, color: CGColor(gray: 0, alpha: 0.6))
+        ctx.textPosition = CGPoint(x: x, y: yBaseline)
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
     }
 
     // MARK: - Combine (multiple photos → one)
@@ -263,16 +374,17 @@ enum ImageEditor {
     /// are square and aspect-fill (cropped) for a clean collage.
     static func renderCombined(sources: [URL], layout: CombineLayout, gapFraction: CGFloat,
                                background: CGColor, sourceMaxPixel: Int?, longEdge: Int? = nil,
-                               gridRows: Int? = nil) -> CGImage? {
+                               gridRows: Int? = nil, caption: Caption? = nil) -> CGImage? {
         let imgs = sources.compactMap { loadCGImage($0, maxPixel: sourceMaxPixel) }
         return composite(imgs, layout: layout, gapFraction: gapFraction, background: background,
-                         longEdge: longEdge, gridRows: gridRows)
+                         longEdge: longEdge, gridRows: gridRows, caption: caption)
     }
 
     /// Composite already-decoded images into one. Lets callers reuse cached
     /// thumbnails for an instant preview (no disk decode on open).
     static func composite(_ imgs: [CGImage], layout: CombineLayout, gapFraction: CGFloat,
-                          background: CGColor, longEdge: Int? = nil, gridRows: Int? = nil) -> CGImage? {
+                          background: CGColor, longEdge: Int? = nil, gridRows: Int? = nil,
+                          caption: Caption? = nil) -> CGImage? {
         guard imgs.count >= 2 else { return nil }
         let sizes = imgs.map { CGSize(width: $0.width, height: $0.height) }
         let (canvas, rects) = combinedLayout(sizes, layout: layout, gapFraction: gapFraction, gridRows: gridRows)
@@ -300,16 +412,17 @@ enum ImageEditor {
             ctx.draw(img, in: CGRect(x: dest.midX - dw / 2, y: dest.midY - dh / 2, width: dw, height: dh))
             ctx.restoreGState()
         }
+        if let caption { drawCaption(ctx, caption, w: cw, h: ch) }
         return ctx.makeImage()
     }
 
     @discardableResult
     static func combine(sources: [URL], layout: CombineLayout, gapFraction: CGFloat,
                         background: CGColor, sourceMaxPixel: Int?, to dest: URL,
-                        gridRows: Int? = nil) -> Bool {
+                        gridRows: Int? = nil, caption: Caption? = nil) -> Bool {
         guard let cg = renderCombined(sources: sources, layout: layout, gapFraction: gapFraction,
                                       background: background, sourceMaxPixel: sourceMaxPixel,
-                                      gridRows: gridRows) else { return false }
+                                      gridRows: gridRows, caption: caption) else { return false }
         return write(cg, to: dest, quality: 0.92)
     }
 

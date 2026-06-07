@@ -46,8 +46,9 @@ struct PhotoMeta: Codable, Equatable, Sendable {
     var rating: Int = 0            // 0...5
     var label: ColorLabel = .none
     var tags: [String] = []
+    var rejected: Bool = false     // culling: marked to discard
 
     var isEmpty: Bool {
-        !favorite && rating == 0 && label == .none && tags.isEmpty
+        !favorite && rating == 0 && label == .none && tags.isEmpty && !rejected
     }
 }

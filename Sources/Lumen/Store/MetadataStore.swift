@@ -41,10 +41,10 @@ final class MetadataStore {
             let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8)) ?? "[]"
             try? db.write {
                 try $0.execute(sql: """
-                    INSERT INTO photo_meta (path, favorite, rating, label, tags) VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO photo_meta (path, favorite, rating, label, tags, rejected) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET favorite=excluded.favorite, rating=excluded.rating,
-                        label=excluded.label, tags=excluded.tags
-                    """, arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags ?? "[]"])
+                        label=excluded.label, tags=excluded.tags, rejected=excluded.rejected
+                    """, arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags ?? "[]", meta.rejected])
             }
         }
     }
@@ -164,13 +164,14 @@ final class MetadataStore {
 
     private func load() {
         try? db.read { db in
-            let metaRows = try Row.fetchAll(db, sql: "SELECT path, favorite, rating, label, tags FROM photo_meta")
+            let metaRows = try Row.fetchAll(db, sql: "SELECT path, favorite, rating, label, tags, rejected FROM photo_meta")
             for row in metaRows {
                 let path: String = row["path"]
                 var meta = PhotoMeta()
                 meta.favorite = row["favorite"] != 0
                 meta.rating = row["rating"]
                 meta.label = ColorLabel(rawValue: row["label"]) ?? .none
+                meta.rejected = (row["rejected"] as Int?) ?? 0 != 0
                 if let tagsJSON: String = row["tags"],
                    let data = tagsJSON.data(using: .utf8),
                    let tags = try? JSONDecoder().decode([String].self, from: data) {
@@ -216,8 +217,8 @@ final class MetadataStore {
         try? db.write { db in
             for (path, meta) in itemsCache {
                 let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8) ?? "[]") ?? "[]"
-                try db.execute(sql: "INSERT OR REPLACE INTO photo_meta (path, favorite, rating, label, tags) VALUES (?, ?, ?, ?, ?)",
-                               arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags])
+                try db.execute(sql: "INSERT OR REPLACE INTO photo_meta (path, favorite, rating, label, tags, rejected) VALUES (?, ?, ?, ?, ?, ?)",
+                               arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags, meta.rejected])
             }
             for (pos, album) in albumsCache.enumerated() {
                 try db.execute(sql: "INSERT OR REPLACE INTO album (id, name, position) VALUES (?, ?, ?)",

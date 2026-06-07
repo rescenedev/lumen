@@ -62,6 +62,9 @@ struct ContentView: View {
         .sheet(isPresented: $model.showCombine) {
             PhotoCombineView(photos: model.combineTargets)
         }
+        .sheet(isPresented: $model.showBatchResize) {
+            BatchResizeView(photos: model.batchTargets)
+        }
         .overlay(alignment: .bottom) { toastBanner }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.toast)
     }

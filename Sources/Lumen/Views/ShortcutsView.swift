@@ -30,10 +30,17 @@ struct ShortcutsView: View {
             .init(keys: "Space", action: "Quick Look (in grid)"),
             .init(keys: "Return", action: "Open in viewer"),
         ]),
+        Section(title: "Cull (grid)", items: [
+            .init(keys: "1–5", action: "Rate selected"),
+            .init(keys: "0", action: "Clear rating"),
+            .init(keys: "F", action: "Toggle favorite"),
+            .init(keys: "X", action: "Toggle reject"),
+        ]),
         Section(title: "Viewer", items: [
             .init(keys: "← / →", action: "Previous / next photo"),
             .init(keys: "Space", action: "Favorite & advance"),
             .init(keys: "F", action: "Toggle favorite"),
+            .init(keys: "X", action: "Reject & advance"),
             .init(keys: "1–5", action: "Set rating"),
             .init(keys: "I", action: "Toggle EXIF overlay"),
             .init(keys: "P", action: "Slideshow"),

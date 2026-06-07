@@ -5,6 +5,7 @@ private enum Badge {
     static let heart = tinted("heart.fill", .white, pointSize: 12)
     static let star = tinted("star.fill", .systemYellow, pointSize: 9)
     static let check = tinted("checkmark", .white, pointSize: 12)
+    static let reject = tinted("xmark", .white, pointSize: 11)
     static let placeholder = tinted("photo", NSColor(white: 1, alpha: 0.16), pointSize: 44)
 
     static func tinted(_ name: String, _ color: NSColor, pointSize: CGFloat) -> NSImage {
@@ -30,6 +31,7 @@ final class PhotoGridCellView: NSView {
     var favorite = false
     var rating = 0
     var labelColor: NSColor?
+    var rejected = false
     var selected = false
     var selectionActive = false   // any photo selected → dim the non-selected ones
     var thumbSize: CGFloat = 170
@@ -120,6 +122,21 @@ final class PhotoGridCellView: NSView {
                               width: h.size.width, height: h.size.height))
         }
 
+        // Rejected — dim the photo and mark it with a red ✕ (bottom-right).
+        if rejected {
+            NSColor.black.withAlphaComponent(0.45).setFill()
+            photoClip.fill()
+            let bs: CGFloat = 22
+            let br = NSRect(x: photoRect.maxX - bs - 5, y: photoRect.minY + 5, width: bs, height: bs)
+            NSColor.white.withAlphaComponent(0.9).setFill()
+            NSBezierPath(ovalIn: br.insetBy(dx: -1.5, dy: -1.5)).fill()
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: br).fill()
+            let x = Badge.reject
+            x.draw(in: NSRect(x: br.midX - x.size.width / 2, y: br.midY - x.size.height / 2,
+                              width: x.size.width, height: x.size.height))
+        }
+
         // Color label — dot in the photo's bottom-left corner.
         if let labelColor {
             let d: CGFloat = 11
@@ -171,11 +188,12 @@ final class PhotoCollectionItem: NSCollectionViewItem {
     override func loadView() { view = cell }
 
     func configure(photo: Photo, size: CGFloat, selected: Bool, selectionActive: Bool,
-                   favorite: Bool, rating: Int, label: ColorLabel) {
+                   favorite: Bool, rating: Int, label: ColorLabel, rejected: Bool) {
         cell.filename = photo.filename
         cell.favorite = favorite
         cell.rating = rating
         cell.labelColor = label.nsColor
+        cell.rejected = rejected
         cell.selected = selected
         cell.selectionActive = selectionActive
         cell.thumbSize = size
@@ -208,12 +226,14 @@ final class PhotoCollectionItem: NSCollectionViewItem {
         cell.needsDisplay = true
     }
 
-    /// Update favorite/rating/label/selection badges without reloading the image.
-    func updateBadges(favorite: Bool, rating: Int, label: ColorLabel) {
-        guard cell.favorite != favorite || cell.rating != rating || cell.labelColor != label.nsColor else { return }
+    /// Update favorite/rating/label/reject badges without reloading the image.
+    func updateBadges(favorite: Bool, rating: Int, label: ColorLabel, rejected: Bool) {
+        guard cell.favorite != favorite || cell.rating != rating
+                || cell.labelColor != label.nsColor || cell.rejected != rejected else { return }
         cell.favorite = favorite
         cell.rating = rating
         cell.labelColor = label.nsColor
+        cell.rejected = rejected
         cell.needsDisplay = true
     }
 
