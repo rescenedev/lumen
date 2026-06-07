@@ -3,235 +3,341 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lumen — macOS 사진 뷰어 & 매니저</title>
-<meta name="description" content="대용량(6만 장+) NAS 라이브러리도 가볍게 다루는 네이티브 macOS 사진 뷰어/매니저. SwiftUI로 제작.">
-<meta property="og:title" content="Lumen — macOS 사진 뷰어 & 매니저">
-<meta property="og:description" content="대용량 NAS 라이브러리도 가볍게. 그리드·리스트·지도 뷰, 앨범/태그/별점, 빠른 썸네일 캐싱.">
+<title>Lumen — 대용량 사진 라이브러리를 위한 macOS 뷰어</title>
+<meta name="description" content="로컬·NAS·Apple Photos를 한 앱에서. 6만 장 넘는 라이브러리도 휙휙 넘기는 네이티브 macOS 사진 뷰어 & 매니저. 편집 없는 비파괴 안전 설계.">
+<meta property="og:title" content="Lumen — 대용량 사진 라이브러리를 위한 macOS 뷰어">
+<meta property="og:description" content="로컬·NAS·Apple Photos를 한 앱에서. 6만 장+ 라이브러리도 가볍게.">
 <meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
 <meta property="og:type" content="website">
 <link rel="icon" type="image/png" href="favicon.png">
 <style>
-  :root {
-    --blue: #4b78f5;
-    --purple: #8f4dee;
-    --bg: #0b0d12;
-    --panel: #141821;
-    --panel-2: #1b2030;
-    --text: #eef1f7;
-    --muted: #9aa3b5;
-    --border: rgba(255,255,255,.08);
+  :root{
+    --blue:#5b86ff; --purple:#9a5cff; --pink:#ff6fae;
+    --bg:#070910; --bg2:#0b0e17;
+    --panel:#121622; --panel-2:#171c2b;
+    --text:#eef1f7; --muted:#98a2b8; --faint:#6b7488;
+    --border:rgba(255,255,255,.08);
+    --grad:linear-gradient(120deg,var(--blue),var(--purple));
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Segoe UI",sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.65; -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
   }
-  a { color: inherit; text-decoration: none; }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  .grad-text{background:linear-gradient(120deg,#fff,#bcc9ff 55%,#e3c8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* Nav */
+  nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:saturate(160%) blur(14px);
+    background:rgba(7,9,16,.7); border-bottom:1px solid var(--border);
+  }
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
+  .brand img{width:28px;height:28px;border-radius:7px}
+  .nav-links{display:flex;align-items:center;gap:26px;font-size:14px;color:var(--muted)}
+  .nav-links a:hover{color:var(--text)}
+  .nav-cta{padding:8px 16px;border-radius:9px;background:var(--grad);color:#fff;font-weight:600;font-size:14px}
+  @media(max-width:680px){.nav-links a:not(.nav-cta){display:none}}
 
   /* Hero */
-  .hero {
-    position: relative;
-    text-align: center;
-    padding: 100px 24px 80px;
-    overflow: hidden;
-  }
-  .hero::before {
-    content: "";
-    position: absolute; inset: 0;
+  .hero{position:relative;text-align:center;padding:86px 24px 40px;overflow:hidden}
+  .hero::before{content:"";position:absolute;inset:0;z-index:0;
     background:
-      radial-gradient(800px 400px at 50% -10%, rgba(143,77,238,.28), transparent 70%),
-      radial-gradient(700px 360px at 80% 10%, rgba(75,120,245,.22), transparent 70%);
-    z-index: 0;
-  }
-  .hero > * { position: relative; z-index: 1; }
-  .app-icon {
-    width: 132px; height: 132px;
-    border-radius: 30px;
-    box-shadow: 0 20px 60px rgba(75,120,245,.35), 0 4px 14px rgba(0,0,0,.4);
-    margin-bottom: 26px;
-  }
-  h1 {
-    font-size: 64px; font-weight: 800; letter-spacing: -.03em;
-    background: linear-gradient(120deg, #fff, #b9c6ff 60%, #d6b8ff);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .tagline { font-size: 22px; color: var(--muted); margin-top: 14px; }
-  .badges { margin-top: 12px; font-size: 14px; color: var(--muted); }
-  .badges span { display: inline-block; margin: 0 8px; }
+      radial-gradient(900px 460px at 50% -12%,rgba(154,92,255,.30),transparent 70%),
+      radial-gradient(760px 420px at 82% 4%,rgba(91,134,255,.24),transparent 70%),
+      radial-gradient(620px 360px at 14% 18%,rgba(255,111,174,.14),transparent 72%);}
+  .hero>*{position:relative;z-index:1}
+  .pill{display:inline-block;font-size:13px;color:#cdd6ff;border:1px solid var(--border);
+    background:rgba(255,255,255,.04);padding:6px 14px;border-radius:999px;margin-bottom:24px}
+  h1{font-size:68px;font-weight:850;letter-spacing:-.035em;line-height:1.04}
+  .sub{font-size:21px;color:var(--muted);margin:18px auto 0;max-width:660px}
+  .cta{margin-top:30px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 24px;border-radius:12px;
+    font-weight:600;font-size:15px;border:1px solid var(--border);transition:transform .12s,box-shadow .2s,background .2s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-primary{background:var(--grad);border:none;box-shadow:0 12px 32px rgba(91,134,255,.32)}
+  .btn-ghost{background:var(--panel-2)}
+  .micro{margin-top:14px;font-size:13px;color:var(--faint)}
 
-  .cta { margin-top: 34px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 13px 22px; border-radius: 12px; font-weight: 600; font-size: 15px;
-    border: 1px solid var(--border); transition: transform .12s ease, background .2s ease;
-  }
-  .btn:hover { transform: translateY(-2px); }
-  .btn-primary { background: linear-gradient(120deg, var(--blue), var(--purple)); border: none; }
-  .btn-ghost { background: var(--panel-2); }
-
-  /* Install snippet */
-  .install {
-    margin: 26px auto 0; max-width: 560px;
-    background: #0e1118; border: 1px solid var(--border); border-radius: 14px;
-    padding: 18px 20px; text-align: left; position: relative;
-  }
-  .install code {
-    font-family: "SF Mono", ui-monospace, Menlo, monospace;
-    font-size: 14px; color: #cdd6f4; display: block; white-space: pre;
-  }
-  .install .copy {
-    position: absolute; top: 12px; right: 12px;
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
-    border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer;
-  }
-  .install .copy:hover { color: var(--text); }
+  /* App window mockup */
+  .shot{margin:54px auto 0;max-width:980px;position:relative}
+  .shot::after{content:"";position:absolute;left:8%;right:8%;bottom:-30px;height:60px;
+    background:radial-gradient(closest-side,rgba(91,134,255,.5),transparent);filter:blur(26px);z-index:-1}
+  .win{border-radius:16px;overflow:hidden;border:1px solid var(--border);
+    box-shadow:0 40px 90px rgba(0,0,0,.6),0 4px 18px rgba(0,0,0,.4);background:var(--bg2)}
+  .titlebar{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#0e121c;border-bottom:1px solid var(--border)}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+  .titlebar .t{margin-left:10px;font-size:12px;color:var(--faint)}
+  .app{display:grid;grid-template-columns:188px 1fr;min-height:430px}
+  .side{background:#0c0f18;border-right:1px solid var(--border);padding:14px 10px;font-size:12.5px}
+  .side .h{color:var(--faint);font-size:11px;letter-spacing:.04em;margin:14px 8px 6px;text-transform:uppercase}
+  .side .row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;color:var(--muted)}
+  .side .row.active{background:linear-gradient(120deg,rgba(91,134,255,.9),rgba(154,92,255,.9));color:#fff}
+  .side .row .ic{width:15px;text-align:center}
+  .side .row .n{margin-left:auto;color:var(--faint);font-size:11px}
+  .side .row.active .n{color:rgba(255,255,255,.7)}
+  .board{padding:14px;display:grid;grid-template-columns:repeat(5,1fr);grid-auto-rows:1fr;gap:9px;background:#0a0d15}
+  .tile{aspect-ratio:1;border-radius:9px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.05)}
+  .tile::after{content:"";position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.14),transparent 60%)}
 
   /* Sections */
-  section { padding: 70px 0; }
-  .section-title { text-align: center; font-size: 34px; font-weight: 800; letter-spacing: -.02em; }
-  .section-sub { text-align: center; color: var(--muted); margin-top: 10px; font-size: 17px; }
+  section{padding:92px 0;position:relative}
+  .eyebrow{text-align:center;color:var(--blue);font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+  .stitle{text-align:center;font-size:38px;font-weight:820;letter-spacing:-.02em;margin-top:10px}
+  .ssub{text-align:center;color:var(--muted);margin-top:12px;font-size:18px;max-width:620px;margin-left:auto;margin-right:auto}
 
-  .grid {
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 46px;
-  }
-  .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
-    padding: 24px; transition: border-color .2s ease, transform .12s ease;
-  }
-  .card:hover { border-color: rgba(143,77,238,.4); transform: translateY(-3px); }
-  .card .ico {
-    width: 44px; height: 44px; border-radius: 11px;
-    background: linear-gradient(120deg, rgba(75,120,245,.25), rgba(143,77,238,.25));
-    display: grid; place-items: center; font-size: 22px; margin-bottom: 16px;
-  }
-  .card h3 { font-size: 18px; font-weight: 700; }
-  .card p { color: var(--muted); font-size: 15px; margin-top: 8px; }
+  /* Why / differentiators */
+  .why{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:52px}
+  .why .card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:28px}
+  .why .badge{width:50px;height:50px;border-radius:13px;background:linear-gradient(120deg,rgba(91,134,255,.22),rgba(154,92,255,.22));
+    display:grid;place-items:center;font-size:24px;margin-bottom:16px}
+  .why h3{font-size:19px;font-weight:740}
+  .why p{color:var(--muted);font-size:15px;margin-top:9px}
+
+  /* Feature rows */
+  .feat{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;margin-top:64px}
+  .feat:nth-child(even) .feat-media{order:2}
+  .feat h3{font-size:27px;font-weight:800;letter-spacing:-.01em}
+  .feat p{color:var(--muted);font-size:16.5px;margin-top:14px}
+  .feat ul{margin-top:16px;list-style:none;display:flex;flex-direction:column;gap:9px}
+  .feat li{display:flex;gap:10px;color:var(--text);font-size:15px}
+  .feat li::before{content:"✓";color:var(--blue);font-weight:800}
+  .feat-media{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:18px;
+    box-shadow:0 24px 60px rgba(0,0,0,.4);min-height:240px}
+  .mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .mini-grid .tile{aspect-ratio:1}
+  .map-mock{height:230px;border-radius:12px;position:relative;overflow:hidden;
+    background:radial-gradient(120px 120px at 30% 40%,rgba(91,134,255,.25),transparent),
+               radial-gradient(160px 160px at 70% 65%,rgba(154,92,255,.22),transparent),#0c1020}
+  .bub{position:absolute;border-radius:50%;background:var(--grad);color:#fff;display:grid;place-items:center;
+    font-weight:700;border:2px solid #fff;box-shadow:0 6px 16px rgba(0,0,0,.4)}
+  .src-row{display:flex;flex-direction:column;gap:12px}
+  .src{display:flex;align-items:center;gap:14px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .src .si{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-size:20px;
+    background:linear-gradient(120deg,rgba(91,134,255,.25),rgba(154,92,255,.25))}
+  .src b{font-size:15px}.src span{display:block;color:var(--muted);font-size:13px}
 
   /* Perf band */
-  .band {
-    background: linear-gradient(120deg, rgba(75,120,245,.12), rgba(143,77,238,.12));
-    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-  }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 40px; }
-  .stat { text-align: center; }
-  .stat .num {
-    font-size: 42px; font-weight: 800;
-    background: linear-gradient(120deg, #8fb0ff, #c69bff);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .stat .lbl { color: var(--muted); margin-top: 4px; font-size: 15px; }
+  .band{background:linear-gradient(120deg,rgba(91,134,255,.1),rgba(154,92,255,.1));
+    border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:46px}
+  .stat{text-align:center}
+  .stat .num{font-size:44px;font-weight:850;background:linear-gradient(120deg,#9fb8ff,#cda7ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat .lbl{color:var(--muted);margin-top:6px;font-size:14px}
 
-  /* Install steps */
-  .steps { max-width: 640px; margin: 40px auto 0; }
-  .note {
-    margin-top: 18px; background: var(--panel); border: 1px solid var(--border);
-    border-radius: 12px; padding: 16px 18px; color: var(--muted); font-size: 14px;
-  }
-  .note code { background: #0e1118; padding: 2px 7px; border-radius: 6px; color: #cdd6f4; font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+  /* Download */
+  .install{margin:30px auto 0;max-width:600px;background:#0b0e16;border:1px solid var(--border);
+    border-radius:14px;padding:18px 20px;text-align:left;position:relative}
+  .install code{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:14px;color:#cdd6f4;display:block;white-space:pre}
+  .install .copy{position:absolute;top:12px;right:12px;background:var(--panel-2);border:1px solid var(--border);
+    color:var(--muted);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer}
+  .install .copy:hover{color:var(--text)}
+  .note{margin:16px auto 0;max-width:600px;background:var(--panel);border:1px solid var(--border);
+    border-radius:12px;padding:15px 18px;color:var(--muted);font-size:14px;text-align:left}
+  .note code{background:#0b0e16;padding:2px 7px;border-radius:6px;color:#cdd6f4;font-family:"SF Mono",ui-monospace,Menlo,monospace}
 
-  footer { text-align: center; padding: 50px 24px; color: var(--muted); border-top: 1px solid var(--border); font-size: 14px; }
-  footer a { color: #aab6ff; }
+  footer{text-align:center;padding:54px 24px;color:var(--muted);border-top:1px solid var(--border);font-size:14px}
+  footer a{color:#aab6ff}
 
-  @media (max-width: 760px) {
-    h1 { font-size: 46px; }
-    .grid, .stats { grid-template-columns: 1fr; }
+  /* reveal */
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  @media(max-width:820px){
+    h1{font-size:44px} .stitle{font-size:30px}
+    .why,.stats{grid-template-columns:1fr 1fr}
+    .feat{grid-template-columns:1fr;gap:28px} .feat:nth-child(even) .feat-media{order:0}
+    .app{grid-template-columns:1fr} .side{display:none} .board{grid-template-columns:repeat(4,1fr)}
   }
+  @media(max-width:520px){.why,.stats{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
-  <header class="hero">
-    <img class="app-icon" src="icon.png" alt="Lumen 아이콘">
-    <h1>Lumen</h1>
-    <p class="tagline">대용량 사진 라이브러리를 가볍게 — macOS 네이티브 뷰어 &amp; 매니저</p>
-    <p class="badges">
-      <span>🖼️ 편집 없는 뷰어</span><span>·</span>
-      <span>⚡ 6만 장+ NAS 대응</span><span>·</span>
-      <span>🦅 SwiftUI</span>
-    </p>
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="#top"><img src="icon.png" alt="">Lumen</a>
+    <div class="nav-links">
+      <a href="#why">왜 Lumen</a>
+      <a href="#features">기능</a>
+      <a href="#perf">성능</a>
+      <a class="nav-cta" href="#download">다운로드</a>
+    </div>
+  </div>
+</nav>
 
-    <div class="cta">
-      <a class="btn btn-primary" href="https://github.com/rescenedev/lumen/releases/latest">⬇️ 다운로드</a>
-      <a class="btn btn-ghost" href="https://github.com/rescenedev/lumen">GitHub에서 보기</a>
+<header class="hero" id="top">
+  <span class="pill">macOS 14+ · 네이티브 · 비파괴 뷰어</span>
+  <h1 class="grad-text">사진 수만 장,<br>한 곳에서 가볍게.</h1>
+  <p class="sub">로컬 · NAS · Apple Photos를 하나의 빠른 네이티브 앱에서. 6만 장이 넘어도 휙휙 넘어가는 macOS 사진 뷰어 &amp; 매니저.</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="#download">⬇️ 무료 다운로드</a>
+    <a class="btn btn-ghost" href="https://github.com/rescenedev/lumen">GitHub에서 보기</a>
+  </div>
+  <p class="micro">Apple Silicon · Intel · 오픈소스(MIT)</p>
+
+  <!-- CSS app window mockup -->
+  <div class="shot reveal">
+    <div class="win">
+      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="t">Lumen — Photos Library</span></div>
+      <div class="app">
+        <div class="side">
+          <div class="h">Library</div>
+          <div class="row"><span class="ic">🖼️</span>All Photos<span class="n">67,677</span></div>
+          <div class="row"><span class="ic">❤️</span>Favorites<span class="n">2,690</span></div>
+          <div class="h">Photos</div>
+          <div class="row active"><span class="ic">📸</span>Photos Library<span class="n">70,815</span></div>
+          <div class="row"><span class="ic">📚</span>Albums<span class="n">75</span></div>
+          <div class="h">Folders</div>
+          <div class="row"><span class="ic">📁</span>2026_여행<span class="n">1,609</span></div>
+          <div class="row"><span class="ic">📁</span>NAS · photos<span class="n">58k</span></div>
+        </div>
+        <div class="board" id="board"></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <p class="eyebrow reveal">왜 Lumen인가</p>
+    <h2 class="stitle reveal">사진앱은 NAS를 못 보고,<br>대부분의 뷰어는 6만 장에서 버벅댑니다.</h2>
+    <div class="why">
+      <div class="card reveal"><div class="badge">⚡</div><h3>대용량에 진심</h3><p>6만 장 넘는 NAS 라이브러리로 실사용 테스트. 셀 재사용 그리드, 2단 썸네일 캐시, 백그라운드 워밍으로 어느 폴더든 즉시 열립니다.</p></div>
+      <div class="card reveal"><div class="badge">🗂️</div><h3>모든 소스를 한 곳에</h3><p>로컬 폴더, <b>NAS</b>, 그리고 <b>Apple Photos(iCloud)</b>까지 한 창에서. 사진앱이 못 보는 NAS와, 뷰어가 못 보는 iCloud를 동시에.</p></div>
+      <div class="card reveal"><div class="badge">🛡️</div><h3>절대 비파괴</h3><p>픽셀은 건드리지 않습니다. 편집 없음, 모든 동작은 복구 가능(휴지통)·안전. 즐겨찾기·태그·별점은 원본과 분리 저장.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <p class="eyebrow reveal">기능</p>
+    <h2 class="stitle reveal">보고, 찾고, 정리하는 데 필요한 전부</h2>
+
+    <div class="feat">
+      <div class="feat-text reveal">
+        <h3>그리드 · 리스트 · 지도</h3>
+        <p>적응형 썸네일 그리드, 상세 리스트, 그리고 GPS 사진을 지도에. ⌘1·2·3로 즉시 전환.</p>
+        <ul>
+          <li>화면을 꽉 채우는 적응형 그리드 + 크기 슬라이더</li>
+          <li>지도 핀 <b>클러스터링</b> — 수만 장도 줌별로 묶고 펼침</li>
+          <li>월별 타임라인 그룹</li>
+        </ul>
+      </div>
+      <div class="feat-media reveal"><div class="mini-grid" id="mini"></div></div>
     </div>
 
-    <div class="install">
+    <div class="feat">
+      <div class="feat-text reveal">
+        <h3>로컬 · NAS · Apple Photos</h3>
+        <p>흩어진 사진을 한 사이드바에서. iCloud 전용 사진은 필요할 때만 내려받습니다.</p>
+        <div class="src-row" style="margin-top:18px">
+          <div class="src"><div class="si">💽</div><div><b>로컬 &amp; NAS 폴더</b><span>재귀 스캔 · 실시간 폴더 감시(FSEvents) · 증분 캐시</span></div></div>
+          <div class="src"><div class="si">📸</div><div><b>Apple Photos / iCloud</b><span>전체 · 즐겨찾기 · 앨범 · 지도 · 온디맨드 다운로드</span></div></div>
+          <div class="src"><div class="si">☁️</div><div><b>iCloud Drive</b><span>“최적화” 오프로드 파일 자동 머티리얼라이즈</span></div></div>
+        </div>
+      </div>
+      <div class="feat-media reveal">
+        <div class="map-mock">
+          <div class="bub" style="width:54px;height:54px;left:22%;top:34%;font-size:14px">5.2k</div>
+          <div class="bub" style="width:40px;height:40px;left:58%;top:58%;font-size:12px">820</div>
+          <div class="bub" style="width:32px;height:32px;left:74%;top:30%;font-size:11px">96</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feat">
+      <div class="feat-text reveal">
+        <h3>빠른 정리 · 몰입형 뷰어</h3>
+        <p>비파괴 메타데이터로 정리하고, 풀스크린 뷰어로 몰입.</p>
+        <ul>
+          <li>앨범 · 태그 · 별점 · 색상 라벨 · 스마트 모음</li>
+          <li>검색(파일명·태그·카메라) &amp; 필터(별점·라벨·위치·카메라)</li>
+          <li>뷰어: 줌/팬, 좌우 미리보기, EXIF, 2장 비교, 슬라이드쇼</li>
+          <li><b>Space</b>로 즐겨찾기 후 바로 다음 — 초고속 컬링</li>
+        </ul>
+      </div>
+      <div class="feat-media reveal"><div class="mini-grid" id="mini2"></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="perf">
+  <div class="wrap">
+    <p class="eyebrow reveal">성능</p>
+    <h2 class="stitle reveal">대용량 라이브러리를 위해 설계</h2>
+    <p class="ssub reveal">NAS에 흩어진 수만 장도 휙휙. 한 번 캐싱하면 어느 폴더든 즉시.</p>
+    <div class="stats">
+      <div class="stat reveal"><div class="num">67K+</div><div class="lbl">장 실사용 테스트</div></div>
+      <div class="stat reveal"><div class="num">2-tier</div><div class="lbl">메모리+디스크 캐시 (재실행 유지)</div></div>
+      <div class="stat reveal"><div class="num">AppKit</div><div class="lbl">셀 재사용 그리드 (60fps)</div></div>
+      <div class="stat reveal"><div class="num">즉시</div><div class="lbl">증분 스캔으로 빠른 재실행</div></div>
+    </div>
+    <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
+      메모이즈된 목록 · 폴더 인덱스 · 디바운스 내비게이션 · 백그라운드 썸네일 워밍 · 지연 EXIF 인덱싱 · 점진적 이미지 로딩
+    </p>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap" style="text-align:center">
+    <p class="eyebrow reveal">다운로드</p>
+    <h2 class="stitle reveal">지금 바로 시작</h2>
+    <p class="ssub reveal">Homebrew로 한 줄. macOS 14(Sonoma) 이상.</p>
+    <div class="install reveal">
       <button class="copy" onclick="copyInstall()">복사</button>
-      <code id="installCmd">brew tap rescenedev/tap
+      <code>brew tap rescenedev/tap
 brew install --cask lumen-photos</code>
     </div>
-  </header>
-
-  <section>
-    <div class="wrap">
-      <h2 class="section-title">필요한 건 다, 무거운 건 없이</h2>
-      <p class="section-sub">사진을 보고 정리하는 데 필요한 기능만 — 픽셀 편집 없는 안전한 뷰어/매니저.</p>
-      <div class="grid">
-        <div class="card"><div class="ico">🗂️</div><h3>그리드 · 리스트 · 지도</h3><p>적응형 썸네일 그리드, 상세 리스트, GPS 사진을 지도 핀으로. ⌘1·2·3로 전환.</p></div>
-        <div class="card"><div class="ico">📁</div><h3>폴더 트리 &amp; 스마트 모음</h3><p>계층형 폴더, 즐겨찾기·최근 추가·오늘 날짜·중복 찾기. 폴더 우클릭으로 이름변경·앨범화.</p></div>
-        <div class="card"><div class="ico">🏷️</div><h3>앨범 · 태그 · 별점 · 라벨</h3><p>비파괴 메타데이터로 정리. Space로 즐겨찾기 후 바로 다음 사진 — 빠른 컬링.</p></div>
-        <div class="card"><div class="ico">🔍</div><h3>검색 &amp; 필터</h3><p>파일명·태그·카메라 검색. 별점·라벨·위치·카메라(예: SONY)로 필터.</p></div>
-        <div class="card"><div class="ico">👁️</div><h3>몰입형 뷰어</h3><p>줌·팬, 좌우 썸네일 미리보기, EXIF 오버레이, 2장 비교, 슬라이드쇼.</p></div>
-        <div class="card"><div class="ico">📤</div><h3>공유 · 내보내기</h3><p>시스템 공유, 원본/리사이즈/zip 내보내기, 배경화면 설정, 일괄 이름변경.</p></div>
-      </div>
+    <div class="note reveal">
+      현재는 노타라이즈되지 않은 빌드라, 첫 실행 시 Gatekeeper가 막으면
+      앱을 <b>우클릭 → 열기</b> 하거나: <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code>
     </div>
-  </section>
-
-  <section class="band">
-    <div class="wrap">
-      <h2 class="section-title">대용량 라이브러리를 위해 설계</h2>
-      <p class="section-sub">NAS에 흩어진 수만 장도 휙휙. 한 번 캐싱하면 어느 폴더든 즉시.</p>
-      <div class="stats">
-        <div class="stat"><div class="num">60K+</div><div class="lbl">장 라이브러리 실사용 테스트</div></div>
-        <div class="stat"><div class="num">2-tier</div><div class="lbl">메모리+디스크 썸네일 캐시 (재실행에도 유지)</div></div>
-        <div class="stat"><div class="num">즉시</div><div class="lbl">증분 스캔·캐시로 빠른 재실행</div></div>
-      </div>
-      <p class="section-sub" style="margin-top:34px; font-size:15px;">
-        메모이즈된 목록 · 폴더 인덱스 · 디바운스 내비게이션 · 백그라운드 전체 썸네일 워밍 · 지연 EXIF 인덱싱
-      </p>
+    <div class="note reveal">
+      소스로 빌드: <code>git clone</code> 후 <code>./Scripts/make_app.sh</code> — Xcode 불필요, Command Line Tools만.
     </div>
-  </section>
+  </div>
+</section>
 
-  <section id="install">
-    <div class="wrap">
-      <h2 class="section-title">설치</h2>
-      <div class="steps">
-        <div class="install" style="max-width:none; margin-top:30px;">
-          <button class="copy" onclick="copyInstall()">복사</button>
-          <code>brew tap rescenedev/tap
-brew install --cask lumen-photos</code>
-        </div>
-        <div class="note">
-          macOS 14(Sonoma) 이상. 노타라이즈되지 않은 빌드라, 첫 실행 시 Gatekeeper가 막으면
-          앱을 <b>우클릭 → 열기</b> 하거나 아래를 실행하세요:<br>
-          <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code>
-        </div>
-        <div class="note">
-          소스로 빌드: <code>git clone</code> 후 <code>./Scripts/make_app.sh</code> (Xcode 불필요, Command Line Tools만)
-        </div>
-      </div>
-    </div>
-  </section>
+<footer>
+  <p><b>Lumen</b> · 대용량 사진 라이브러리를 위한 네이티브 macOS 뷰어 &amp; 매니저</p>
+  <p style="margin-top:8px">
+    <a href="https://github.com/rescenedev/lumen">GitHub</a> ·
+    <a href="https://github.com/rescenedev/lumen/releases">릴리즈</a> ·
+    <a href="https://github.com/rescenedev/lumen/blob/main/CONTRIBUTING.md">기여</a> ·
+    MIT License
+  </p>
+</footer>
 
-  <footer>
-    <p>Lumen · 네이티브 macOS 사진 뷰어 &amp; 매니저</p>
-    <p style="margin-top:8px;">
-      <a href="https://github.com/rescenedev/lumen">GitHub</a> ·
-      <a href="https://github.com/rescenedev/lumen/releases">릴리즈</a> ·
-      <a href="https://github.com/fayazara/macos-app-skills">macos-app-skills 기반</a>
-    </p>
-  </footer>
+<script>
+  // Stylish placeholder tiles (gradient swatches — no personal photos)
+  const hues = [[91,134,255],[154,92,255],[255,111,174],[80,200,180],[255,176,90],[120,160,255],[210,120,255],[90,180,255]];
+  function tile(){
+    const a=hues[Math.floor(Math.random()*hues.length)], b=hues[Math.floor(Math.random()*hues.length)];
+    const ang=Math.floor(Math.random()*360);
+    const d=document.createElement('div'); d.className='tile';
+    d.style.background=`linear-gradient(${ang}deg, rgb(${a.join(',')}), rgb(${b.join(',')}))`;
+    return d;
+  }
+  function fill(id,n){const el=document.getElementById(id); if(!el)return; for(let i=0;i<n;i++)el.appendChild(tile());}
+  fill('board',20); fill('mini',8); fill('mini2',8);
 
-  <script>
-    function copyInstall() {
-      navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew install --cask lumen-photos");
-      document.querySelectorAll('.copy').forEach(b => { const t=b.textContent; b.textContent='복사됨 ✓'; setTimeout(()=>b.textContent=t,1500); });
-    }
-  </script>
+  // Scroll reveal
+  const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  function copyInstall(){
+    navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew install --cask lumen-photos");
+    document.querySelectorAll('.copy').forEach(b=>{const t=b.textContent;b.textContent='복사됨 ✓';setTimeout(()=>b.textContent=t,1500);});
+  }
+</script>
 </body>
 </html>
