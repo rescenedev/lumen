@@ -11,6 +11,10 @@ struct LumenApp: App {
         }
         .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Lumen") { model.showAbout = true }
+            }
+
             CommandGroup(after: .sidebar) {
                 Picker("Show", selection: $model.viewMode) {
                     ForEach(ViewMode.allCases) { Text($0.label).tag($0) }
@@ -44,6 +48,8 @@ struct LumenApp: App {
                     .keyboardShortcut("1", modifiers: .command)
                 Button("As List") { model.viewMode = .list }
                     .keyboardShortcut("2", modifiers: .command)
+                Button("As Map") { model.viewMode = .map }
+                    .keyboardShortcut("3", modifiers: .command)
                 Divider()
                 Picker("Sort By", selection: $model.sortOrder) {
                     ForEach(SortOrder.allCases) { Text($0.rawValue).tag($0) }
@@ -60,8 +66,10 @@ struct LumenApp: App {
             }
 
             CommandGroup(replacing: .help) {
+                Button("Keyboard Shortcuts") { model.showShortcuts = true }
+                    .keyboardShortcut("/", modifiers: .command)
                 Button("Lumen Help") {
-                    NSWorkspace.shared.open(URL(string: "https://github.com/fayazara/macos-app-skills")!)
+                    NSWorkspace.shared.open(URL(string: "https://rescenedev.github.io/lumen")!)
                 }
             }
         }
