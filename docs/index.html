@@ -68,6 +68,7 @@
   .shot{margin:54px auto 0;max-width:980px;position:relative}
   .shot::after{content:"";position:absolute;left:8%;right:8%;bottom:-30px;height:60px;
     background:radial-gradient(closest-side,rgba(91,134,255,.5),transparent);filter:blur(26px);z-index:-1}
+  .screen{width:100%;display:block;border-radius:12px;box-shadow:0 40px 90px rgba(0,0,0,.6),0 4px 18px rgba(0,0,0,.4)}
   .win{border-radius:16px;overflow:hidden;border:1px solid var(--border);
     box-shadow:0 40px 90px rgba(0,0,0,.6),0 4px 18px rgba(0,0,0,.4);background:var(--bg2)}
   .titlebar{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#0e121c;border-bottom:1px solid var(--border)}
@@ -183,25 +184,8 @@
   </div>
   <p class="micro">Apple Silicon · Intel · 오픈소스(MIT)</p>
 
-  <!-- CSS app window mockup -->
   <div class="shot reveal">
-    <div class="win">
-      <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="t">Lumen — Photos Library</span></div>
-      <div class="app">
-        <div class="side">
-          <div class="h">Library</div>
-          <div class="row"><span class="ic">🖼️</span>All Photos<span class="n">67,677</span></div>
-          <div class="row"><span class="ic">❤️</span>Favorites<span class="n">2,690</span></div>
-          <div class="h">Photos</div>
-          <div class="row active"><span class="ic">📸</span>Photos Library<span class="n">70,815</span></div>
-          <div class="row"><span class="ic">📚</span>Albums<span class="n">75</span></div>
-          <div class="h">Folders</div>
-          <div class="row"><span class="ic">📁</span>2026_여행<span class="n">1,609</span></div>
-          <div class="row"><span class="ic">📁</span>NAS · photos<span class="n">58k</span></div>
-        </div>
-        <div class="board" id="board"></div>
-      </div>
-    </div>
+    <img class="screen" src="screenshots/grid.png" alt="Lumen 그리드 — 대용량 사진 라이브러리">
   </div>
 </header>
 
@@ -224,48 +208,38 @@
 
     <div class="feat">
       <div class="feat-text reveal">
-        <h3>그리드 · 리스트 · 지도</h3>
-        <p>적응형 썸네일 그리드, 상세 리스트, 그리고 GPS 사진을 지도에. ⌘1·2·3로 즉시 전환.</p>
+        <h3>로컬 · NAS · Apple Photos를 한 곳에</h3>
+        <p>흩어진 사진을 하나의 사이드바에서. iCloud 전용 사진은 필요할 때만 내려받고, GPS 사진은 지도에 클러스터로 묶어 보여줍니다.</p>
         <ul>
-          <li>화면을 꽉 채우는 적응형 그리드 + 크기 슬라이더</li>
+          <li>로컬 폴더 · <b>NAS</b> · <b>Apple Photos(iCloud)</b> · iCloud Drive</li>
           <li>지도 핀 <b>클러스터링</b> — 수만 장도 줌별로 묶고 펼침</li>
-          <li>월별 타임라인 그룹</li>
+          <li>실시간 폴더 감시(FSEvents) · 증분 캐시 · 온디맨드 다운로드</li>
         </ul>
       </div>
-      <div class="feat-media reveal"><div class="mini-grid" id="mini"></div></div>
-    </div>
-
-    <div class="feat">
-      <div class="feat-text reveal">
-        <h3>로컬 · NAS · Apple Photos</h3>
-        <p>흩어진 사진을 한 사이드바에서. iCloud 전용 사진은 필요할 때만 내려받습니다.</p>
-        <div class="src-row" style="margin-top:18px">
-          <div class="src"><div class="si">💽</div><div><b>로컬 &amp; NAS 폴더</b><span>재귀 스캔 · 실시간 폴더 감시(FSEvents) · 증분 캐시</span></div></div>
-          <div class="src"><div class="si">📸</div><div><b>Apple Photos / iCloud</b><span>전체 · 즐겨찾기 · 앨범 · 지도 · 온디맨드 다운로드</span></div></div>
-          <div class="src"><div class="si">☁️</div><div><b>iCloud Drive</b><span>“최적화” 오프로드 파일 자동 머티리얼라이즈</span></div></div>
-        </div>
-      </div>
-      <div class="feat-media reveal">
-        <div class="map-mock">
-          <div class="bub" style="width:54px;height:54px;left:22%;top:34%;font-size:14px">5.2k</div>
-          <div class="bub" style="width:40px;height:40px;left:58%;top:58%;font-size:12px">820</div>
-          <div class="bub" style="width:32px;height:32px;left:74%;top:30%;font-size:11px">96</div>
-        </div>
+      <div class="feat-media reveal" style="padding:0;background:none;border:none;box-shadow:none">
+        <img class="screen" src="screenshots/map.png" alt="Lumen 지도 — 클러스터링 + Apple Photos 연동">
       </div>
     </div>
 
     <div class="feat">
       <div class="feat-text reveal">
-        <h3>빠른 정리 · 몰입형 뷰어</h3>
-        <p>비파괴 메타데이터로 정리하고, 풀스크린 뷰어로 몰입.</p>
+        <h3>몰입형 뷰어 · <span style="background:linear-gradient(120deg,#8fb0ff,#c69bff);-webkit-background-clip:text;background-clip:text;color:transparent">Space로 퀵 리뷰</span></h3>
+        <p>풀스크린으로 몰입. 그리고 사진가를 위한 가장 빠른 컬링 동작:</p>
         <ul>
-          <li>앨범 · 태그 · 별점 · 색상 라벨 · 스마트 모음</li>
-          <li>검색(파일명·태그·카메라) &amp; 필터(별점·라벨·위치·카메라)</li>
-          <li>뷰어: 줌/팬, 좌우 미리보기, EXIF, 2장 비교, 슬라이드쇼</li>
-          <li><b>Space</b>로 즐겨찾기 후 바로 다음 — 초고속 컬링</li>
+          <li><b>Space</b> = 즐겨찾기 + 바로 다음 사진 — 손 안 떼고 수천 장을 순식간에 리뷰</li>
+          <li>좌우 썸네일 미리보기 · EXIF 오버레이 · 2장 비교 · 슬라이드쇼</li>
+          <li>핀치/스크롤/더블클릭 줌 · 드래그 팬 · 별점(1–5)</li>
         </ul>
       </div>
-      <div class="feat-media reveal"><div class="mini-grid" id="mini2"></div></div>
+      <div class="feat-media reveal" style="padding:0;background:none;border:none;box-shadow:none">
+        <img class="screen" src="screenshots/viewer.png" alt="Lumen 뷰어 — Space로 빠른 컬링">
+      </div>
+    </div>
+
+    <div class="why" style="margin-top:66px">
+      <div class="card reveal"><div class="badge">🏷️</div><h3>비파괴 정리</h3><p>앨범 · 태그 · 별점 · 색상 라벨 · 스마트 모음(즐겨찾기·최근·오늘·중복). 원본은 절대 변경하지 않습니다.</p></div>
+      <div class="card reveal"><div class="badge">🔍</div><h3>검색 &amp; 필터</h3><p>파일명 · 태그 · 카메라 모델 검색. 별점 · 라벨 · 위치 · 카메라(예: SONY)로 필터.</p></div>
+      <div class="card reveal"><div class="badge">📤</div><h3>공유 · 내보내기</h3><p>시스템 공유, 원본/리사이즈/zip 내보내기, 일괄 이름변경, 배경화면 설정.</p></div>
     </div>
   </div>
 </section>

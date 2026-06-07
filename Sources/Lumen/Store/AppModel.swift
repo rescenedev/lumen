@@ -172,6 +172,10 @@ final class AppModel {
         loadSettings()
         watcher = FolderWatcher { [weak self] in self?.rescanRoots() }
         reopenRecentFolders()
+        // Demo/screenshot hook: auto-open a folder on launch (no effect normally).
+        if let demo = ProcessInfo.processInfo.environment["LUMEN_OPEN_FOLDER"] {
+            importURLs([URL(fileURLWithPath: demo)])
+        }
     }
 
     // MARK: - Per-photo metadata
