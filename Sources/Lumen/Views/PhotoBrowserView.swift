@@ -13,6 +13,15 @@ struct PhotoBrowserView: View {
             Divider()
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .top) {
+                    if model.isSortingVisible {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .padding(.top, 10)
+                    }
+                }
             Divider()
             statusBar
         }
@@ -64,10 +73,21 @@ struct PhotoBrowserView: View {
     private var content: some View {
         if model.viewMode == .map {
             PhotoMapView()
-        } else if model.visiblePhotos.isEmpty {
+        } else if model.visiblePhotos.isEmpty && !model.isSortingVisible {
             emptyFilterState
         } else if model.viewMode == .grid {
-            PhotoGridView()
+            if model.groupByMonth {
+                PhotoGridView()   // SwiftUI fallback keeps month sections
+            } else {
+                PhotoCollectionView(
+                    model: model,
+                    token: model.visibleToken,
+                    isSorting: model.isSortingVisible,
+                    thumbnailSize: model.thumbnailSize,
+                    selection: model.selection,
+                    anchor: model.selectionAnchor
+                )
+            }
         } else {
             PhotoListView()
         }

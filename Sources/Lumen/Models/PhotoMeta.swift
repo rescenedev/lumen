@@ -25,6 +25,19 @@ enum ColorLabel: String, Codable, CaseIterable, Identifiable, Sendable {
         case .gray: return .gray
         }
     }
+
+    var nsColor: NSColor? {
+        switch self {
+        case .none: return nil
+        case .red: return .systemRed
+        case .orange: return .systemOrange
+        case .yellow: return .systemYellow
+        case .green: return .systemGreen
+        case .blue: return .systemBlue
+        case .purple: return .systemPurple
+        case .gray: return .systemGray
+        }
+    }
 }
 
 /// Per-photo user metadata that Lumen owns (the files themselves are untouched).

@@ -272,11 +272,7 @@ final class AppModel {
         case .album(let id):
             guard let album = albums.first(where: { $0.id == id }) else { return [] }
             let membership = Set(album.photoPaths)
-            let inAlbum = photos.filter { membership.contains($0.url.path) }
-            // Keep the album's manual order unless the user chose a sort.
-            guard sortOrder == .dateNewest else { return inAlbum }
-            let order = Dictionary(uniqueKeysWithValues: album.photoPaths.enumerated().map { ($1, $0) })
-            return inAlbum.sorted { (order[$0.url.path] ?? 0) < (order[$1.url.path] ?? 0) }
+            return photos.filter { membership.contains($0.url.path) }  // sorted later
         case .tag(let tag):
             return photos.filter { meta($0).tags.contains(tag) }
         case .folder(let url):
@@ -288,7 +284,7 @@ final class AppModel {
             where folderPath == url.path || folderPath.hasPrefix(prefix) {
                 result.append(contentsOf: folderPhotos)
             }
-            return sortOrder.sorted(result)
+            return result  // sorted later
         }
     }
 
@@ -343,41 +339,18 @@ final class AppModel {
     /// to trigger prefetching without diffing the whole array.
     var visibleToken: Int { visibleSignature }
 
-    /// Final ordered list shown in the detail area.
-    var visiblePhotos: [Photo] {
-        let key = visibleSignature
-        if let hit = visibleCacheMap[key] { return hit }
-        let result = computeVisiblePhotos()
-        visibleCacheMap[key] = result
-        visibleCacheOrder.append(key)
-        if visibleCacheOrder.count > visibleCacheCapacity {
-            let evict = visibleCacheOrder.removeFirst()
-            visibleCacheMap.removeValue(forKey: evict)
-        }
-        return result
-    }
+    /// True while a large scope's sort is running on a background thread (the
+    /// grid shows the previous content + a spinner until it lands).
+    private(set) var isSortingVisible = false
 
-    // The library sorted once per (libraryVersion, sortOrder) — so switching
-    // scope or typing a search no longer re-sorts 50k photos every keystroke.
-    @ObservationIgnored private var sortedCache: [Photo] = []
-    @ObservationIgnored private var sortedCacheKey = -1
+    @ObservationIgnored private var lastVisible: [Photo] = []
+    @ObservationIgnored private var sortTask: Task<Void, Never>?
+    @ObservationIgnored private var sortInFlightKey = -1
+    @ObservationIgnored private let asyncSortThreshold = 4000
 
-    @ObservationIgnored private var sortedAllPhotos: [Photo] {
-        var hasher = Hasher()
-        hasher.combine(libraryVersion)
-        hasher.combine(sortOrder)
-        let key = hasher.finalize()
-        if key == sortedCacheKey { return sortedCache }
-        let result = sortOrder.sorted(allPhotos)
-        sortedCache = result
-        sortedCacheKey = key
-        return result
-    }
-
-    private func computeVisiblePhotos() -> [Photo] {
-        // Scope + filters + search are order-preserving over the pre-sorted base.
-        var result = filtered(scoped(sortedAllPhotos))
-
+    /// Scope + filter + search WITHOUT sorting (cheap; safe on the main thread).
+    private func gatherUnsorted() -> [Photo] {
+        var result = filtered(scoped(allPhotos))
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if !query.isEmpty {
             let names = lowerNames
@@ -388,6 +361,60 @@ final class AppModel {
             }
         }
         return result
+    }
+
+    /// Apply the active sort. Album scope keeps its manual order unless sorted.
+    private func sortVisible(_ gathered: [Photo]) -> [Photo] {
+        if case .album(let id) = committedSidebar, sortOrder == .dateNewest,
+           let album = albums.first(where: { $0.id == id }) {
+            let order = Dictionary(uniqueKeysWithValues: album.photoPaths.enumerated().map { ($1, $0) })
+            return gathered.sorted { (order[$0.url.path] ?? 0) < (order[$1.url.path] ?? 0) }
+        }
+        return sortOrder.sorted(gathered)
+    }
+
+    private func cacheVisible(_ key: Int, _ result: [Photo]) {
+        visibleCacheMap[key] = result
+        visibleCacheOrder.append(key)
+        if visibleCacheOrder.count > visibleCacheCapacity {
+            visibleCacheMap.removeValue(forKey: visibleCacheOrder.removeFirst())
+        }
+    }
+
+    /// Final ordered list shown in the detail area. Small scopes sort inline;
+    /// large ones sort off the main thread to keep navigation snappy.
+    var visiblePhotos: [Photo] {
+        let key = visibleSignature
+        if let hit = visibleCacheMap[key] { lastVisible = hit; return hit }
+
+        let gathered = gatherUnsorted()
+        let isAlbum: Bool = { if case .album = committedSidebar { return true }; return false }()
+
+        if gathered.count <= asyncSortThreshold || isAlbum {
+            let sorted = sortVisible(gathered)
+            cacheVisible(key, sorted)
+            lastVisible = sorted
+            return sorted
+        }
+
+        // Large: sort off-main; show the previous list + spinner until ready.
+        if sortInFlightKey != key {
+            sortInFlightKey = key
+            let order = sortOrder
+            sortTask?.cancel()
+            sortTask = Task { [weak self] in
+                await MainActor.run { self?.isSortingVisible = true }
+                let sorted = await Task.detached(priority: .userInitiated) { order.sorted(gathered) }.value
+                guard let self else { return }
+                if self.visibleSignature == key {
+                    self.cacheVisible(key, sorted)
+                    self.lastVisible = sorted
+                }
+                self.sortInFlightKey = -1
+                self.isSortingVisible = false
+            }
+        }
+        return lastVisible
     }
 
     // Library statistics (folders, recently-added, on-this-day) — depends only

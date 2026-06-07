@@ -35,6 +35,26 @@ final class ThumbnailCache {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         diskDir = base.appendingPathComponent("Lumen/Thumbnails", isDirectory: true)
         try? FileManager.default.createDirectory(at: diskDir, withIntermediateDirectories: true)
+        migrateFlatCacheIfNeeded()
+    }
+
+    /// Older builds wrote all thumbnails flat into one directory. MOVE those
+    /// loose files into their shard subdirectory — never delete, so an existing
+    /// warmed cache is preserved.
+    private func migrateFlatCacheIfNeeded() {
+        let dir = diskDir
+        DispatchQueue.global(qos: .utility).async {
+            let fm = FileManager.default
+            guard let entries = try? fm.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return }
+            for entry in entries where entry.pathExtension == "jpg" {
+                let name = entry.deletingPathExtension().lastPathComponent
+                guard name.count >= 2 else { continue }
+                let shard = dir.appendingPathComponent(String(name.prefix(2)), isDirectory: true)
+                try? fm.createDirectory(at: shard, withIntermediateDirectories: true)
+                try? fm.moveItem(at: entry, to: shard.appendingPathComponent(entry.lastPathComponent))
+            }
+        }
     }
 
     private func cost(of image: NSImage) -> Int {
@@ -49,7 +69,11 @@ final class ThumbnailCache {
         let raw = "\(url.path)|\(maxPixel)|\(Int(mtime))"
         let digest = SHA256.hash(data: Data(raw.utf8))
         let name = digest.map { String(format: "%02x", $0) }.joined()
-        return diskDir.appendingPathComponent(name).appendingPathExtension("jpg")
+        // Shard into 256 subdirs by the first 2 hex chars so no single directory
+        // ever holds tens of thousands of files.
+        let shard = String(name.prefix(2))
+        return diskDir.appendingPathComponent(shard, isDirectory: true)
+            .appendingPathComponent(name).appendingPathExtension("jpg")
     }
 
     private func diskURL(_ url: URL, _ maxPixel: Int) -> URL {
@@ -196,6 +220,9 @@ final class ThumbnailCache {
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff),
               let data = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) else { return }
+        // Ensure the shard subdirectory exists (idempotent, cheap).
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
     }
 
