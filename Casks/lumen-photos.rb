@@ -9,6 +9,11 @@ cask "lumen-photos" do
 
   app "Lumen.app"
 
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
   caveats <<~EOS
     Lumen is ad-hoc signed (not notarized). If macOS blocks it on first launch,
     either right-click the app and choose Open, or clear the quarantine flag:
