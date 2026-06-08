@@ -16,8 +16,7 @@ struct LibraryView: View {
                 } else if !lib.authorized {
                     OnboardingView { Task { await lib.load() } }
                 } else if lib.scopes.isEmpty {
-                    ContentUnavailableView("사진 없음", systemImage: "photo",
-                                           description: Text("정리할 사진이 없습니다."))
+                    emptyState
                 } else {
                     scopeList
                 }
@@ -26,10 +25,31 @@ struct LibraryView: View {
         }
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
-        .task { if !lib.loaded { await lib.load() } }
-        .fullScreenCover(item: $scope, onDismiss: { lib.refresh() }) { s in
-            OrganizeView(assets: lib.assets(for: s), library: lib)
+        .task {
+            if !lib.loaded { await lib.load() }
+            // Screenshot helper: `-autoOrganize` opens the first album straight away.
+            if scope == nil, ProcessInfo.processInfo.arguments.contains("-autoOrganize") {
+                scope = lib.scopes.first
+            }
         }
+        .fullScreenCover(item: $scope, onDismiss: { lib.refresh() }) { s in
+            OrganizeView(scope: s, library: lib)
+        }
+    }
+
+    /// Branded empty state — distinguishes "no photos yet" from "all organized".
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            LumenGlyph(size: 72)
+            Text(lib.assets.isEmpty ? "사진이 없어요" : "모두 정리했어요")
+                .font(.title2.bold()).foregroundStyle(.white)
+            Text(lib.assets.isEmpty
+                 ? "기기에 사진이 추가되면 여기에서 정리할 수 있어요."
+                 : "정리할 사진을 모두 둘러봤어요. 보관한 사진은 ‘Lumen’ 앨범에 모여 있어요.")
+                .font(.subheadline).foregroundStyle(.white.opacity(0.55))
+                .multilineTextAlignment(.center).padding(.horizontal, 44)
+        }
+        .padding(.bottom, 40)
     }
 
     private var scopeList: some View {
@@ -37,14 +57,14 @@ struct LibraryView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Lumen").font(.system(size: 30, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white).padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
-                Text("정리할 묶음").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
+                Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     .padding(.horizontal, 4)
                 ForEach(lib.scopes) { s in
                     ScopeRow(scope: s, library: lib)
                         .contentShape(Rectangle())
                         .onTapGesture { scope = s }
                 }
-                Text("묶음을 골라 좌우로 넘기며 정리하세요. 오른쪽(보관)은 ‘Lumen’ 앨범에 모이고, 왼쪽은 삭제 후보입니다.")
+                Text("앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 즐겨찾기, ♥는 ‘Lumen’ 앨범에 보관, ✕는 삭제 후보입니다.")
                     .font(.footnote).foregroundStyle(.white.opacity(0.4))
                     .padding(.horizontal, 4).padding(.top, 6)
             }
@@ -101,8 +121,8 @@ struct OnboardingView: View {
             Text("사진 정리가 쉬워집니다").font(.headline).foregroundStyle(.white.opacity(0.6)).padding(.top, 4)
 
             VStack(spacing: 18) {
-                feature("hand.draw.fill", "좌우 스와이프로 정리", "오른쪽은 보관, 왼쪽은 삭제")
-                feature("rectangle.stack.fill", "보관은 Lumen 앨범에", "남긴 사진을 한 곳에 모아 나중에 분류")
+                feature("hand.draw.fill", "넘기며 둘러보기", "좌우로 넘기고, 위로 올리면 즐겨찾기")
+                feature("rectangle.stack.fill", "보관은 Lumen 앨범에", "♥로 고른 사진을 한 곳에 모아 나중에 분류")
                 feature("checkmark.shield.fill", "안전하게", "삭제는 항상 확인 후 진행")
             }
             .padding(.top, 36).padding(.horizontal, 30)

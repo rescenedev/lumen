@@ -8,27 +8,34 @@ extension Color {
     static let lumenCard = Color(red: 0.13, green: 0.145, blue: 0.18)
 }
 
-/// One brand gradient, used sparingly for the app glyph / onboarding CTA.
+/// Indigo accent gradient — the lone pop of color (glyph heart, primary CTA).
+/// Matches the heart in the app icon.
 let heroGradient = LinearGradient(
-    colors: [Color(red: 0.36, green: 0.42, blue: 1.0), Color(red: 0.58, green: 0.36, blue: 0.98)],
+    colors: [Color(red: 0.46, green: 0.50, blue: 1.0), Color(red: 0.40, green: 0.40, blue: 0.98)],
+    startPoint: .topLeading, endPoint: .bottomTrailing)
+
+/// Slate tile gradient — matches the app icon's slate background.
+let slateTile = LinearGradient(
+    colors: [Color(red: 0.18, green: 0.21, blue: 0.28), Color(red: 0.08, green: 0.095, blue: 0.13)],
     startPoint: .topLeading, endPoint: .bottomTrailing)
 
 /// The app mark: two stacked photo cards, the front one tilted — a "swipe to
-/// organize" motif.
+/// organize" motif. Slate tile + indigo heart, mirroring the app icon.
 struct LumenGlyph: View {
     var size: CGFloat = 72
 
     var body: some View {
         RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
-            .fill(heroGradient)
+            .fill(slateTile)
             .frame(width: size, height: size)
+            .overlay(RoundedRectangle(cornerRadius: size * 0.225, style: .continuous).strokeBorder(.white.opacity(0.08)))
             .overlay {
                 ZStack {
-                    card.rotationEffect(.degrees(-11)).offset(x: -size * 0.05, y: size * 0.02).opacity(0.55)
+                    card.rotationEffect(.degrees(-11)).offset(x: -size * 0.05, y: size * 0.02).opacity(0.5)
                     card.rotationEffect(.degrees(7)).offset(x: size * 0.055, y: -size * 0.01)
                 }
             }
-            .shadow(color: .lumenAccent.opacity(0.4), radius: size * 0.16, y: size * 0.07)
+            .shadow(color: .black.opacity(0.45), radius: size * 0.14, y: size * 0.07)
     }
 
     private var card: some View {

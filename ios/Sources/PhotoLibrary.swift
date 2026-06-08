@@ -20,95 +20,129 @@ struct OrganizeScope: Identifiable {
     var authorized = false
     var loaded = false
 
+    /// localIdentifiers already filed into "Lumen". Cached from the last snapshot so
+    /// scope filtering never re-hits PhotoKit on the main thread.
+    @ObservationIgnored private var keptIDs: Set<String> = []
     private let manager = PHCachingImageManager()
 
     func load() async {
-        let status = await withCheckedContinuation { c in
-            PHPhotoLibrary.requestAuthorization(for: .readWrite) { c.resume(returning: $0) }
+        // Only prompt when the user hasn't decided yet — re-requesting an already
+        // granted/denied library just re-shows the system sheet needlessly.
+        var status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        if status == .notDetermined {
+            status = await withCheckedContinuation { c in
+                PHPhotoLibrary.requestAuthorization(for: .readWrite) { c.resume(returning: $0) }
+            }
         }
         authorized = (status == .authorized || status == .limited)
         loaded = true
         guard authorized else { return }
 
-        reload()
+        await reload()
     }
 
     /// Re-read the library (after an organize session: new "Lumen" album, changed
-    /// counts, deletions). Cheap enough to call when returning to the home.
+    /// counts, deletions). Runs the fetch off-main so returning home never stutters.
     func refresh() {
         guard authorized else { return }
-        reload()
+        Task { await reload() }
     }
 
-    private func reload() {
-        let opts = PHFetchOptions()
-        opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        let result = PHAsset.fetchAssets(with: .image, options: opts)
-        var arr: [PHAsset] = []
-        arr.reserveCapacity(result.count)
-        result.enumerateObjects { a, _, _ in arr.append(a) }
-        assets = arr
-        loadAlbums()
-        buildScopes()
+    /// All the PhotoKit work happens on a background thread; only the final
+    /// assignment of published state touches the main actor.
+    private func reload() async {
+        let snap = await Task.detached(priority: .userInitiated) { Self.computeSnapshot() }.value
+        assets = snap.assets
+        albums = snap.albums
+        keptIDs = snap.keptIDs
+        scopes = snap.scopes
     }
 
-    // MARK: - Scopes (pick what to organize)
+    // MARK: - Snapshot (built off the main thread)
 
-    private func imageOptions() -> PHFetchOptions {
+    private struct Snapshot {
+        var assets: [PHAsset]
+        var albums: [PHAssetCollection]
+        var keptIDs: Set<String>
+        var scopes: [OrganizeScope]
+    }
+
+    nonisolated private static func imageOptions() -> PHFetchOptions {
         let o = PHFetchOptions()
         o.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
         o.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         return o
     }
 
-    private func buildScopes() {
+    nonisolated private static func fetchAll(in collection: PHAssetCollection) -> [PHAsset] {
+        var arr: [PHAsset] = []
+        PHAsset.fetchAssets(in: collection, options: imageOptions()).enumerateObjects { a, _, _ in arr.append(a) }
+        return arr
+    }
+
+    /// Read everything we need in one off-main pass: all photos, the album list,
+    /// the "already kept" id set, and the resulting scopes (kept photos removed so
+    /// an interrupted session resumes instead of restarting).
+    nonisolated private static func computeSnapshot() -> Snapshot {
+        let opts = PHFetchOptions()
+        opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        var allAssets: [PHAsset] = []
+        PHAsset.fetchAssets(with: .image, options: opts).enumerateObjects { a, _, _ in allAssets.append(a) }
+
+        var albums: [PHAssetCollection] = []
+        PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
+            .enumerateObjects { c, _, _ in albums.append(c) }
+
+        var keptIDs = Set<String>()
+        if let lumen = albums.first(where: { $0.localizedTitle == "Lumen" }) {
+            fetchAll(in: lumen).forEach { keptIDs.insert($0.localIdentifier) }
+        }
+        func remaining(_ list: [PHAsset]) -> [PHAsset] { list.filter { !keptIDs.contains($0.localIdentifier) } }
+
         var out: [OrganizeScope] = []
-        if !assets.isEmpty {
+        let allRemaining = remaining(allAssets)
+        if !allRemaining.isEmpty {
             out.append(.init(id: "all", title: "전체 사진", symbol: "photo.on.rectangle",
-                             count: assets.count, collection: nil, cover: assets.first))
+                             count: allRemaining.count, collection: nil, cover: allRemaining.first))
         }
 
         func smart(_ subtype: PHAssetCollectionSubtype, _ title: String, _ symbol: String) {
             guard let c = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil).firstObject
             else { return }
-            let r = PHAsset.fetchAssets(in: c, options: imageOptions())
-            if r.count > 0 {
+            let rem = remaining(fetchAll(in: c))
+            if !rem.isEmpty {
                 out.append(.init(id: c.localIdentifier, title: title, symbol: symbol,
-                                 count: r.count, collection: c, cover: r.firstObject))
+                                 count: rem.count, collection: c, cover: rem.first))
             }
         }
         smart(.smartAlbumFavorites, "즐겨찾기", "heart")
         smart(.smartAlbumRecentlyAdded, "최근 추가", "clock")
         smart(.smartAlbumScreenshots, "스크린샷", "camera.viewfinder")
 
-        for c in albums {
-            let r = PHAsset.fetchAssets(in: c, options: imageOptions())
-            if r.count > 0 {
+        // Skip the Lumen album itself — it's the destination, not a queue to sort.
+        for c in albums where c.localizedTitle != "Lumen" {
+            let rem = remaining(fetchAll(in: c))
+            if !rem.isEmpty {
                 out.append(.init(id: c.localIdentifier, title: c.localizedTitle ?? "앨범", symbol: "rectangle.stack",
-                                 count: r.count, collection: c, cover: r.firstObject))
+                                 count: rem.count, collection: c, cover: rem.first))
             }
         }
-        scopes = out
+        return Snapshot(assets: allAssets, albums: albums, keptIDs: keptIDs, scopes: out)
     }
 
-    /// The asset list for a scope, fetched on demand (so the picker stays light).
-    func assets(for scope: OrganizeScope) -> [PHAsset] {
-        guard let c = scope.collection else { return assets }
-        let r = PHAsset.fetchAssets(in: c, options: imageOptions())
-        var arr: [PHAsset] = []
-        arr.reserveCapacity(r.count)
-        r.enumerateObjects { a, _, _ in arr.append(a) }
-        return arr
+    /// The asset list for a scope, already-kept photos removed. Fetched off-main so
+    /// tapping a scope opens without freezing.
+    func assets(for scope: OrganizeScope) async -> [PHAsset] {
+        let kept = keptIDs
+        let collection = scope.collection
+        let base = assets
+        return await Task.detached(priority: .userInitiated) {
+            let source = collection.map { Self.fetchAll(in: $0) } ?? base
+            return source.filter { !kept.contains($0.localIdentifier) }
+        }.value
     }
 
-    // MARK: - Albums (for up-swipe classification)
-
-    func loadAlbums() {
-        let r = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
-        var arr: [PHAssetCollection] = []
-        r.enumerateObjects { c, _, _ in arr.append(c) }
-        albums = arr
-    }
+    // MARK: - Albums (organize destination)
 
     func createAlbum(_ title: String) async -> PHAssetCollection? {
         var placeholder: PHObjectPlaceholder?

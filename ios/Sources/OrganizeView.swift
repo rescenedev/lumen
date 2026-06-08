@@ -3,79 +3,123 @@ import Photos
 
 private enum Decision { case keep, trash }
 
-/// Tinder-style organize mode — full-screen photo on black. Swipe RIGHT to keep
-/// (filed into the "Lumen" album), LEFT to mark for deletion. Minimal chrome:
-/// only the count up top, ✕ and ♥ below.
+/// What the brief centered confirmation shows after an action.
+private enum Flash {
+    case keep, trash, favorite
+    var text: String { self == .keep ? "보관" : self == .trash ? "삭제" : "즐겨찾기" }
+    var icon: String { self == .keep ? "rectangle.stack.fill" : self == .trash ? "trash.fill" : "star.fill" }
+}
+
+/// Browse-and-organize mode — full-screen photo on slate. Swipe LEFT/RIGHT just
+/// moves to the next/previous photo (nothing is decided). You organize only the
+/// photos you choose: ♥ files into "Lumen" (live), ✕ marks for deletion. Decisions
+/// are applied/confirmed on the summary. Minimal chrome: the count up top, ✕/♥ below.
 struct OrganizeView: View {
-    let assets: [PHAsset]
+    let scope: OrganizeScope
     let library: PhotoLibrary
     @Environment(\.dismiss) private var dismiss
 
+    @State private var assets: [PHAsset] = []
+    @State private var ready = false
     @State private var index = 0
     @State private var offset: CGSize = .zero
-    @State private var keeps: [PHAsset] = []
-    @State private var trash: [PHAsset] = []
+    @State private var decisions: [Int: Decision] = [:]   // index → keep/trash
+    @State private var finished = false
+    @State private var flash: Flash?                      // brief action confirmation
     @State private var tick = 0
     @State private var doneMsg = ""
 
-    private let threshold: CGFloat = 110
+    private let threshold: CGFloat = 80
+
+    private var keepCount: Int { decisions.values.filter { $0 == .keep }.count }
+    private var trashAssets: [PHAsset] { decisions.compactMap { $0.value == .trash ? assets[$0.key] : nil } }
 
     var body: some View {
         ZStack {
             Color.lumenBG.ignoresSafeArea()
-            if index >= assets.count {
+            if !ready {
+                ProgressView().tint(.white)
+            } else if finished {
                 summary
             } else {
                 photoLayer
+                flashOverlay
                 topBar
                 bottomControls
             }
         }
         .preferredColorScheme(.dark)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: tick)
+        .task {
+            assets = await library.assets(for: scope)
+            ready = true
+        }
     }
 
-    // MARK: - Photo (full-screen, swipeable)
+    // MARK: - Photo (full-screen, swipe = navigate)
 
     private var photoLayer: some View {
         OrganizeCard(asset: assets[index], library: library)
-            .overlay(alignment: .topLeading) { stamp("보관", "rectangle.stack.fill", p: offset.width / threshold) }
-            .overlay(alignment: .topTrailing) { stamp("삭제", "trash.fill", p: -offset.width / threshold) }
+            .overlay(alignment: .top) { favoriteHint }
             .offset(offset)
-            .rotationEffect(.degrees(Double(offset.width / 26)))
             .id(index)
             .gesture(
                 DragGesture()
                     .onChanged { offset = $0.translation }
                     .onEnded { v in
-                        if v.translation.width > threshold { commit(.keep, fly: CGSize(width: 1000, height: v.translation.height)) }
-                        else if v.translation.width < -threshold { commit(.trash, fly: CGSize(width: -1000, height: v.translation.height)) }
+                        let dx = v.translation.width, dy = v.translation.height
+                        if dy < -threshold && abs(dy) > abs(dx) { favorite() }
+                        else if dx < -threshold { swipeTo(next: true) }
+                        else if dx > threshold { swipeTo(next: false) }
                         else { withAnimation(.spring(response: 0.3)) { offset = .zero } }
                     }
             )
             .ignoresSafeArea()
     }
 
-    private func stamp(_ text: String, _ icon: String, p: CGFloat) -> some View {
-        let v = min(max(p, 0), 1)
-        return Label(text, systemImage: icon)
-            .font(.headline.bold()).foregroundStyle(.white)
-            .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
-            .padding(.horizontal, 24).padding(.top, 78)
-            .opacity(Double(v)).scaleEffect(0.85 + 0.15 * v)
+    /// A star that grows as you drag up — hint that releasing favorites the photo.
+    @ViewBuilder private var favoriteHint: some View {
+        let p = min(max(-offset.height / threshold, 0), 1)
+        if p > 0.02 {
+            Label("즐겨찾기", systemImage: "star.fill")
+                .font(.headline.bold()).foregroundStyle(.white)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
+                .padding(.top, 70)
+                .opacity(Double(p)).scaleEffect(0.85 + 0.15 * p)
+        }
     }
 
-    // MARK: - Top bar (only the count, centered)
+    /// Short centered confirmation after ♥ / ✕ / up-swipe.
+    @ViewBuilder private var flashOverlay: some View {
+        if let flash {
+            Label(flash.text, systemImage: flash.icon)
+                .font(.headline.bold()).foregroundStyle(.white)
+                .padding(.horizontal, 18).padding(.vertical, 11)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
+        }
+    }
+
+    // MARK: - Top bar (count + current photo's decision state)
 
     private var topBar: some View {
         ZStack {
-            Text("\(index + 1) / \(assets.count)").font(.subheadline.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
+            VStack(spacing: 6) {
+                Text("\(index + 1) / \(assets.count)").font(.subheadline.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                if let d = decisions[index] {
+                    Text(d == .keep ? "보관됨" : "삭제 예정").font(.caption.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+            }
             HStack {
-                Button { dismiss() } label: {
+                Button { trashAssets.isEmpty ? dismiss() : finish() } label: {
                     Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
                         .frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
                 }
@@ -86,13 +130,15 @@ struct OrganizeView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: - Bottom controls (✕ and ♥)
+    // MARK: - Bottom controls (✕ and ♥ — decide only this photo)
 
     private var bottomControls: some View {
-        HStack(spacing: 64) {
-            control("xmark") { commit(.trash, fly: CGSize(width: -1000, height: 0)) }
-            control("heart.fill") { commit(.keep, fly: CGSize(width: 1000, height: 0)) }
+        HStack {
+            control("xmark") { decide(.trash) }
+            Spacer()
+            control("heart.fill") { decide(.keep) }
         }
+        .padding(.horizontal, 52)
         .padding(.bottom, 18)
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
@@ -115,17 +161,17 @@ struct OrganizeView: View {
             Spacer()
             LumenGlyph(size: 76)
             Text("정리 완료").font(.title.bold()).foregroundStyle(.white).padding(.top, 6)
-            Text(keeps.isEmpty ? "\(assets.count)장을 모두 살펴봤어요"
-                               : "보관한 \(keeps.count)장은 Lumen 앨범에 모았어요")
+            Text(keepCount == 0 ? "정리한 사진이 없어요"
+                                : "보관한 \(keepCount)장은 Lumen 앨범에 모았어요")
                 .font(.subheadline).foregroundStyle(.white.opacity(0.6)).multilineTextAlignment(.center)
             HStack(spacing: 40) {
-                stat("보관", keeps.count, "rectangle.stack.fill")
-                stat("삭제", trash.count, "trash.fill")
+                stat("보관", keepCount, "rectangle.stack.fill")
+                stat("삭제", trashAssets.count, "trash.fill")
             }.padding(.vertical, 8)
             VStack(spacing: 12) {
-                if !trash.isEmpty {
+                if !trashAssets.isEmpty {
                     Button(role: .destructive) { Task { await deleteTrash() } } label: {
-                        Label("삭제 후보 \(trash.count)장 삭제", systemImage: "trash").frame(maxWidth: .infinity)
+                        Label("삭제 후보 \(trashAssets.count)장 삭제", systemImage: "trash").frame(maxWidth: .infinity)
                     }.buttonStyle(.bordered).controlSize(.large).tint(.white)
                 }
                 if !doneMsg.isEmpty {
@@ -148,26 +194,61 @@ struct OrganizeView: View {
         }
     }
 
-    // MARK: - Decisions
+    // MARK: - Navigation (swipe) & decisions (buttons)
 
-    private func commit(_ decision: Decision, fly: CGSize) {
-        guard index < assets.count else { return }
-        let a = assets[index]
-        switch decision {
-        case .keep:
-            keeps.append(a)
-            Task { await library.addToLumen(a) }   // keep = file into Lumen, live
-        case .trash:
-            trash.append(a)
+    /// Move to the next/previous photo. At the last photo, a forward swipe just
+    /// springs back — browsing never forces you into the summary.
+    private func swipeTo(next: Bool) {
+        let target = next ? index + 1 : index - 1
+        guard target >= 0, target < assets.count else {
+            withAnimation(.spring(response: 0.3)) { offset = .zero }; return
         }
-        tick += 1
-        withAnimation(.easeOut(duration: 0.26)) { offset = fly }
-        Task { try? await Task.sleep(for: .milliseconds(255)); index += 1; offset = .zero }
+        withAnimation(.easeOut(duration: 0.2)) { offset = CGSize(width: next ? -1000 : 1000, height: 0) }
+        Task { try? await Task.sleep(for: .milliseconds(195)); index = target; offset = .zero }
     }
 
+    /// Record a decision for the current photo, then advance. Deciding the last
+    /// photo wraps up into the summary.
+    private func decide(_ d: Decision) {
+        guard index < assets.count else { return }
+        decisions[index] = d
+        if d == .keep { let a = assets[index]; Task { await library.addToLumen(a) } }   // file into Lumen, live
+        tick += 1
+        showFlash(d == .keep ? .keep : .trash)
+        flyAndAdvance(CGSize(width: -1000, height: 0))
+    }
+
+    /// Up-swipe: mark the photo as an Apple Favorite (non-destructive, lives in the
+    /// system 즐겨찾기 album), then move on. Independent of keep/trash.
+    private func favorite() {
+        guard index < assets.count else { return }
+        let a = assets[index]
+        Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = true } }
+        tick += 1
+        showFlash(.favorite)
+        flyAndAdvance(CGSize(width: 0, height: -1200))
+    }
+
+    /// Fly the current card out, then step to the next photo (or finish at the end).
+    private func flyAndAdvance(_ fly: CGSize) {
+        withAnimation(.easeOut(duration: 0.2)) { offset = fly }
+        Task {
+            try? await Task.sleep(for: .milliseconds(195))
+            if index < assets.count - 1 { index += 1; offset = .zero } else { offset = .zero; finish() }
+        }
+    }
+
+    private func showFlash(_ f: Flash) {
+        withAnimation(.spring(response: 0.3)) { flash = f }
+        Task { try? await Task.sleep(for: .milliseconds(500)); if flash == f { withAnimation { flash = nil } } }
+    }
+
+    private func finish() { withAnimation { finished = true } }
+
     private func deleteTrash() async {
+        let targets = trashAssets
         do {
-            try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(trash as NSArray) }
+            try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(targets as NSArray) }
             doneMsg = "삭제 완료"
         } catch { doneMsg = "삭제 취소됨" }
     }
