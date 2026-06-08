@@ -143,8 +143,10 @@
   .note{margin:16px auto 0;max-width:600px;background:var(--panel);border:1px solid var(--border);
     border-radius:12px;padding:15px 18px;color:var(--muted);font-size:14px;text-align:left}
   .note code{background:#0b0e16;padding:2px 7px;border-radius:6px;color:#cdd6f4;font-family:"SF Mono",ui-monospace,Menlo,monospace}
-  .note .copy{background:var(--panel-2);border:1px solid var(--border);color:var(--muted);
-    border-radius:7px;padding:3px 9px;font-size:12px;cursor:pointer;margin-left:8px;vertical-align:middle}
+  .note .cmd-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}
+  .note .cmd-row code{margin:0}
+  .note .copy{flex:none;background:var(--panel-2);border:1px solid var(--border);color:var(--muted);
+    border-radius:7px;padding:5px 11px;font-size:12px;cursor:pointer}
   .note .copy:hover{color:var(--text)}
 
   footer{text-align:center;padding:54px 24px;color:var(--muted);border-top:1px solid var(--border);font-size:14px}
@@ -280,7 +282,11 @@ brew install --cask lumen-photos</code>
     </div>
     <div class="note reveal">
       현재는 노타라이즈되지 않은 빌드라, 첫 실행 시 Gatekeeper가 막으면
-      앱을 <b>우클릭 → 열기</b> 하거나: <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code><button class="copy" onclick="copyXattr(event)">복사</button>
+      앱을 <b>우클릭 → 열기</b> 하거나:
+      <div class="cmd-row">
+        <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code>
+        <button class="copy" onclick="copyXattr(event)">복사</button>
+      </div>
     </div>
     <div class="note reveal">
       소스로 빌드: <code>git clone</code> 후 <code>./Scripts/make_app.sh</code> — Xcode 불필요, Command Line Tools만.
