@@ -37,7 +37,7 @@ struct LibraryView: View {
             } header: {
                 Text("정리할 묶음")
             } footer: {
-                Text("묶음을 골라 좌우로 넘기며 정리하세요. 위로 넘기면 ‘Lumen’ 앨범으로 모읍니다.")
+                Text("묶음을 골라 좌우로 넘기며 정리하세요. 오른쪽(보관)은 ‘Lumen’ 앨범에 모이고, 왼쪽은 삭제 후보입니다.")
             }
         }
         .listStyle(.insetGrouped)
@@ -90,8 +90,8 @@ struct OnboardingView: View {
             Text("사진 정리가 쉬워집니다").font(.headline).foregroundStyle(.secondary).padding(.top, 4)
 
             VStack(spacing: 18) {
-                feature("hand.draw.fill", "좌우 스와이프로 정리", "한 장씩 넘기며 보관·삭제를 결정")
-                feature("rectangle.stack.badge.plus", "위로 넘기면 Lumen 앨범", "나중에 천천히 분류")
+                feature("hand.draw.fill", "좌우 스와이프로 정리", "오른쪽은 보관, 왼쪽은 삭제")
+                feature("rectangle.stack.fill", "보관은 Lumen 앨범에", "남긴 사진을 한 곳에 모아 나중에 분류")
                 feature("checkmark.shield.fill", "안전하게", "삭제는 항상 확인 후 진행")
             }
             .padding(.top, 36).padding(.horizontal, 30)
