@@ -195,6 +195,29 @@ struct OrganizeScope: Identifiable {
                       delivery: .highQualityFormat)?.cgImage
     }
 
+    /// Progressive image stream — yields a fast (possibly degraded, local) image
+    /// first, then the full-quality one, downloading from iCloud if needed. Use it
+    /// while browsing so iCloud photos show a thumbnail immediately instead of a
+    /// blank grey box.
+    func imageStream(_ asset: PHAsset, points: CGFloat, mode: PHImageContentMode) -> AsyncStream<UIImage> {
+        let px = points * UIScreen.main.scale
+        let target = CGSize(width: px, height: px)
+        let mgr = manager
+        return AsyncStream { continuation in
+            let opt = PHImageRequestOptions()
+            opt.deliveryMode = .opportunistic          // fast local thumb → then full
+            opt.isNetworkAccessAllowed = true          // download iCloud originals
+            opt.resizeMode = .fast
+            let id = mgr.requestImage(for: asset, targetSize: target, contentMode: mode, options: opt) { img, info in
+                if let img { continuation.yield(img) }
+                let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+                let done = info?[PHImageErrorKey] != nil || (info?[PHImageCancelledKey] as? Bool) ?? false
+                if !degraded || done { continuation.finish() }
+            }
+            continuation.onTermination = { _ in mgr.cancelImageRequest(id) }
+        }
+    }
+
     private func request(_ asset: PHAsset, target: CGSize, mode: PHImageContentMode,
                          delivery: PHImageRequestOptionsDeliveryMode) async -> UIImage? {
         await withCheckedContinuation { c in

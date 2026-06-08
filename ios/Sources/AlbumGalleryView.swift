@@ -11,8 +11,9 @@ struct AlbumGalleryView: View {
     @State private var assets: [PHAsset] = []
     @State private var ready = false
     @State private var open: StartAt?
+    @State private var cols = 4                       // pinch to change
 
-    private let columns = [GridItem(.adaptive(minimum: 96), spacing: 3)]
+    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 3), count: cols) }
 
     var body: some View {
         ZStack {
@@ -31,6 +32,14 @@ struct AlbumGalleryView: View {
                     }
                     .padding(.horizontal, 3).padding(.top, 54).padding(.bottom, 24)
                 }
+                .gesture(
+                    MagnifyGesture().onEnded { v in
+                        withAnimation(.spring(response: 0.3)) {
+                            if v.magnification > 1.15 { cols = max(2, cols - 1) }       // zoom in → bigger thumbs
+                            else if v.magnification < 0.85 { cols = min(8, cols + 1) }  // pinch → smaller thumbs
+                        }
+                    }
+                )
             }
             header
         }
@@ -85,7 +94,7 @@ struct GalleryThumb: View {
             }
             .contentShape(Rectangle())
             .task(id: asset.localIdentifier) {
-                image = await library.thumbnail(asset, points: 130)
+                for await img in library.imageStream(asset, points: 200, mode: .aspectFill) { image = img }
             }
     }
 }
