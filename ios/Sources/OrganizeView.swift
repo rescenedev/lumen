@@ -146,11 +146,12 @@ struct OrganizeView: View {
         Button {
             withAnimation(.spring(response: 0.35)) { organizing = true }
         } label: {
-            Label("정리 시작", systemImage: "sparkles")
-                .font(.headline.weight(.semibold)).foregroundStyle(.white)
-                .padding(.horizontal, 26).padding(.vertical, 14)
-                .background(heroGradient, in: Capsule())
-                .shadow(color: .black.opacity(0.35), radius: 10, y: 5)
+            Text("정리 시작")
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                .padding(.horizontal, 28).padding(.vertical, 13)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
+                .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
         }
         .buttonStyle(.plain)
         .padding(.bottom, 24)
