@@ -14,9 +14,8 @@ struct PhotoGridView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> UICollectionView {
-        let layout = GridFlowLayout()
-        layout.minimumLineSpacing = 2
-        layout.minimumInteritemSpacing = 2
+        let layout = InterpolatingGridLayout()
+        layout.spacing = 2
         let cv = UICollectionView(frame: .zero, collectionViewLayout: layout)
         cv.backgroundColor = .clear
         cv.contentInsetAdjustmentBehavior = .always
@@ -49,7 +48,7 @@ struct PhotoGridView: UIViewRepresentable {
         var assets: [PHAsset]
         weak var collectionView: UICollectionView?
         let manager = PHCachingImageManager()
-        private var pinchStartEdge: CGFloat = 0
+        private var pinchStartCols: CGFloat = 4
 
         init(_ parent: PhotoGridView) { self.parent = parent; self.assets = parent.assets }
 
@@ -58,8 +57,8 @@ struct PhotoGridView: UIViewRepresentable {
         func collectionView(_ cv: UICollectionView, cellForItemAt ip: IndexPath) -> UICollectionViewCell {
             let cell = cv.dequeueReusableCell(withReuseIdentifier: "c", for: ip) as! ThumbCell
             let asset = assets[ip.item]
-            cell.configure(asset, manager: manager,
-                           edge: (cv.collectionViewLayout as? GridFlowLayout)?.itemSize.width ?? 96)
+            let cols = (cv.collectionViewLayout as? InterpolatingGridLayout)?.cols ?? 4
+            cell.configure(asset, manager: manager, edge: cv.bounds.width / max(cols, 1))
             return cell
         }
 
@@ -69,14 +68,21 @@ struct PhotoGridView: UIViewRepresentable {
         }
 
         @objc func handlePinch(_ g: UIPinchGestureRecognizer) {
-            guard let cv = collectionView, let layout = cv.collectionViewLayout as? GridFlowLayout else { return }
+            guard let cv = collectionView, let layout = cv.collectionViewLayout as? InterpolatingGridLayout else { return }
             switch g.state {
             case .began:
-                pinchStartEdge = layout.targetEdge
+                pinchStartCols = layout.cols
             case .changed:
-                let w = cv.bounds.width
-                layout.targetEdge = min(max(pinchStartEdge * g.scale, w / 9.0), w / 2.05)  // 2…9 columns
+                // pinch out (scale>1) → fewer/bigger columns; fractional → continuous reflow
+                layout.cols = min(max(pinchStartCols / g.scale, 2), 9)
                 layout.invalidateLayout()
+            case .ended, .cancelled:
+                let snapped = min(max(layout.cols.rounded(), 2), 9)
+                UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut]) {
+                    layout.cols = snapped
+                    layout.invalidateLayout()
+                    cv.layoutIfNeeded()
+                }
             default:
                 break
             }
@@ -88,22 +94,74 @@ struct PhotoGridView: UIViewRepresentable {
     }
 }
 
-/// Flow layout whose `targetEdge` (desired item side) is set continuously by the
-/// pinch; `prepare` snaps it to a whole number of columns that fills the width.
-final class GridFlowLayout: UICollectionViewFlowLayout {
-    var targetEdge: CGFloat = 96
+/// A grid layout with a *fractional* column count. It interpolates each cell's
+/// frame between the floor- and ceil-column grids, so changing `cols` continuously
+/// (during a pinch) reflows smoothly — no snapping at column boundaries.
+final class InterpolatingGridLayout: UICollectionViewLayout {
+    var cols: CGFloat = 4
+    var spacing: CGFloat = 2
+    private var contentHeight: CGFloat = 0
+
+    private struct P { let w: CGFloat; let lo: Int; let hi: Int; let t: CGFloat; let cwLo: CGFloat; let cwHi: CGFloat }
+
+    private func params() -> P? {
+        guard let cv = collectionView, cv.bounds.width > 0 else { return nil }
+        let w = cv.bounds.width
+        let c = min(max(cols, 2), 9)
+        let lo = Int(floor(c)); let hi = min(lo + 1, 9); let t = c - CGFloat(lo)
+        func cw(_ n: Int) -> CGFloat { (w - CGFloat(n - 1) * spacing) / CGFloat(n) }
+        return P(w: w, lo: lo, hi: hi, t: t, cwLo: cw(lo), cwHi: cw(hi))
+    }
+
+    private func frame(_ i: Int, _ n: Int, _ cw: CGFloat) -> CGRect {
+        let c = i % n, r = i / n
+        return CGRect(x: CGFloat(c) * (cw + spacing), y: CGFloat(r) * (cw + spacing), width: cw, height: cw)
+    }
+
+    private func interp(_ i: Int, _ p: P) -> CGRect {
+        let a = frame(i, p.lo, p.cwLo), b = frame(i, p.hi, p.cwHi), t = p.t
+        return CGRect(x: a.minX + (b.minX - a.minX) * t, y: a.minY + (b.minY - a.minY) * t,
+                      width: a.width + (b.width - a.width) * t, height: a.height + (b.height - a.height) * t)
+    }
 
     override func prepare() {
         super.prepare()
-        guard let cv = collectionView else { return }
-        let w = cv.bounds.width
-        let spacing = minimumInteritemSpacing
-        let cols = max(2, min(9, Int((w + spacing) / (targetEdge + spacing))))
-        let edge = (w - CGFloat(cols - 1) * spacing) / CGFloat(cols)
-        itemSize = CGSize(width: floor(edge), height: floor(edge))
+        guard let cv = collectionView, let p = params() else { return }
+        let n = cv.numberOfItems(inSection: 0)
+        let rowsLo = (n + p.lo - 1) / max(p.lo, 1), rowsHi = (n + p.hi - 1) / max(p.hi, 1)
+        let hLo = CGFloat(rowsLo) * (p.cwLo + spacing) - spacing
+        let hHi = CGFloat(rowsHi) * (p.cwHi + spacing) - spacing
+        contentHeight = max(0, hLo + (hHi - hLo) * p.t)
     }
 
-    override func shouldInvalidateLayout(forBoundsChange newBounds: CGRect) -> Bool { true }
+    override var collectionViewContentSize: CGSize { CGSize(width: collectionView?.bounds.width ?? 0, height: contentHeight) }
+
+    override func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
+        guard let cv = collectionView, let p = params() else { return nil }
+        let n = cv.numberOfItems(inSection: 0)
+        let rowH = (p.cwLo + (p.cwHi - p.cwLo) * p.t) + spacing
+        let firstRow = max(0, Int(rect.minY / rowH) - 2)
+        let lastRow = Int(rect.maxY / rowH) + 2
+        let start = max(0, firstRow * p.lo)
+        let end = min(n, (lastRow + 1) * p.hi)
+        guard start < end else { return [] }
+        return (start..<end).map { i in
+            let a = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: i, section: 0))
+            a.frame = interp(i, p)
+            return a
+        }
+    }
+
+    override func layoutAttributesForItem(at indexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
+        guard let p = params() else { return nil }
+        let a = UICollectionViewLayoutAttributes(forCellWith: indexPath)
+        a.frame = interp(indexPath.item, p)
+        return a
+    }
+
+    override func shouldInvalidateLayout(forBoundsChange newBounds: CGRect) -> Bool {
+        newBounds.width != collectionView?.bounds.width
+    }
 }
 
 /// One square thumbnail cell with a favorite heart.
