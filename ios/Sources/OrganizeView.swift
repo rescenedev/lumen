@@ -17,6 +17,7 @@ private enum Flash {
 struct OrganizeView: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
+    var startIndex: Int = 0
     @Environment(\.dismiss) private var dismiss
 
     @State private var assets: [PHAsset] = []
@@ -53,6 +54,7 @@ struct OrganizeView: View {
         .sensoryFeedback(.impact(flexibility: .soft), trigger: tick)
         .task {
             assets = await library.assets(for: scope)
+            index = min(max(startIndex, 0), max(assets.count - 1, 0))
             ready = true
         }
     }
