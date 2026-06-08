@@ -1,5 +1,10 @@
-import AppKit
+// Cross-platform (macOS + iOS): only CoreGraphics/CoreImage/ImageIO/CoreText +
+// Foundation. No AppKit/UIKit — this is the portable editing/combine/watermark
+// engine the iOS app reuses verbatim.
+import CoreGraphics
+import CoreImage
 import CoreText
+import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
