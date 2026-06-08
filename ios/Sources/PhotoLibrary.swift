@@ -35,10 +35,10 @@ struct OrganizeScope: Identifiable {
             }
         }
         authorized = (status == .authorized || status == .limited)
+        // Populate scopes BEFORE marking loaded, so the home never flashes the
+        // "사진이 없어요" empty state while photos are still being fetched.
+        if authorized { await reload() }
         loaded = true
-        guard authorized else { return }
-
-        await reload()
     }
 
     /// Re-read the library (after an organize session: new "Lumen" album, changed
