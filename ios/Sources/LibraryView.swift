@@ -6,6 +6,9 @@ import Photos
 struct LibraryView: View {
     @State private var lib = PhotoLibrary()
     @State private var scope: OrganizeScope?
+    @Environment(\.horizontalSizeClass) private var hSize
+
+    private let gridColumns = [GridItem(.adaptive(minimum: 250), spacing: 14)]
 
     var body: some View {
         NavigationStack {
@@ -59,10 +62,19 @@ struct LibraryView: View {
                     .foregroundStyle(.white).padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
                 Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     .padding(.horizontal, 4)
-                ForEach(lib.scopes) { s in
-                    ScopeRow(scope: s, library: lib)
-                        .contentShape(Rectangle())
-                        .onTapGesture { scope = s }
+                if hSize == .regular {
+                    LazyVGrid(columns: gridColumns, spacing: 14) {
+                        ForEach(lib.scopes) { s in
+                            ScopeCard(scope: s, library: lib)
+                                .onTapGesture { scope = s }
+                        }
+                    }
+                } else {
+                    ForEach(lib.scopes) { s in
+                        ScopeRow(scope: s, library: lib)
+                            .contentShape(Rectangle())
+                            .onTapGesture { scope = s }
+                    }
                 }
                 Text("앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 즐겨찾기, ♥는 ‘Lumen’ 앨범에 보관, ✕는 삭제 후보입니다.")
                     .font(.footnote).foregroundStyle(.white.opacity(0.4))
@@ -104,6 +116,46 @@ struct ScopeRow: View {
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.06)))
         .task(id: scope.id) {
             if cover == nil, let a = scope.cover { cover = await library.thumbnail(a, points: 60) }
+        }
+    }
+}
+
+/// Poster-style album card for the iPad grid — a big cover with title/count below.
+struct ScopeCard: View {
+    let scope: OrganizeScope
+    let library: PhotoLibrary
+    @State private var cover: UIImage?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Fixed 16:10 cover → every cell is the same height, so rows always align.
+            Color.clear
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .overlay {
+                    ZStack {
+                        Color.white.opacity(0.06)
+                        if let cover {
+                            Image(uiImage: cover).resizable().scaledToFill()
+                        } else {
+                            Image(systemName: scope.symbol).font(.system(size: 30)).foregroundStyle(.white.opacity(0.35))
+                        }
+                    }
+                }
+                .clipped()
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(scope.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
+                Text("\(scope.count)장").font(.caption).foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(.horizontal, 12).frame(height: 56, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color.lumenCard)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.06)))
+        .contentShape(Rectangle())
+        .task(id: scope.id) {
+            if cover == nil, let a = scope.cover { cover = await library.thumbnail(a, points: 300) }
         }
     }
 }
