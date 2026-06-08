@@ -5,9 +5,13 @@ private enum Decision { case keep, trash }
 
 /// What the brief centered confirmation shows after an action.
 private enum Flash {
-    case keep, trash, favorite
-    var text: String { self == .keep ? "보관" : self == .trash ? "삭제" : "즐겨찾기" }
-    var icon: String { self == .keep ? "rectangle.stack.fill" : self == .trash ? "trash.fill" : "star.fill" }
+    case keep, trash, favorite, unfavorite
+    var text: String {
+        switch self { case .keep: "보관"; case .trash: "삭제"; case .favorite: "즐겨찾기"; case .unfavorite: "즐겨찾기 해제" }
+    }
+    var icon: String {
+        switch self { case .keep: "rectangle.stack.fill"; case .trash: "trash.fill"; case .favorite: "star.fill"; case .unfavorite: "star.slash.fill" }
+    }
 }
 
 /// Viewer + organize. You enter as a viewer: swipe LEFT/RIGHT to browse (straight
@@ -28,6 +32,7 @@ struct OrganizeView: View {
     @State private var decisions: [Int: Decision] = [:]   // index → keep/trash
     @State private var finished = false
     @State private var flash: Flash?                      // brief action confirmation
+    @State private var currentIsFav = false               // live favorite state of the shown photo
     @State private var tick = 0
     @State private var doneMsg = ""
 
@@ -66,6 +71,11 @@ struct OrganizeView: View {
             .overlay(alignment: .top) { favoriteHint }
             .offset(offset)
             .id(index)
+            .task(id: index) {
+                guard index < assets.count else { return }
+                currentIsFav = PHAsset.fetchAssets(withLocalIdentifiers: [assets[index].localIdentifier], options: nil)
+                    .firstObject?.isFavorite ?? false
+            }
             .gesture(
                 DragGesture()
                     .onChanged { v in
@@ -93,7 +103,7 @@ struct OrganizeView: View {
     @ViewBuilder private var favoriteHint: some View {
         let p = min(max(-offset.height / threshold, 0), 1)
         if p > 0.02 {
-            Label("즐겨찾기", systemImage: "star.fill")
+            Label(currentIsFav ? "즐겨찾기 해제" : "즐겨찾기", systemImage: currentIsFav ? "star.slash.fill" : "star.fill")
                 .font(.headline.bold()).foregroundStyle(.white)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
@@ -251,14 +261,16 @@ struct OrganizeView: View {
         flyAndAdvance(CGSize(width: -1000, height: 0))
     }
 
-    /// Up-swipe: mark the photo as an Apple Favorite (non-destructive, lives in the
+    /// Up-swipe: toggle the photo's Apple Favorite (non-destructive, lives in the
     /// system 즐겨찾기 album), then move on. Independent of keep/trash.
     private func favorite() {
         guard index < assets.count else { return }
         let a = assets[index]
-        Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = true } }
+        let newValue = !currentIsFav
+        Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = newValue } }
+        currentIsFav = newValue
         tick += 1
-        showFlash(.favorite)
+        showFlash(newValue ? .favorite : .unfavorite)
         flyAndAdvance(CGSize(width: 0, height: -1200))
     }
 

@@ -13,7 +13,7 @@ struct OrganizeScope: Identifiable {
 
 /// Loads the device photo library (PhotoKit) and serves thumbnails / full images.
 /// This is the iOS equivalent of the macOS scanner — the app's library source.
-@MainActor @Observable final class PhotoLibrary {
+@MainActor @Observable final class PhotoLibrary: NSObject, PHPhotoLibraryChangeObserver {
     var assets: [PHAsset] = []
     var albums: [PHAssetCollection] = []
     var scopes: [OrganizeScope] = []
@@ -23,7 +23,11 @@ struct OrganizeScope: Identifiable {
     /// localIdentifiers already filed into "Lumen". Cached from the last snapshot so
     /// scope filtering never re-hits PhotoKit on the main thread.
     @ObservationIgnored private var keptIDs: Set<String> = []
+    @ObservationIgnored private var observing = false
+    @ObservationIgnored private var reloadTask: Task<Void, Never>?
     private let manager = PHCachingImageManager()
+
+    override init() { super.init() }
 
     func load() async {
         // Only prompt when the user hasn't decided yet — re-requesting an already
@@ -37,8 +41,25 @@ struct OrganizeScope: Identifiable {
         authorized = (status == .authorized || status == .limited)
         // Populate scopes BEFORE marking loaded, so the home never flashes the
         // "사진이 없어요" empty state while photos are still being fetched.
-        if authorized { await reload() }
+        if authorized {
+            await reload()
+            if !observing { PHPhotoLibrary.shared().register(self); observing = true }
+        }
         loaded = true
+    }
+
+    /// PhotoKit changed (a favorite toggled, a photo deleted, an external edit) —
+    /// rebuild so covers/counts stay fresh. Debounced to coalesce bursts.
+    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
+        Task { @MainActor in
+            guard authorized else { return }
+            reloadTask?.cancel()
+            reloadTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled else { return }
+                await reload()
+            }
+        }
     }
 
     /// Re-read the library (after an organize session: new "Lumen" album, changed

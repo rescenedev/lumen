@@ -12,6 +12,8 @@ struct AlbumGalleryView: View {
     @State private var ready = false
     @State private var open: StartAt?
     @State private var cols = 4                       // pinch to change
+    @State private var scale: CGFloat = 1             // continuous zoom during a pinch
+    @State private var startCols: Int?                // columns when the pinch began
 
     private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 3), count: cols) }
 
@@ -31,19 +33,40 @@ struct AlbumGalleryView: View {
                         }
                     }
                     .padding(.horizontal, 3).padding(.top, 54).padding(.bottom, 24)
+                    .scaleEffect(scale, anchor: .top)        // smooth, continuous during pinch
                 }
                 .simultaneousGesture(
-                    MagnifyGesture().onEnded { v in
-                        withAnimation(.spring(response: 0.3)) {
-                            if v.magnification > 1.08 { cols = max(2, cols - 1) }       // zoom in → bigger thumbs
-                            else if v.magnification < 0.92 { cols = min(8, cols + 1) }  // pinch → smaller thumbs
+                    MagnifyGesture()
+                        .onChanged { v in
+                            if startCols == nil { startCols = cols }
+                            scale = min(max(v.magnification, 0.45), 2.4)
                         }
-                    }
+                        .onEnded { _ in
+                            let start = startCols ?? cols
+                            // pinch out → fewer/bigger columns, pinch in → more/smaller
+                            let newCols = min(8, max(2, Int((CGFloat(start) / scale).rounded())))
+                            startCols = nil
+                            // Animate the column reflow and the scale-reset together so the
+                            // thumbnails slide to their new spots instead of popping.
+                            withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) {
+                                cols = newCols
+                                scale = 1
+                            }
+                        }
                 )
             }
             header
         }
         .preferredColorScheme(.dark)
+        .simultaneousGesture(
+            // Swipe in from the left edge → back to the album list.
+            DragGesture(minimumDistance: 20)
+                .onEnded { v in
+                    if v.startLocation.x < 36, v.translation.width > 90, abs(v.translation.height) < 70 {
+                        dismiss()
+                    }
+                }
+        )
         .task {
             assets = await library.assets(for: scope)
             ready = true
