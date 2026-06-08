@@ -35,6 +35,11 @@ struct LibraryView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            // Push the gallery so back is a natural horizontal slide (not a drop-down).
+            .navigationDestination(item: $scope) { s in
+                AlbumGalleryView(scope: s, library: lib)
+                    .toolbar(.hidden, for: .navigationBar)
+            }
         }
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
@@ -44,9 +49,6 @@ struct LibraryView: View {
             if scope == nil, ProcessInfo.processInfo.arguments.contains("-autoOrganize") {
                 scope = lib.scopes.first
             }
-        }
-        .fullScreenCover(item: $scope, onDismiss: { lib.refresh() }) { s in
-            AlbumGalleryView(scope: s, library: lib)
         }
     }
 

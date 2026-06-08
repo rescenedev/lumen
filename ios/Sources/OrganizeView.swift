@@ -267,6 +267,7 @@ struct OrganizeView: View {
         guard index < assets.count else { return }
         let a = assets[index]
         let newValue = !currentIsFav
+        library.bumpFavorite(a, added: newValue)   // instant home update
         Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = newValue } }
         currentIsFav = newValue
         tick += 1

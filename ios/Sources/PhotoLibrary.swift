@@ -2,13 +2,16 @@ import Photos
 import UIKit
 
 /// A pickable bundle to organize (all photos, a smart album, or a user album).
-struct OrganizeScope: Identifiable {
+struct OrganizeScope: Identifiable, Hashable {
     let id: String
     let title: String
     let symbol: String
     let count: Int
     let collection: PHAssetCollection?   // nil = all photos
     let cover: PHAsset?
+
+    static func == (a: OrganizeScope, b: OrganizeScope) -> Bool { a.id == b.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 /// Loads the device photo library (PhotoKit) and serves thumbnails / full images.
@@ -67,6 +70,19 @@ struct OrganizeScope: Identifiable {
     func refresh() {
         guard authorized else { return }
         Task { await reload() }
+    }
+
+    /// Instant, optimistic update of the 즐겨찾기 scope cover/count right when the
+    /// user toggles a favorite, so the home reflects it immediately instead of
+    /// waiting for PhotoKit's notification + a full reload. The reload still runs
+    /// afterwards to make counts/order exact.
+    func bumpFavorite(_ asset: PHAsset, added: Bool) {
+        guard let i = scopes.firstIndex(where: { $0.collection?.assetCollectionSubtype == .smartAlbumFavorites })
+        else { return }
+        let s = scopes[i]
+        scopes[i] = OrganizeScope(id: s.id, title: s.title, symbol: s.symbol,
+                                  count: max(0, s.count + (added ? 1 : -1)),
+                                  collection: s.collection, cover: added ? asset : s.cover)
     }
 
     /// All the PhotoKit work happens on a background thread; only the final
