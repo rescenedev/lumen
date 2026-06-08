@@ -42,10 +42,49 @@ else
 fi
 rm -rf "$ICON_TMP"
 
-# --- Ad-hoc code signature (lets the app launch without Gatekeeper fuss) ---
-echo "==> Ad-hoc signing…"
-codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null || \
-    echo "    (codesign skipped — app will still run locally)"
+# --- Code signing (conditional) ------------------------------------------
+# If a Developer ID identity is available we sign + (optionally) notarize for
+# distribution; otherwise we fall back to an ad-hoc signature so the app still
+# runs locally. Configure for real signing via env vars:
+#   export DEVELOPER_ID="Developer ID Application: Your Name (TEAMID)"
+#   export NOTARY_PROFILE="lumen-notary"   # from: xcrun notarytool store-credentials
+#   export ENTITLEMENTS="$ROOT/Scripts/Lumen.entitlements"   # optional
+have_developer_id=false
+if [ -n "${DEVELOPER_ID:-}" ] && \
+   security find-identity -v -p codesigning 2>/dev/null | grep -qF "$DEVELOPER_ID"; then
+    have_developer_id=true
+fi
+
+if [ "$have_developer_id" = true ]; then
+    echo "==> Signing with Developer ID (hardened runtime)…"
+    sign_args=(--force --deep --timestamp --options runtime --sign "$DEVELOPER_ID")
+    if [ -n "${ENTITLEMENTS:-}" ] && [ -f "$ENTITLEMENTS" ]; then
+        sign_args+=(--entitlements "$ENTITLEMENTS")
+    fi
+    codesign "${sign_args[@]}" "$APP_BUNDLE"
+
+    if [ -n "${NOTARY_PROFILE:-}" ]; then
+        echo "==> Notarizing (this can take a few minutes)…"
+        NOTARIZE_ZIP="$(mktemp -d)/Lumen-notarize.zip"
+        ditto -c -k --keepParent "$APP_BUNDLE" "$NOTARIZE_ZIP"
+        if xcrun notarytool submit "$NOTARIZE_ZIP" \
+               --keychain-profile "$NOTARY_PROFILE" --wait; then
+            echo "==> Stapling notarization ticket…"
+            xcrun stapler staple "$APP_BUNDLE"
+            xcrun stapler validate "$APP_BUNDLE" && echo "    notarized & stapled ✓"
+        else
+            echo "    ⚠️  Notarization failed — app is signed but not notarized."
+        fi
+        rm -rf "$(dirname "$NOTARIZE_ZIP")"
+    else
+        echo "    (NOTARY_PROFILE unset — signed with Developer ID but NOT notarized)"
+    fi
+else
+    # --- Ad-hoc signature (lets the app launch locally without Gatekeeper fuss) ---
+    echo "==> Ad-hoc signing (no Developer ID — set DEVELOPER_ID to notarize)…"
+    codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null || \
+        echo "    (codesign skipped — app will still run locally)"
+fi
 
 echo ""
 echo "✅ Built: $APP_BUNDLE"
