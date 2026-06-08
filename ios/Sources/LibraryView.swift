@@ -1,13 +1,11 @@
 import SwiftUI
 import Photos
 
-/// Home: a polished dashboard — branded onboarding before access, then a hero
-/// "정리 시작" card over a Photos-style grid.
+/// Home: pick what to organize (전체 / 즐겨찾기 / 최근 / 스크린샷 / each album),
+/// then swipe just that bundle. Scoping keeps large libraries manageable.
 struct LibraryView: View {
     @State private var lib = PhotoLibrary()
-    @State private var organizing = false
-
-    private let cols = Array(repeating: GridItem(.flexible(), spacing: 2), count: 4)
+    @State private var scope: OrganizeScope?
 
     var body: some View {
         NavigationStack {
@@ -17,77 +15,64 @@ struct LibraryView: View {
                 } else if !lib.authorized {
                     OnboardingView { Task { await lib.load() } }
                 } else {
-                    libraryContent
+                    list
                 }
             }
             .navigationTitle("Lumen")
-            .navigationBarTitleDisplayMode(lib.authorized ? .large : .inline)
         }
         .task { if !lib.loaded { await lib.load() } }
-        .fullScreenCover(isPresented: $organizing) {
-            OrganizeView(assets: lib.assets, library: lib)
+        .fullScreenCover(item: $scope) { s in
+            OrganizeView(assets: lib.assets(for: s), library: lib)
         }
     }
 
-    private var libraryContent: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                heroCard
-                if lib.assets.isEmpty {
-                    ContentUnavailableView("사진 없음", systemImage: "photo")
-                        .frame(height: 240)
+    private var list: some View {
+        List {
+            Section {
+                ForEach(lib.scopes) { s in
+                    Button { scope = s } label: { ScopeRow(scope: s, library: lib) }
+                        .buttonStyle(.plain)
+                }
+            } header: {
+                Text("정리할 묶음")
+            } footer: {
+                Text("묶음을 골라 좌우로 넘기며 정리하세요. 위로 넘기면 ‘Lumen’ 앨범으로 모읍니다.")
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+}
+
+/// One row in the scope picker: cover thumbnail · title · count.
+struct ScopeRow: View {
+    let scope: OrganizeScope
+    let library: PhotoLibrary
+    @State private var cover: UIImage?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.fill.tertiary)
+                if let cover {
+                    Image(uiImage: cover).resizable().scaledToFill()
                 } else {
-                    sectionHeader
-                    LazyVGrid(columns: cols, spacing: 2) {
-                        ForEach(lib.assets, id: \.localIdentifier) { asset in
-                            AssetThumbnail(asset: asset, library: lib, selected: false, selecting: false)
-                        }
-                    }
+                    Image(systemName: scope.symbol).font(.title3).foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 2)
-            .padding(.top, 4)
-        }
-    }
+            .frame(width: 56, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-    private var heroCard: some View {
-        Button { organizing = true } label: {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Image(systemName: "sparkles").font(.title3)
-                    Spacer()
-                    Text("\(lib.assets.count)장").font(.subheadline.weight(.medium)).opacity(0.9)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("사진 정리 시작").font(.title2.bold())
-                    Text("좌우로 넘기며 보관·삭제를 빠르게 결정하세요")
-                        .font(.subheadline).opacity(0.92).fixedSize(horizontal: false, vertical: true)
-                }
-                HStack(spacing: 6) {
-                    Text("시작하기").font(.subheadline.weight(.semibold))
-                    Image(systemName: "arrow.right").font(.footnote.weight(.bold))
-                }
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(.white.opacity(0.22), in: Capsule())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(scope.title).font(.headline)
+                Text("\(scope.count)장").font(.subheadline).foregroundStyle(.secondary)
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(heroGradient, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .foregroundStyle(.white)
-            .shadow(color: .lumenAccent.opacity(0.35), radius: 18, y: 8)
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 14)
-        .disabled(lib.assets.isEmpty)
-        .opacity(lib.assets.isEmpty ? 0.6 : 1)
-    }
-
-    private var sectionHeader: some View {
-        HStack {
-            Text("전체 사진").font(.headline)
             Spacer()
+            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
         }
-        .padding(.horizontal, 14).padding(.top, 4)
+        .padding(.vertical, 4)
+        .task(id: scope.id) {
+            if cover == nil, let a = scope.cover { cover = await library.thumbnail(a, points: 60) }
+        }
     }
 }
 
@@ -105,7 +90,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 18) {
                 feature("hand.draw.fill", "좌우 스와이프로 정리", "한 장씩 넘기며 보관·삭제를 결정")
-                feature("heart.fill", "보관은 즐겨찾기로", "남길 사진은 한 번에 즐겨찾기")
+                feature("rectangle.stack.badge.plus", "위로 넘기면 Lumen 앨범", "나중에 천천히 분류")
                 feature("checkmark.shield.fill", "안전하게", "삭제는 항상 확인 후 진행")
             }
             .padding(.top, 36).padding(.horizontal, 30)

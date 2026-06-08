@@ -1,11 +1,22 @@
 import Photos
 import UIKit
 
+/// A pickable bundle to organize (all photos, a smart album, or a user album).
+struct OrganizeScope: Identifiable {
+    let id: String
+    let title: String
+    let symbol: String
+    let count: Int
+    let collection: PHAssetCollection?   // nil = all photos
+    let cover: PHAsset?
+}
+
 /// Loads the device photo library (PhotoKit) and serves thumbnails / full images.
 /// This is the iOS equivalent of the macOS scanner — the app's library source.
 @MainActor @Observable final class PhotoLibrary {
     var assets: [PHAsset] = []
     var albums: [PHAssetCollection] = []
+    var scopes: [OrganizeScope] = []
     var authorized = false
     var loaded = false
 
@@ -27,6 +38,54 @@ import UIKit
         result.enumerateObjects { a, _, _ in arr.append(a) }
         assets = arr
         loadAlbums()
+        buildScopes()
+    }
+
+    // MARK: - Scopes (pick what to organize)
+
+    private func imageOptions() -> PHFetchOptions {
+        let o = PHFetchOptions()
+        o.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        o.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        return o
+    }
+
+    private func buildScopes() {
+        var out: [OrganizeScope] = []
+        out.append(.init(id: "all", title: "전체 사진", symbol: "photo.on.rectangle",
+                         count: assets.count, collection: nil, cover: assets.first))
+
+        func smart(_ subtype: PHAssetCollectionSubtype, _ title: String, _ symbol: String) {
+            guard let c = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil).firstObject
+            else { return }
+            let r = PHAsset.fetchAssets(in: c, options: imageOptions())
+            if r.count > 0 {
+                out.append(.init(id: c.localIdentifier, title: title, symbol: symbol,
+                                 count: r.count, collection: c, cover: r.firstObject))
+            }
+        }
+        smart(.smartAlbumFavorites, "즐겨찾기", "heart")
+        smart(.smartAlbumRecentlyAdded, "최근 추가", "clock")
+        smart(.smartAlbumScreenshots, "스크린샷", "camera.viewfinder")
+
+        for c in albums {
+            let r = PHAsset.fetchAssets(in: c, options: imageOptions())
+            if r.count > 0 {
+                out.append(.init(id: c.localIdentifier, title: c.localizedTitle ?? "앨범", symbol: "rectangle.stack",
+                                 count: r.count, collection: c, cover: r.firstObject))
+            }
+        }
+        scopes = out
+    }
+
+    /// The asset list for a scope, fetched on demand (so the picker stays light).
+    func assets(for scope: OrganizeScope) -> [PHAsset] {
+        guard let c = scope.collection else { return assets }
+        let r = PHAsset.fetchAssets(in: c, options: imageOptions())
+        var arr: [PHAsset] = []
+        arr.reserveCapacity(r.count)
+        r.enumerateObjects { a, _, _ in arr.append(a) }
+        return arr
     }
 
     // MARK: - Albums (for up-swipe classification)
