@@ -7,6 +7,7 @@ struct SidebarView: View {
     @State private var renamingAlbum: Album?
     @State private var renameText = ""
     @State private var photoAlbumsExpanded = false
+    @State private var expandedFolders: Set<URL> = []
 
     var body: some View {
         List(selection: Binding(
@@ -158,9 +159,8 @@ struct SidebarView: View {
         if !folderCounts.isEmpty {
             Section {
                 if model.folderTreeView {
-                    OutlineGroup(model.folderTree, children: \.children) { node in
-                        row(.folder(node.url), node.name, .secondary, count: node.count)
-                            .contextMenu { FolderContextMenu(url: node.url) }
+                    ForEach(model.folderTree) { node in
+                        FolderTreeNode(node: node, expanded: $expandedFolders)
                     }
                 } else {
                     let folders = folderCounts.keys.sorted {
@@ -205,4 +205,55 @@ struct SidebarView: View {
         .tag(item)
     }
 
+}
+
+/// One node of the folder tree. Folders with children expand/collapse via the
+/// disclosure chevron *or* a double-click on the row — the latter mirrors the
+/// Photos-albums section and matches Finder muscle memory.
+private struct FolderTreeNode: View {
+    @Environment(AppModel.self) private var model
+    let node: FolderNode
+    @Binding var expanded: Set<URL>
+
+    private var hasChildren: Bool { !(node.children?.isEmpty ?? true) }
+
+    private var isExpanded: Binding<Bool> {
+        Binding(
+            get: { expanded.contains(node.url) },
+            set: { expanded = $0 ? expanded.union([node.url]) : expanded.subtracting([node.url]) }
+        )
+    }
+
+    var body: some View {
+        if hasChildren {
+            DisclosureGroup(isExpanded: isExpanded) {
+                ForEach(node.children ?? []) { child in
+                    FolderTreeNode(node: child, expanded: $expanded)
+                }
+            } label: {
+                label
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        model.selectedSidebar = .folder(node.url)   // move selection to this folder
+                        withAnimation { isExpanded.wrappedValue.toggle() }
+                    }
+            }
+        } else {
+            label
+        }
+    }
+
+    private var label: some View {
+        Label {
+            HStack {
+                Text(node.name).lineLimit(1)
+                Spacer()
+                Text("\(node.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            }
+        } icon: {
+            Image(systemName: "folder").foregroundStyle(.secondary)
+        }
+        .tag(SidebarItem.folder(node.url))
+        .contextMenu { FolderContextMenu(url: node.url) }
+    }
 }
