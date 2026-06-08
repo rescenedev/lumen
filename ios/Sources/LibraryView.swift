@@ -22,9 +22,7 @@ struct LibraryView: View {
                     scopeList
                 }
             }
-            .navigationTitle("Lumen")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
@@ -37,8 +35,10 @@ struct LibraryView: View {
     private var scopeList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
+                Text("Lumen").font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white).padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
                 Text("정리할 묶음").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
-                    .padding(.horizontal, 4).padding(.top, 4)
+                    .padding(.horizontal, 4)
                 ForEach(lib.scopes) { s in
                     ScopeRow(scope: s, library: lib)
                         .contentShape(Rectangle())
