@@ -136,6 +136,15 @@ struct OrganizeScope: Identifiable {
         return await createAlbum("Lumen")
     }
 
+    /// Add a photo to the Lumen album right away (create it the first time), so the
+    /// album exists during the session — no need to wait for a summary "apply".
+    @ObservationIgnored private var lumenCollection: PHAssetCollection?
+    func addToLumen(_ asset: PHAsset) async {
+        if lumenCollection == nil { lumenCollection = await lumenAlbum() }
+        guard let c = lumenCollection else { return }
+        await addAssets([asset], to: c)
+    }
+
     /// Square thumbnail for the grid. `.highQualityFormat` → exactly one callback
     /// (safe to bridge to a continuation).
     func thumbnail(_ asset: PHAsset, points: CGFloat) async -> UIImage? {

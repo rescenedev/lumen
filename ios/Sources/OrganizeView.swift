@@ -140,9 +140,9 @@ struct OrganizeView: View {
                 stat("삭제", trash.count, "trash.fill")
             }.padding(.vertical, 8)
             VStack(spacing: 12) {
-                if !keeps.isEmpty || !albumed.isEmpty {
-                    Button { Task { await applyNonDestructive() } } label: {
-                        Label("보관·Lumen 적용", systemImage: "checkmark").frame(maxWidth: .infinity)
+                if !keeps.isEmpty {
+                    Button { Task { await favoriteKeeps() } } label: {
+                        Label("보관 \(keeps.count)장 즐겨찾기", systemImage: "heart").frame(maxWidth: .infinity)
                     }.buttonStyle(.bordered).controlSize(.large).tint(.white)
                 }
                 if !trash.isEmpty {
@@ -179,19 +179,20 @@ struct OrganizeView: View {
         switch decision {
         case .keep: keeps.append(a)
         case .trash: trash.append(a)
-        case .album: albumed.append(a)
+        case .album:
+            albumed.append(a)
+            Task { await library.addToLumen(a) }   // file into Lumen right away
         }
         tick += 1
         withAnimation(.easeOut(duration: 0.26)) { offset = fly }
         Task { try? await Task.sleep(for: .milliseconds(255)); index += 1; offset = .zero }
     }
 
-    private func applyNonDestructive() async {
+    private func favoriteKeeps() async {
         try? await PHPhotoLibrary.shared().performChanges {
             for a in keeps { PHAssetChangeRequest(for: a).isFavorite = true }
         }
-        if !albumed.isEmpty, let c = await library.lumenAlbum() { await library.addAssets(albumed, to: c) }
-        doneMsg = "보관·Lumen 적용 완료"
+        doneMsg = "즐겨찾기 \(keeps.count)장 완료"
     }
 
     private func deleteTrash() async {

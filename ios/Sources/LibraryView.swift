@@ -30,8 +30,9 @@ struct LibraryView: View {
         List {
             Section {
                 ForEach(lib.scopes) { s in
-                    Button { scope = s } label: { ScopeRow(scope: s, library: lib) }
-                        .buttonStyle(.plain)
+                    ScopeRow(scope: s, library: lib)
+                        .contentShape(Rectangle())          // whole cell is tappable
+                        .onTapGesture { scope = s }
                 }
             } header: {
                 Text("정리할 묶음")
