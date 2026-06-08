@@ -9,6 +9,10 @@ struct PhotoBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let update = model.availableUpdate, !model.updateBannerDismissed {
+                updateBanner(update)
+                Divider()
+            }
             searchBar
             Divider()
             content
@@ -34,6 +38,33 @@ struct PhotoBrowserView: View {
         guard model.viewMode != .map else { return }
         ThumbnailCache.shared.yieldWarmingToBrowsing()
         ThumbnailCache.shared.prefetch(model.visiblePhotos.map { $0.url })
+    }
+
+    /// Non-intrusive "a new version exists" bar. Notify-only: Homebrew installs
+    /// get the upgrade command, direct downloads get the release page.
+    private func updateBanner(_ update: UpdateInfo) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill").foregroundStyle(.tint)
+            Text("Lumen \(update.version) 사용 가능").font(.callout.weight(.medium))
+            Spacer()
+            if update.isBrewInstall {
+                Button("Homebrew로 업데이트") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(UpdateInfo.brewUpgradeCommand, forType: .string)
+                    model.showToast("업그레이드 명령을 복사했어요: \(UpdateInfo.brewUpgradeCommand)")
+                }
+            } else {
+                Button("다운로드") { NSWorkspace.shared.open(update.releaseURL) }
+            }
+            Button("릴리즈 노트") { NSWorkspace.shared.open(update.releaseURL) }
+                .buttonStyle(.plain).foregroundStyle(.secondary).font(.callout)
+            Button { model.updateBannerDismissed = true } label: {
+                Image(systemName: "xmark").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(.tint.opacity(0.12))
     }
 
     private var searchBar: some View {

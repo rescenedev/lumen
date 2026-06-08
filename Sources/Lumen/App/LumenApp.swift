@@ -13,6 +13,7 @@ struct LumenApp: App {
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About Lumen") { model.showAbout = true }
+                Button("Check for Updates…") { model.checkForUpdates(force: true) }
             }
 
             CommandGroup(after: .sidebar) {

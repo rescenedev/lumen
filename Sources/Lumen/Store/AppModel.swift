@@ -145,6 +145,30 @@ final class AppModel {
     var showAbout = false
     var showShortcuts = false
 
+    // Update notification (notify-only — never auto-installs; see UpdateChecker).
+    var availableUpdate: UpdateInfo?
+    var updateBannerDismissed = false
+    @ObservationIgnored private let updateCheckKey = "lumen.lastUpdateCheck"
+
+    /// Check GitHub for a newer release. Throttled to once/day unless `force`d
+    /// (e.g. from the "Check for Updates…" menu item). Silent on failure.
+    func checkForUpdates(force: Bool = false) {
+        if !force {
+            let last = UserDefaults.standard.double(forKey: updateCheckKey)
+            if last > 0, Date().timeIntervalSince1970 - last < 86_400 { return }
+        }
+        Task {
+            let info = await UpdateChecker.check()
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: updateCheckKey)
+            if let info {
+                availableUpdate = info
+                updateBannerDismissed = false
+            } else if force {
+                showToast("최신 버전을 사용 중입니다 (\(UpdateChecker.currentVersion)).")
+            }
+        }
+    }
+
     // Crop & resize editor (non-destructive by default).
     var editTarget: Photo?
     var showEditor = false

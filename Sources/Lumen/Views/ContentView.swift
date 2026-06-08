@@ -67,6 +67,7 @@ struct ContentView: View {
         }
         .overlay(alignment: .bottom) { toastBanner }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.toast)
+        .task { model.checkForUpdates() }
     }
 
     @ViewBuilder
