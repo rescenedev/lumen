@@ -86,17 +86,35 @@ final class AppModel {
         }
     }
 
+    /// True while a Photos album/library scope is fetching from PhotoKit, so the
+    /// grid can show "Loading…" instead of an empty "No Photos" state.
+    private(set) var isLoadingAssetScope = false
+
     /// Load one Photos album's assets on demand (cached per album id).
     func loadPhotosAlbum(_ id: String) {
         if photosAccess == .unknown { loadPhotosLibraryIfNeeded() }
         guard currentAssetAlbumId != id else { return }
         currentAssetAlbumId = id
         assetAlbumPhotos = []
+        isLoadingAssetScope = true
         Task {
             let photos = await PhotosLibraryService.fetchAssets(inAlbumId: id)
-            if self.currentAssetAlbumId == id { self.assetAlbumPhotos = photos }
+            if self.currentAssetAlbumId == id {
+                self.assetAlbumPhotos = photos
+                self.isLoadingAssetScope = false
+            }
         }
     }
+    /// Whether the currently-shown scope is still fetching its photos — drives
+    /// the grid's "Loading…" placeholder for the (async) Photos library/albums.
+    var isLoadingVisibleScope: Bool {
+        switch committedSidebar {
+        case .photosLibrary: return photosAccess == .loading
+        case .photosAlbum: return isLoadingAssetScope
+        default: return isLoadingLibrary
+        }
+    }
+
     var sortOrder: SortOrder = .dateNewest
     var searchText = ""
     var thumbnailSize: Double = 320
@@ -783,13 +801,19 @@ final class AppModel {
 
     var selectedPhotos: [Photo] { allPhotos.filter { selection.contains($0.id) } }
 
-    // O(1) photo lookup by id, rebuilt only when the library changes.
+    // O(1) photo lookup by id, rebuilt only when the library or Photos assets
+    // change. Includes Apple Photos assets (library + the open album) so the
+    // inspector and viewer resolve a selected asset, not just file photos.
     @ObservationIgnored private var idIndexCache: [URL: Photo] = [:]
-    @ObservationIgnored private var idIndexKey = -1
+    @ObservationIgnored private var idIndexKey = (-1, -1)
     @ObservationIgnored private var photoByID: [URL: Photo] {
-        if libraryVersion == idIndexKey { return idIndexCache }
-        idIndexCache = Dictionary(allPhotos.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
-        idIndexKey = libraryVersion
+        let key = (libraryVersion, assetsVersion)
+        if key == idIndexKey { return idIndexCache }
+        var dict = Dictionary(allPhotos.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
+        for p in assetPhotos where dict[p.url] == nil { dict[p.url] = p }
+        for p in assetAlbumPhotos where dict[p.url] == nil { dict[p.url] = p }
+        idIndexCache = dict
+        idIndexKey = key
         return idIndexCache
     }
 
@@ -964,24 +988,117 @@ final class AppModel {
     }
 
     private(set) var isIndexingExif = false
+    /// Progress for the on-demand EXIF pass, so the UI can show "Indexing…"
+    /// instead of an empty result while a large (NAS) library is read.
+    private(set) var exifIndexTotal = 0
+    private(set) var exifIndexDone = 0
+    /// Which storage the index is currently reading ("Local disk" / "NAS") and
+    /// the recent throughput in photos/sec — shown in the status bar.
+    private(set) var exifIndexSource = ""
+    private(set) var exifIndexRate = 0
+    /// Set briefly when an indexing pass finishes, so the status bar can confirm
+    /// "Indexed N photos" before clearing. `exifReadyCount` is the photos covered.
+    private(set) var exifIndexJustFinished = false
+    private(set) var exifReadyCount = 0
 
     /// Index EXIF for any photos that don't have it yet — called on demand when
     /// the Map or an EXIF-based filter is first used, so a plain browse session
-    /// never reads 50k files.
+    /// never reads 50k files. Indexed in chunks so search/map results stream in
+    /// progressively rather than appearing all at once after a long stall.
     func ensureExifIndex() {
         guard !isIndexingExif else { return }
         let missing = allPhotos.filter { exif[$0.url.path] == nil }
         guard !missing.isEmpty else { return }
         isIndexingExif = true
-        let urls = missing.map { $0.url }
-        Task {
-            let added = await Task.detached(priority: .utility) { ExifIndexer.index(urls) }.value
+
+        // Fast local disk before the (slow) NAS, so results appear quickly and
+        // the user never waits on the network for nearby photos. The boundary
+        // also drives the "Local disk / NAS" status label.
+        let networkPrefixes = Self.networkVolumePrefixes()
+        let isNetwork = { (url: URL) in networkPrefixes.contains { url.path.hasPrefix($0) } }
+        let localURLs = missing.map { $0.url }.filter { !isNetwork($0) }
+        let networkURLs = missing.map { $0.url }.filter { isNetwork($0) }
+        let urls = localURLs + networkURLs
+        let localCount = localURLs.count
+
+        // Report progress against the WHOLE library, not just this session's
+        // remaining work — so the counter resumes from what's already cached
+        // (e.g. local photos done on a prior launch) instead of restarting at 0.
+        let libraryTotal = allPhotos.count
+        let baseDone = libraryTotal - urls.count
+        exifIndexTotal = libraryTotal
+        exifIndexDone = baseDone
+        exifIndexRate = 0
+        exifIndexSource = localCount > 0 ? "Local disk" : "NAS"
+
+        // .utility (not .background): a serial NAS read is already low-CPU since
+        // it mostly waits on I/O, but .background throttles so hard the pass never
+        // makes progress. .utility stays imperceptible yet actually completes.
+        Task(priority: .utility) {
+            let chunkSize = 200
+            let saveEvery = 2_000   // checkpoint so a long NAS pass survives a quit
             var merged = exif
-            for (key, value) in added { merged[key] = value }
-            exif = merged
+            var start = 0
+            var sinceSave = 0
+            var tickTime = Date()
+            var tickDone = 0
+            var lastPublish = Date()
+            while start < urls.count {
+                let end = min(start + chunkSize, urls.count)
+                let chunk = Array(urls[start..<end])
+                let added = await Task.detached(priority: .utility) { ExifIndexer.index(chunk) }.value
+                for (key, value) in added { merged[key] = value }
+                // Cheap status updates every chunk (status bar only).
+                exifIndexDone = baseDone + end
+                exifIndexSource = start < localCount ? "Local disk" : "NAS"
+                // Publishing `exif` invalidates the visible cache and re-filters
+                // the whole library — expensive while a search is active. Throttle
+                // it to ~1.5s so streaming results don't make the grid stutter.
+                if -lastPublish.timeIntervalSinceNow >= 1.5 {
+                    exif = merged
+                    lastPublish = Date()
+                }
+                // Rolling throughput (photos/sec) over the last ~second.
+                let elapsed = -tickTime.timeIntervalSinceNow
+                if elapsed >= 1 {
+                    exifIndexRate = Int(Double(end - tickDone) / elapsed)
+                    tickTime = Date()
+                    tickDone = end
+                }
+                start = end
+                sinceSave += chunk.count
+                if sinceSave >= saveEvery {   // persist partial progress periodically
+                    persistExifCache()
+                    sinceSave = 0
+                }
+            }
+            exif = merged            // final publish so the cache + search are complete
             persistExifCache()
             isIndexingExif = false
+            exifIndexTotal = 0
+            exifIndexDone = 0
+            exifIndexRate = 0
+            exifIndexSource = ""
+            // Briefly confirm the index is ready, then clear the status indicator.
+            exifReadyCount = exif.count
+            exifIndexJustFinished = true
+            Task {
+                try? await Task.sleep(for: .seconds(5))
+                exifIndexJustFinished = false
+            }
         }
+    }
+
+    /// Mount-point paths of currently-mounted *network* volumes (NAS/SMB/AFP).
+    /// Used to classify photo URLs as local vs network by path prefix — far
+    /// cheaper than stat-ing every one of tens of thousands of files.
+    nonisolated static func networkVolumePrefixes() -> [String] {
+        let keys: [URLResourceKey] = [.volumeIsLocalKey]
+        let volumes = FileManager.default.mountedVolumeURLs(
+            includingResourceValuesForKeys: keys, options: []) ?? []
+        return volumes
+            .filter { (try? $0.resourceValues(forKeys: [.volumeIsLocalKey]).volumeIsLocal) == false }
+            .map { $0.path }
     }
 
     /// Index EXIF for just the given (new) photos and merge into the cache.
@@ -1378,8 +1495,17 @@ final class AppModel {
             }
             isLoadingLibrary = false
 
+            // Build the photo-metadata (EXIF) index up front so search, the map,
+            // and camera filters are ready without the user having to trigger it.
+            // Kick off on the cached list immediately — don't wait for the (slow,
+            // NAS) reconcile. Runs at utility priority behind thumbnail warming;
+            // cached so later launches only index newly-added photos.
+            ensureExifIndex()
+
             let available = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
             if !available.isEmpty { await reconcile(roots: available) }
+
+            ensureExifIndex()   // catch any photos reconcile newly added
         }
     }
 

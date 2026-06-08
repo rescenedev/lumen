@@ -5,7 +5,10 @@ import ImageIO
 /// search, and the map don't pay a decode cost at query time.
 enum ExifIndexer {
     /// Index the given files, returning a [path: ExifInfo] map. Designed to run
-    /// inside a detached task.
+    /// inside a detached background task. Reads serially on purpose — the NAS is
+    /// the bottleneck (parallelism barely helped in testing) and a serial pass at
+    /// background priority keeps the index from spiking CPU or stealing I/O from
+    /// the foreground while the user browses.
     static func index(_ urls: [URL]) -> [String: ExifInfo] {
         var result: [String: ExifInfo] = [:]
         result.reserveCapacity(urls.count)

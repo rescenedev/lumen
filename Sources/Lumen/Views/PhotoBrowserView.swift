@@ -65,6 +65,9 @@ struct PhotoBrowserView: View {
     /// Debounce search input so we don't re-filter the whole library on every keystroke.
     private func scheduleSearch(_ value: String) {
         searchDebounce?.cancel()
+        // Camera search needs the EXIF index; populate it on demand the first time
+        // the user actually searches (a plain browse session still skips it).
+        if !value.trimmingCharacters(in: .whitespaces).isEmpty { model.ensureExifIndex() }
         let work = DispatchWorkItem { model.searchText = value }
         searchDebounce = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
@@ -96,12 +99,40 @@ struct PhotoBrowserView: View {
         }
     }
 
+    @ViewBuilder
     private var emptyFilterState: some View {
-        ContentUnavailableView {
-            Label("No Photos", systemImage: "photo.on.rectangle")
-        } description: {
-            Text(emptyDescription)
+        if model.isLoadingVisibleScope {
+            VStack(spacing: 14) {
+                ProgressView()
+                Text("Loading…").font(.title3.weight(.medium))
+                Text("Fetching photos from your library.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        } else if model.isIndexingExif && !model.searchText.isEmpty {
+            indexingState
+        } else {
+            ContentUnavailableView {
+                Label("No Photos", systemImage: "photo.on.rectangle")
+            } description: {
+                Text(emptyDescription)
+            }
         }
+    }
+
+    /// Shown while the EXIF index is still being built for a search — camera
+    /// matches can't appear until their files have been read.
+    private var indexingState: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+            Text("Indexing photo metadata…").font(.title3.weight(.medium))
+            Text(indexingDescription).font(.callout).foregroundStyle(.secondary)
+        }
+    }
+
+    private var indexingDescription: String {
+        let total = model.exifIndexTotal
+        guard total > 0 else { return "Reading EXIF (camera, date, GPS) to match “\(model.searchText)”." }
+        return "Reading EXIF (camera, date, GPS)… \(model.exifIndexDone.formatted()) of \(total.formatted()) photos"
     }
 
     private var emptyDescription: String {
@@ -122,6 +153,23 @@ struct PhotoBrowserView: View {
 
             HStack(spacing: 6) {
                 WarmingStatusView(warming: model.warming)
+                if model.isIndexingExif {
+                    ProgressView().controlSize(.mini)
+                    Text(indexingStatusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help("Reading camera & EXIF info so search and the map can find photos")
+                } else if model.exifIndexJustFinished {
+                    Image(systemName: "checkmark.circle.fill")
+                        .imageScale(.small)
+                        .foregroundStyle(.green)
+                    Text("Metadata indexed · \(model.exifReadyCount.formatted()) photos")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help("Photo metadata (camera, date, GPS) is indexed — search and the map are ready")
+                }
                 Spacer()
                 if model.viewMode == .grid {
                     Image(systemName: "square.grid.3x3")
@@ -136,6 +184,16 @@ struct PhotoBrowserView: View {
         .padding(.horizontal, 12)
         .frame(height: 28)
         .background(.bar)
+    }
+
+    private var indexingStatusText: String {
+        let total = model.exifIndexTotal
+        guard total > 0 else { return "Indexing photo metadata…" }
+        var parts = ["Indexing metadata"]
+        if !model.exifIndexSource.isEmpty { parts.append(model.exifIndexSource) }
+        parts.append("\(model.exifIndexDone.formatted()) / \(total.formatted())")
+        if model.exifIndexRate > 0 { parts.append("\(model.exifIndexRate)/s") }
+        return parts.joined(separator: " · ")
     }
 
     private var statusText: String {
