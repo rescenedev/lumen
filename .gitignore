@@ -9,6 +9,10 @@ dist/
 # macOS
 .DS_Store
 
+# Private planning notes (not for the public repo)
+SELLING-TODO.md
+.private/
+
 # Xcode (if ever opened)
 *.xcuserstate
 xcuserdata/

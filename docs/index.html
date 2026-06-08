@@ -143,6 +143,9 @@
   .note{margin:16px auto 0;max-width:600px;background:var(--panel);border:1px solid var(--border);
     border-radius:12px;padding:15px 18px;color:var(--muted);font-size:14px;text-align:left}
   .note code{background:#0b0e16;padding:2px 7px;border-radius:6px;color:#cdd6f4;font-family:"SF Mono",ui-monospace,Menlo,monospace}
+  .note .copy{background:var(--panel-2);border:1px solid var(--border);color:var(--muted);
+    border-radius:7px;padding:3px 9px;font-size:12px;cursor:pointer;margin-left:8px;vertical-align:middle}
+  .note .copy:hover{color:var(--text)}
 
   footer{text-align:center;padding:54px 24px;color:var(--muted);border-top:1px solid var(--border);font-size:14px}
   footer a{color:#aab6ff}
@@ -270,14 +273,14 @@
     <h2 class="stitle reveal">지금 바로 시작</h2>
     <p class="ssub reveal">Homebrew로 한 줄. macOS 14(Sonoma) 이상.</p>
     <div class="install reveal">
-      <button class="copy" onclick="copyInstall()">복사</button>
+      <button class="copy" onclick="copyInstall(event)">복사</button>
       <code>brew tap rescenedev/tap
 brew trust --cask rescenedev/tap/lumen-photos
 brew install --cask lumen-photos</code>
     </div>
     <div class="note reveal">
       현재는 노타라이즈되지 않은 빌드라, 첫 실행 시 Gatekeeper가 막으면
-      앱을 <b>우클릭 → 열기</b> 하거나: <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code>
+      앱을 <b>우클릭 → 열기</b> 하거나: <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code><button class="copy" onclick="copyXattr(event)">복사</button>
     </div>
     <div class="note reveal">
       소스로 빌드: <code>git clone</code> 후 <code>./Scripts/make_app.sh</code> — Xcode 불필요, Command Line Tools만.
@@ -312,9 +315,14 @@ brew install --cask lumen-photos</code>
   const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.12});
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 
-  function copyInstall(){
+  function flashCopied(btn){const t=btn.textContent;btn.textContent='복사됨 ✓';setTimeout(()=>btn.textContent=t,1500);}
+  function copyInstall(e){
     navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew trust --cask rescenedev/tap/lumen-photos\nbrew install --cask lumen-photos");
-    document.querySelectorAll('.copy').forEach(b=>{const t=b.textContent;b.textContent='복사됨 ✓';setTimeout(()=>b.textContent=t,1500);});
+    flashCopied(e.currentTarget);
+  }
+  function copyXattr(e){
+    navigator.clipboard.writeText('xattr -dr com.apple.quarantine "/Applications/Lumen.app"');
+    flashCopied(e.currentTarget);
   }
 </script>
 </body>
