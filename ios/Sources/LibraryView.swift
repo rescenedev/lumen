@@ -18,9 +18,13 @@ struct LibraryView: View {
             ZStack {
                 Color.lumenBG.ignoresSafeArea()
                 if !lib.loaded {
-                    VStack(spacing: 14) {
-                        ProgressView().tint(.white)
-                        Text("사진을 불러오고 있어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                    TimelineView(.periodic(from: .now, by: 0.4)) { ctx in
+                        let n = Int(ctx.date.timeIntervalSince1970 / 0.4) % 4
+                        HStack(spacing: 0) {
+                            Text("사진을 불러오고 있어요")
+                            Text(String(repeating: ".", count: n)).frame(width: 16, alignment: .leading)
+                        }
+                        .font(.subheadline).foregroundStyle(.white.opacity(0.5))
                     }
                 } else if !lib.authorized {
                     OnboardingView { Task { await lib.load() } }
@@ -120,7 +124,9 @@ struct ScopeCard: View {
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.06)) }
         .contentShape(Rectangle())
         .task(id: scope.cover?.localIdentifier) {
-            if let a = scope.cover { cover = await library.thumbnail(a, points: 300) }
+            if let a = scope.cover {
+                for await img in library.imageStream(a, points: 300, mode: .aspectFill) { cover = img }
+            }
         }
     }
 }
