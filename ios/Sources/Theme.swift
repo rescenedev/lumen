@@ -10,18 +10,34 @@ let heroGradient = LinearGradient(
     colors: [Color(red: 0.36, green: 0.42, blue: 1.0), Color(red: 0.58, green: 0.36, blue: 0.98)],
     startPoint: .topLeading, endPoint: .bottomTrailing)
 
-/// The rounded "app glyph" (gradient tile + symbol) reused on onboarding.
+/// The app mark: two stacked photo cards, the front one tilted — a "swipe to
+/// organize" motif. Drawn (not an SF Symbol) so it reads as a real brand mark.
 struct LumenGlyph: View {
     var size: CGFloat = 72
+
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+        RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
             .fill(heroGradient)
             .frame(width: size, height: size)
             .overlay {
-                Image(systemName: "rectangle.portrait.on.rectangle.portrait.angled.fill")
-                    .font(.system(size: size * 0.42, weight: .semibold))
-                    .foregroundStyle(.white)
+                ZStack {
+                    card.rotationEffect(.degrees(-11)).offset(x: -size * 0.05, y: size * 0.02)
+                        .opacity(0.55)
+                    card.rotationEffect(.degrees(7)).offset(x: size * 0.055, y: -size * 0.01)
+                }
             }
-            .shadow(color: .lumenAccent.opacity(0.4), radius: size * 0.18, y: size * 0.08)
+            .shadow(color: .lumenAccent.opacity(0.4), radius: size * 0.16, y: size * 0.07)
+    }
+
+    private var card: some View {
+        RoundedRectangle(cornerRadius: size * 0.09, style: .continuous)
+            .fill(.white)
+            .frame(width: size * 0.40, height: size * 0.50)
+            .overlay(alignment: .bottom) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: size * 0.12, weight: .bold))
+                    .foregroundStyle(heroGradient)
+                    .padding(.bottom, size * 0.06)
+            }
     }
 }

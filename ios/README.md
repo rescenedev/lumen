@@ -21,3 +21,16 @@ open LumenIOS.xcodeproj       # pick a simulator, ⌘R
 ```
 
 `LumenIOS.xcodeproj/` is git-ignored — regenerate it from `project.yml`.
+
+## App icon
+
+The icon is generated (gradient + tilted photo cards) into the asset catalog:
+
+```sh
+swift Scripts/make_icon.swift Sources/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+```
+
+Compiling the catalog needs the full iOS platform installed (Xcode does this
+automatically on first build; or `xcodebuild -downloadPlatform iOS`). Until then
+`Scripts/sim.sh` may fail at `actool` on a machine missing the platform — open
+the project in Xcode (⌘R) instead, which downloads it.
