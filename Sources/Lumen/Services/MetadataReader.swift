@@ -27,6 +27,12 @@ struct ImageMetadata: Sendable {
 
     var gpsCoordinate: (lat: Double, lon: Double)?
 
+    // Set for Photos-library assets, whose info comes from PhotoKit rather than a
+    // file on disk (the synthetic URL has no real extension/size/path).
+    var byteSize: Int64?
+    var kind: String?
+    var sourceLabel: String?   // shown in "Where" for assets, e.g. "Apple Photos"
+
     var hasCameraInfo: Bool {
         cameraMake != nil || cameraModel != nil || lens != nil ||
         aperture != nil || shutterSpeed != nil || iso != nil || focalLength != nil
@@ -36,11 +42,24 @@ struct ImageMetadata: Sendable {
 /// Reads EXIF/TIFF/GPS metadata from an image file using ImageIO.
 enum MetadataReader {
     static func read(url: URL) -> ImageMetadata {
-        var meta = ImageMetadata()
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
-        else { return meta }
+        else { return ImageMetadata() }
+        return parse(props)
+    }
 
+    /// Parse metadata from already-decoded image data (e.g. PhotoKit-supplied
+    /// asset data), reusing the same property parsing as the file path.
+    static func read(data: Data) -> ImageMetadata {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        else { return ImageMetadata() }
+        return parse(props)
+    }
+
+    /// Extract EXIF/TIFF/GPS fields from a CGImageSource property dictionary.
+    static func parse(_ props: [CFString: Any]) -> ImageMetadata {
+        var meta = ImageMetadata()
         meta.pixelWidth = props[kCGImagePropertyPixelWidth] as? Int
         meta.pixelHeight = props[kCGImagePropertyPixelHeight] as? Int
         meta.colorModel = props[kCGImagePropertyColorModel] as? String

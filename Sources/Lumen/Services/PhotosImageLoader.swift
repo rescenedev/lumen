@@ -1,5 +1,6 @@
 import AppKit
 import Photos
+import UniformTypeIdentifiers
 
 /// Loads thumbnails and full images for Photos-library assets via PhotoKit.
 /// Thumbnails come from local representations (no iCloud download); full images
@@ -55,6 +56,55 @@ final class PhotosImageLoader {
         options.isSynchronous = false
         return await requestImage(asset, target: CGSize(width: maxPixel, height: maxPixel),
                                   options: options, skipDegraded: true)
+    }
+
+    /// Rich metadata for an asset, read from PhotoKit (and iCloud on demand).
+    /// Dimensions/dates/size/kind come from the asset + its resource (instant);
+    /// camera EXIF & GPS come from the image data (may download from iCloud).
+    func metadata(for url: URL) async -> ImageMetadata {
+        guard let asset = asset(for: url) else { return ImageMetadata() }
+        var meta = ImageMetadata()
+        meta.pixelWidth = asset.pixelWidth
+        meta.pixelHeight = asset.pixelHeight
+        meta.sourceLabel = "Apple Photos"
+        if let loc = asset.location {
+            meta.gpsCoordinate = (loc.coordinate.latitude, loc.coordinate.longitude)
+        }
+        // Original filename, type and byte size from the primary resource.
+        if let resource = PHAssetResource.assetResources(for: asset).first {
+            meta.kind = (resource.uniformTypeIdentifier as String?)
+                .flatMap { UTType($0)?.preferredFilenameExtension?.uppercased() }
+                ?? (resource.originalFilename as NSString).pathExtension.uppercased()
+            if let size = resource.value(forKey: "fileSize") as? Int64 { meta.byteSize = size }
+        }
+        // EXIF/camera from the image data (network allowed for iCloud-only assets).
+        if let data = await imageData(asset) {
+            let exif = MetadataReader.read(data: data)
+            // Keep PhotoKit's dimensions/size/kind; fold in the camera + GPS fields.
+            meta.cameraMake = exif.cameraMake; meta.cameraModel = exif.cameraModel
+            meta.lens = exif.lens; meta.focalLength = exif.focalLength
+            meta.aperture = exif.aperture; meta.shutterSpeed = exif.shutterSpeed
+            meta.iso = exif.iso; meta.dateTaken = exif.dateTaken
+            if meta.gpsCoordinate == nil { meta.gpsCoordinate = exif.gpsCoordinate }
+            if meta.byteSize == nil { meta.byteSize = Int64(data.count) }
+        }
+        return meta
+    }
+
+    /// Fetch an asset's image data (original), allowing iCloud download.
+    private func imageData(_ asset: PHAsset) async -> Data? {
+        let options = PHImageRequestOptions()
+        options.isNetworkAccessAllowed = true
+        options.deliveryMode = .highQualityFormat
+        options.isSynchronous = false
+        return await withCheckedContinuation { continuation in
+            var resumed = false
+            manager.requestImageDataAndOrientation(for: asset, options: options) { data, _, _, _ in
+                if resumed { return }
+                resumed = true
+                continuation.resume(returning: data)
+            }
+        }
     }
 
     /// Full image for the viewer; downloads the original from iCloud on demand.

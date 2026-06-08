@@ -121,16 +121,21 @@ struct InspectorView: View {
     }
 
     private func fileSection(for photo: Photo) -> some View {
-        MetadataSection(title: "File") {
-            InfoRow("Kind", photo.fileExtension.uppercased())
-            InfoRow("Size", Format.size(photo.byteSize))
+        // Assets pull Kind/Size/Where from PhotoKit; file photos use the on-disk
+        // values. Size is only shown once known (avoids a misleading "Zero KB").
+        let kind = photo.isAsset ? (metadata?.kind ?? "—") : photo.fileExtension.uppercased()
+        let byteSize = photo.isAsset ? metadata?.byteSize : photo.byteSize
+        let whereText = photo.isAsset ? (metadata?.sourceLabel ?? "Apple Photos") : photo.folderURL.path
+        return MetadataSection(title: "File") {
+            InfoRow("Kind", kind)
+            if let byteSize { InfoRow("Size", Format.size(byteSize)) }
             InfoRow("Dimensions", Format.dimensions(metadata?.pixelWidth, metadata?.pixelHeight))
             if let mp = Format.megapixels(metadata?.pixelWidth, metadata?.pixelHeight) {
                 InfoRow("Resolution", mp)
             }
             InfoRow("Created", Format.dateString(photo.creationDate))
             InfoRow("Modified", Format.dateString(photo.modificationDate))
-            InfoRow("Where", photo.folderURL.path, mono: true)
+            InfoRow("Where", whereText, mono: !photo.isAsset)
         }
     }
 
@@ -165,11 +170,16 @@ struct InspectorView: View {
 
     private func loadMetadata() async {
         metadata = nil
-        guard let url = photo?.url else { return }
-        let result = await Task.detached(priority: .userInitiated) {
-            MetadataReader.read(url: url)
-        }.value
-        metadata = result
+        guard let photo else { return }
+        // Assets have no file on disk — read their metadata from PhotoKit/iCloud.
+        if photo.isAsset {
+            metadata = await PhotosImageLoader.shared.metadata(for: photo.url)
+        } else {
+            let url = photo.url
+            metadata = await Task.detached(priority: .userInitiated) {
+                MetadataReader.read(url: url)
+            }.value
+        }
     }
 }
 
