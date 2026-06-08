@@ -108,8 +108,8 @@ struct OrganizeView: View {
 
     private var bottomControls: some View {
         HStack(spacing: 64) {
-            control("xmark", .red) { commit(.trash, fly: CGSize(width: -1000, height: 0)) }
-            control("heart.fill", .green) { commit(.keep, fly: CGSize(width: 1000, height: 0)) }
+            control("xmark", .white.opacity(0.85)) { commit(.trash, fly: CGSize(width: -1000, height: 0)) }
+            control("heart.fill", .white.opacity(0.85)) { commit(.keep, fly: CGSize(width: 1000, height: 0)) }
         }
         .padding(.bottom, 18)
         .frame(maxHeight: .infinity, alignment: .bottom)
@@ -143,15 +143,15 @@ struct OrganizeView: View {
                 if !keeps.isEmpty || !albumed.isEmpty {
                     Button { Task { await applyNonDestructive() } } label: {
                         Label("보관·Lumen 적용", systemImage: "checkmark").frame(maxWidth: .infinity)
-                    }.buttonStyle(.bordered).controlSize(.large).tint(.green)
+                    }.buttonStyle(.bordered).controlSize(.large).tint(.white)
                 }
                 if !trash.isEmpty {
                     Button(role: .destructive) { Task { await deleteTrash() } } label: {
                         Label("삭제 후보 \(trash.count)장 삭제", systemImage: "trash").frame(maxWidth: .infinity)
-                    }.buttonStyle(.borderedProminent).controlSize(.large).tint(.red)
+                    }.buttonStyle(.bordered).controlSize(.large).tint(.white)
                 }
                 if !doneMsg.isEmpty {
-                    Label(doneMsg, systemImage: "checkmark.circle.fill").font(.subheadline).foregroundStyle(.green)
+                    Label(doneMsg, systemImage: "checkmark.circle.fill").font(.subheadline).foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 30)
