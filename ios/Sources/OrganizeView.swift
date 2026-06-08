@@ -10,10 +10,10 @@ private enum Flash {
     var icon: String { self == .keep ? "rectangle.stack.fill" : self == .trash ? "trash.fill" : "star.fill" }
 }
 
-/// Browse-and-organize mode — full-screen photo on slate. Swipe LEFT/RIGHT just
-/// moves to the next/previous photo (nothing is decided). You organize only the
-/// photos you choose: ♥ files into "Lumen" (live), ✕ marks for deletion. Decisions
-/// are applied/confirmed on the summary. Minimal chrome: the count up top, ✕/♥ below.
+/// Viewer + organize. You enter as a viewer: swipe LEFT/RIGHT to browse (straight
+/// line), swipe UP to favorite. Tapping "정리 시작" begins organizing from the photo
+/// you're on (no need to restart from the first) — ✕/♥ appear: ♥ files into "Lumen"
+/// (live), ✕ marks for deletion, applied/confirmed on the summary.
 struct OrganizeView: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
@@ -21,6 +21,7 @@ struct OrganizeView: View {
 
     @State private var assets: [PHAsset] = []
     @State private var ready = false
+    @State private var organizing = false                 // viewer first, then organize
     @State private var index = 0
     @State private var offset: CGSize = .zero
     @State private var decisions: [Int: Decision] = [:]   // index → keep/trash
@@ -45,7 +46,7 @@ struct OrganizeView: View {
                 photoLayer
                 flashOverlay
                 topBar
-                bottomControls
+                if organizing { bottomControls } else { startBar }
             }
         }
         .preferredColorScheme(.dark)
@@ -65,7 +66,16 @@ struct OrganizeView: View {
             .id(index)
             .gesture(
                 DragGesture()
-                    .onChanged { offset = $0.translation }
+                    .onChanged { v in
+                        let dx = v.translation.width, dy = v.translation.height
+                        // Straight-line motion only: horizontal for navigation, and the
+                        // single exception — an upward drag — for favoriting.
+                        if dy < 0 && abs(dy) > abs(dx) {
+                            offset = CGSize(width: 0, height: dy)
+                        } else {
+                            offset = CGSize(width: dx, height: 0)
+                        }
+                    }
                     .onEnded { v in
                         let dx = v.translation.width, dy = v.translation.height
                         if dy < -threshold && abs(dy) > abs(dx) { favorite() }
@@ -130,6 +140,23 @@ struct OrganizeView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
+    // MARK: - Viewer "정리 시작" button (starts organizing from the current photo)
+
+    private var startBar: some View {
+        Button {
+            withAnimation(.spring(response: 0.35)) { organizing = true }
+        } label: {
+            Label("정리 시작", systemImage: "sparkles")
+                .font(.headline.weight(.semibold)).foregroundStyle(.white)
+                .padding(.horizontal, 26).padding(.vertical, 14)
+                .background(heroGradient, in: Capsule())
+                .shadow(color: .black.opacity(0.35), radius: 10, y: 5)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 24)
+        .frame(maxHeight: .infinity, alignment: .bottom)
+    }
+
     // MARK: - Bottom controls (✕ and ♥ — decide only this photo)
 
     private var bottomControls: some View {
@@ -171,14 +198,17 @@ struct OrganizeView: View {
             VStack(spacing: 12) {
                 if !trashAssets.isEmpty {
                     Button(role: .destructive) { Task { await deleteTrash() } } label: {
-                        Label("삭제 후보 \(trashAssets.count)장 삭제", systemImage: "trash").frame(maxWidth: .infinity)
-                    }.buttonStyle(.bordered).controlSize(.large).tint(.white)
+                        Label("\(trashAssets.count)장 삭제", systemImage: "trash")
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                            .padding(.horizontal, 22).padding(.vertical, 12)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
+                    }.buttonStyle(.plain)
                 }
                 if !doneMsg.isEmpty {
                     Label(doneMsg, systemImage: "checkmark.circle.fill").font(.subheadline).foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 30)
             Spacer()
             Button("닫기") { dismiss() }.tint(.white).padding(.bottom, 8)
         }
