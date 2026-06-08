@@ -1,0 +1,29 @@
+# XcodeGen spec for the iOS app. Generate with: cd ios && xcodegen generate
+# (no binary .xcodeproj is committed — this file is the source of truth)
+name: LumenIOS
+options:
+  bundleIdPrefix: com.prototype.lumen
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  LumenIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      # Reuse the real, cross-platform editing engine straight from the macOS
+      # tree — no duplication. (Step 3 of IOS_PORT.md replaces this with a
+      # proper LumenEngine package target.)
+      - path: ../Sources/Lumen/Services/ImageEditor.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prototype.lumen.ios
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.9"
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "Lumen saves combined and edited photos to your library."
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
