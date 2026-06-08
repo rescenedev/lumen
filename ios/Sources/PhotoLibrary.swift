@@ -10,7 +10,11 @@ struct OrganizeScope: Identifiable, Hashable {
     let collection: PHAssetCollection?   // nil = all photos
     let cover: PHAsset?
 
-    static func == (a: OrganizeScope, b: OrganizeScope) -> Bool { a.id == b.id }
+    // Include cover/count so a changed cover actually re-renders the card.
+    // (hash stays id-only — equal scopes still share an id, which is all Hashable needs.)
+    static func == (a: OrganizeScope, b: OrganizeScope) -> Bool {
+        a.id == b.id && a.count == b.count && a.cover?.localIdentifier == b.cover?.localIdentifier
+    }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
