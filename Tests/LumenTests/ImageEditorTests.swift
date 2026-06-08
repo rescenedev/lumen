@@ -1,11 +1,36 @@
 import Foundation
 import CoreGraphics
+import ImageIO
 @testable import LumenKit
 
 /// Pure output-size math for the crop/resize editor (drives the UI readout and
 /// the actual pixel op). I/O encoding isn't unit-tested (needs real image files).
 func imageEditorTests() {
     let src = CGSize(width: 4000, height: 3000)
+
+    // Opt-in real-file smoke test: decode a RAW, crop+resize, save JPG, verify.
+    if let rawPath = ProcessInfo.processInfo.environment["LUMEN_RAW_TEST"] {
+        test("rawDecodeCropResizeToJPG") {
+            let raw = URL(fileURLWithPath: rawPath)
+            let dest = FileManager.default.temporaryDirectory
+                .appendingPathComponent("lumen-rawtest-\(UUID().uuidString).jpg")
+            defer { try? FileManager.default.removeItem(at: dest) }
+            let edit = ImageEditor.Edit(cropNorm: CGRect(x: 0.1, y: 0.1, width: 0.5, height: 0.5),
+                                        targetWidth: 1200, targetHeight: nil)
+            check(ImageEditor.process(source: raw, edit: edit, to: dest), "process failed on \(raw.lastPathComponent)")
+            check(FileManager.default.fileExists(atPath: dest.path), "no output written")
+            // Output must be a valid JPEG the system can read back.
+            if let s = CGImageSourceCreateWithURL(dest as CFURL, nil),
+               let props = CGImageSourceCopyPropertiesAtIndex(s, 0, nil) as? [CFString: Any] {
+                let w = (props[kCGImagePropertyPixelWidth] as? Int) ?? 0
+                let h = (props[kCGImagePropertyPixelHeight] as? Int) ?? 0
+                check(max(w, h) == 1200, "expected long edge 1200, got \(w)×\(h)")
+                check(CGImageSourceGetType(s) == "public.jpeg" as CFString, "not a jpeg")
+            } else {
+                check(false, "output not readable as an image")
+            }
+        }
+    }
 
     test("noEditKeepsSize") {
         let s = ImageEditor.outputSize(source: src, edit: .init(cropNorm: nil))
@@ -89,6 +114,22 @@ func imageEditorTests() {
     test("editedCopyURLAddsSuffix") {
         let u = ImageEditor.editedCopyURL(for: URL(fileURLWithPath: "/tmp/lumen-no-such/photo.jpg"))
         check(u.lastPathComponent == "photo (edited).jpg", "got \(u.lastPathComponent)")
+    }
+
+    test("rawEditedCopyBecomesJPG") {
+        // A RAW source can't be re-encoded to itself → edited copy is a .jpg, and
+        // overwriting the original is disallowed.
+        let raw = URL(fileURLWithPath: "/tmp/lumen-no-such/IMG_1234.ARW")
+        check(ImageEditor.editedCopyURL(for: raw).lastPathComponent == "IMG_1234 (edited).jpg",
+              "got \(ImageEditor.editedCopyURL(for: raw).lastPathComponent)")
+        check(ImageEditor.outputExtension(for: raw) == "jpg")
+        check(!ImageEditor.canOverwrite(raw))
+    }
+
+    test("pngEditKeepsFormatAndOverwrites") {
+        let png = URL(fileURLWithPath: "/tmp/lumen-no-such/shot.png")
+        check(ImageEditor.outputExtension(for: png) == "png")
+        check(ImageEditor.canOverwrite(png))
     }
 
     test("combineHorizontalNormalizesHeight") {

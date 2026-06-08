@@ -51,6 +51,10 @@ struct CropResizeView: View {
         }
     }
     private var isCanvas: Bool { canvasTarget != nil }
+    /// RAW/webp/etc. can be edited but only saved as JPG (a new file); the
+    /// original is never overwritten so the master stays intact.
+    private var canOverwrite: Bool { ImageEditor.canOverwrite(photo.url) }
+    private var saveAsLabel: String { canOverwrite ? "Save as Copy" : "Save as Copy (JPG)" }
 
     private var edit: ImageEditor.Edit {
         ImageEditor.Edit(cropNorm: cropNorm == CGRect(x: 0, y: 0, width: 1, height: 1) ? nil : cropNorm,
@@ -192,11 +196,16 @@ struct CropResizeView: View {
                           && widthText.isEmpty && heightText.isEmpty)
             }
             HStack(spacing: 12) {
+                if !canOverwrite {
+                    Text("RAW 등은 편집본을 JPG로 저장합니다 (원본 보존)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Overwrite Original…") { confirmOverwrite = true }
-                    .tint(.red)
-                Button("Save as Copy") { save(overwrite: false) }
+                if canOverwrite {
+                    Button("Overwrite Original…") { confirmOverwrite = true }.tint(.red)
+                }
+                Button(saveAsLabel) { save(overwrite: false) }
                     .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
             .disabled(busy || image == nil)

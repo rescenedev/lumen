@@ -250,6 +250,23 @@ enum ImageEditor {
         return ctx.makeImage()
     }
 
+    /// Formats `write` can actually re-encode to. Anything else (RAW, webp, avif,
+    /// psd, gif, …) is decoded for editing but saved as JPEG — so the output
+    /// extension must be one of these, and overwriting the original isn't allowed
+    /// (it would silently change the file's real format).
+    static let encodableExtensions: Set<String> = ["jpg", "jpeg", "png", "tiff", "tif", "heic"]
+
+    /// The extension an edit of `source` should be saved with: keep the source's
+    /// when it's re-encodable, else fall back to jpg.
+    static func outputExtension(for source: URL) -> String {
+        encodableExtensions.contains(source.pathExtension.lowercased()) ? source.pathExtension : "jpg"
+    }
+
+    /// Whether the original file can be overwritten in place (same real format).
+    static func canOverwrite(_ source: URL) -> Bool {
+        encodableExtensions.contains(source.pathExtension.lowercased())
+    }
+
     /// Encode keeping a lossless container for png/tiff/heic, else JPEG.
     private static func write(_ cg: CGImage, to dest: URL, quality: CGFloat) -> Bool {
         let ext = dest.pathExtension.lowercased()
@@ -495,11 +512,12 @@ enum ImageEditor {
         return write(cg, to: dest, quality: 0.92)
     }
 
-    /// A non-clobbering "<name> (edited).<ext>" sibling URL.
+    /// A non-clobbering "<name> (edited).<ext>" sibling URL. The extension is the
+    /// re-encodable one (jpg for RAW/webp/etc.) so the bytes match the name.
     static func editedCopyURL(for source: URL) -> URL {
         let dir = source.deletingLastPathComponent()
         let base = source.deletingPathExtension().lastPathComponent
-        let ext = source.pathExtension
+        let ext = outputExtension(for: source)
         var candidate = dir.appendingPathComponent("\(base) (edited).\(ext)")
         var n = 2
         while FileManager.default.fileExists(atPath: candidate.path) {
