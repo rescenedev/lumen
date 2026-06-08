@@ -300,6 +300,8 @@ struct OrganizeCard: View {
             else { ProgressView().tint(.white) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: asset.localIdentifier) { image = await library.cgImage(asset, maxPixel: 2400).map(UIImage.init) }
+        .task(id: asset.localIdentifier) {
+            for await img in library.imageStream(asset, points: 1200, mode: .aspectFit) { image = img }
+        }
     }
 }
