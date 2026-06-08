@@ -59,7 +59,12 @@ import UIKit
         }
     }
 
-    func album(withID id: String) -> PHAssetCollection? { albums.first { $0.localIdentifier == id } }
+    /// The single "Lumen" album — up-swiped photos land here for the user to sort
+    /// later. Found by title or created on demand.
+    func lumenAlbum() async -> PHAssetCollection? {
+        if let existing = albums.first(where: { $0.localizedTitle == "Lumen" }) { return existing }
+        return await createAlbum("Lumen")
+    }
 
     /// Square thumbnail for the grid. `.highQualityFormat` → exactly one callback
     /// (safe to bridge to a continuation).
