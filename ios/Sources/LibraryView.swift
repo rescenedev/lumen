@@ -18,7 +18,10 @@ struct LibraryView: View {
             ZStack {
                 Color.lumenBG.ignoresSafeArea()
                 if !lib.loaded {
-                    ProgressView().tint(.white)
+                    VStack(spacing: 14) {
+                        ProgressView().tint(.white)
+                        Text("사진을 불러오고 있어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                    }
                 } else if !lib.authorized {
                     OnboardingView { Task { await lib.load() } }
                 } else if lib.scopes.isEmpty {
