@@ -4,8 +4,18 @@ name: LumenIOS
 options:
   bundleIdPrefix: com.prototype.lumen
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "17.0"
   createIntermediateGroups: true
+
+schemes:
+  LumenIOS:
+    build:
+      targets:
+        LumenIOS: all
+        LumenIOSTests: all
+    test:
+      targets:
+        - LumenIOSTests
 
 targets:
   LumenIOS:
@@ -23,7 +33,22 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.9"
-        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "Lumen saves combined and edited photos to your library."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Lumen shows your photo library so you can browse and organize it."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "Lumen saves edited and combined photos to your library."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+
+  # Logic-test bundle (no host app): compiles the engine + XCTest cases so the
+  # shared ImageEditor is verified on the iOS simulator too.
+  LumenIOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+      - path: ../Sources/Lumen/Services/ImageEditor.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.prototype.lumen.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.9"

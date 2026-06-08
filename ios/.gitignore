@@ -1,3 +1,4 @@
 LumenIOS.xcodeproj/
 *.xcodeproj
+build/
 .DS_Store

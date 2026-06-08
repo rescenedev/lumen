@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// iOS entry point. WIP scaffold (branch `feat/ios`) — proves the cross-platform
-/// `ImageEditor` engine runs on iOS. See ../IOS_PORT.md for the full plan.
+/// iOS entry point. Lumen for iOS is a **photo manager** for people who find
+/// organizing photos painful — browse the library, then a Tinder-style organize
+/// mode to keep/trash by swiping. (Editing/combine come later.)
 @main
 struct LumenIOSApp: App {
     var body: some Scene {
         WindowGroup {
-            CombineDemoView()
+            LibraryView()
         }
     }
 }
