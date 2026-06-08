@@ -6,6 +6,12 @@ import Photos
 struct LibraryView: View {
     @State private var lib = PhotoLibrary()
     @State private var scope: OrganizeScope?
+    @Environment(\.horizontalSizeClass) private var hSize
+
+    // 2 columns on iPhone, ~4-5 on iPad.
+    private var gridColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: hSize == .regular ? 250 : 165), spacing: 12)]
+    }
 
     var body: some View {
         NavigationStack {
@@ -59,10 +65,11 @@ struct LibraryView: View {
                     .foregroundStyle(.white).padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
                 Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     .padding(.horizontal, 4)
-                ForEach(lib.scopes) { s in
-                    ScopeRow(scope: s, library: lib)
-                        .contentShape(Rectangle())
-                        .onTapGesture { scope = s }
+                LazyVGrid(columns: gridColumns, spacing: 12) {
+                    ForEach(lib.scopes) { s in
+                        ScopeCard(scope: s, library: lib)
+                            .onTapGesture { scope = s }
+                    }
                 }
                 Text("앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 즐겨찾기, ♥는 ‘Lumen’ 앨범에 보관, ✕는 삭제 후보입니다.")
                     .font(.footnote).foregroundStyle(.white.opacity(0.4))
@@ -73,37 +80,43 @@ struct LibraryView: View {
     }
 }
 
-/// One slate card in the scope picker: cover thumbnail · title · count.
-struct ScopeRow: View {
+/// Poster-style album card — a big cover with title/count below. Used in the
+/// grid on both iPhone (2 columns) and iPad (more columns).
+struct ScopeCard: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
     @State private var cover: UIImage?
 
     var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.06))
-                if let cover {
-                    Image(uiImage: cover).resizable().scaledToFill()
-                } else {
-                    Image(systemName: scope.symbol).font(.title3).foregroundStyle(.white.opacity(0.4))
+        VStack(alignment: .leading, spacing: 0) {
+            // Fixed 16:10 cover → every cell is the same height, so rows always align.
+            Color.clear
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .overlay {
+                    ZStack {
+                        Color.white.opacity(0.06)
+                        if let cover {
+                            Image(uiImage: cover).resizable().scaledToFill()
+                        } else {
+                            Image(systemName: scope.symbol).font(.system(size: 30)).foregroundStyle(.white.opacity(0.35))
+                        }
+                    }
                 }
-            }
-            .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .clipped()
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(scope.title).font(.headline).foregroundStyle(.white)
-                Text("\(scope.count)장").font(.subheadline).foregroundStyle(.white.opacity(0.5))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(scope.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
+                Text("\(scope.count)장").font(.caption).foregroundStyle(.white.opacity(0.5))
             }
-            Spacer()
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.white.opacity(0.3))
+            .padding(.horizontal, 12).frame(height: 56, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .background(Color.lumenCard, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.06)))
+        .background(Color.lumenCard)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.06)))
+        .contentShape(Rectangle())
         .task(id: scope.id) {
-            if cover == nil, let a = scope.cover { cover = await library.thumbnail(a, points: 60) }
+            if cover == nil, let a = scope.cover { cover = await library.thumbnail(a, points: 300) }
         }
     }
 }
