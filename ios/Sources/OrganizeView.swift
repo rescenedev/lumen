@@ -22,7 +22,7 @@ struct OrganizeView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.lumenBG.ignoresSafeArea()
             if index >= assets.count {
                 summary
             } else {
@@ -39,8 +39,8 @@ struct OrganizeView: View {
 
     private var photoLayer: some View {
         OrganizeCard(asset: assets[index], library: library)
-            .overlay(alignment: .topLeading) { stamp("보관", "rectangle.stack.fill", .green, p: offset.width / threshold) }
-            .overlay(alignment: .topTrailing) { stamp("삭제", "trash.fill", .red, p: -offset.width / threshold) }
+            .overlay(alignment: .topLeading) { stamp("보관", "rectangle.stack.fill", p: offset.width / threshold) }
+            .overlay(alignment: .topTrailing) { stamp("삭제", "trash.fill", p: -offset.width / threshold) }
             .offset(offset)
             .rotationEffect(.degrees(Double(offset.width / 26)))
             .id(index)
@@ -56,12 +56,13 @@ struct OrganizeView: View {
             .ignoresSafeArea()
     }
 
-    private func stamp(_ text: String, _ icon: String, _ color: Color, p: CGFloat) -> some View {
+    private func stamp(_ text: String, _ icon: String, p: CGFloat) -> some View {
         let v = min(max(p, 0), 1)
         return Label(text, systemImage: icon)
             .font(.headline.bold()).foregroundStyle(.white)
             .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(color, in: Capsule()).shadow(color: color.opacity(0.6), radius: 10)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
             .padding(.horizontal, 24).padding(.top, 78)
             .opacity(Double(v)).scaleEffect(0.85 + 0.15 * v)
     }
@@ -180,7 +181,7 @@ struct OrganizeCard: View {
 
     var body: some View {
         ZStack {
-            Color.black
+            Color.lumenBG
             if let image { Image(uiImage: image).resizable().scaledToFit() }
             else { ProgressView().tint(.white) }
         }

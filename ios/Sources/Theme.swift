@@ -1,17 +1,20 @@
 import SwiftUI
 
 extension Color {
-    /// App accent (set via `.tint`). UI stays mostly system; accent for key bits.
+    /// App accent (set via `.tint`).
     static let lumenAccent = Color(red: 0.42, green: 0.40, blue: 0.98)
+    /// Slate dark theme — used everywhere so the home and the organize screen match.
+    static let lumenBG = Color(red: 0.07, green: 0.082, blue: 0.105)
+    static let lumenCard = Color(red: 0.13, green: 0.145, blue: 0.18)
 }
 
-/// One brand gradient, used sparingly for the hero CTA and the app glyph.
+/// One brand gradient, used sparingly for the app glyph / onboarding CTA.
 let heroGradient = LinearGradient(
     colors: [Color(red: 0.36, green: 0.42, blue: 1.0), Color(red: 0.58, green: 0.36, blue: 0.98)],
     startPoint: .topLeading, endPoint: .bottomTrailing)
 
 /// The app mark: two stacked photo cards, the front one tilted — a "swipe to
-/// organize" motif. Drawn (not an SF Symbol) so it reads as a real brand mark.
+/// organize" motif.
 struct LumenGlyph: View {
     var size: CGFloat = 72
 
@@ -21,8 +24,7 @@ struct LumenGlyph: View {
             .frame(width: size, height: size)
             .overlay {
                 ZStack {
-                    card.rotationEffect(.degrees(-11)).offset(x: -size * 0.05, y: size * 0.02)
-                        .opacity(0.55)
+                    card.rotationEffect(.degrees(-11)).offset(x: -size * 0.05, y: size * 0.02).opacity(0.55)
                     card.rotationEffect(.degrees(7)).offset(x: size * 0.055, y: -size * 0.01)
                 }
             }

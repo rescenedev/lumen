@@ -63,8 +63,10 @@ struct OrganizeScope: Identifiable {
 
     private func buildScopes() {
         var out: [OrganizeScope] = []
-        out.append(.init(id: "all", title: "전체 사진", symbol: "photo.on.rectangle",
-                         count: assets.count, collection: nil, cover: assets.first))
+        if !assets.isEmpty {
+            out.append(.init(id: "all", title: "전체 사진", symbol: "photo.on.rectangle",
+                             count: assets.count, collection: nil, cover: assets.first))
+        }
 
         func smart(_ subtype: PHAssetCollectionSubtype, _ title: String, _ symbol: String) {
             guard let c = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil).firstObject
