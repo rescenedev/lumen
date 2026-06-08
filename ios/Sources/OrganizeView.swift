@@ -135,9 +135,9 @@ struct OrganizeView: View {
             Text("정리 완료").font(.title.bold()).foregroundStyle(.white).padding(.top, 6)
             Text("\(assets.count)장을 모두 살펴봤어요").font(.subheadline).foregroundStyle(.white.opacity(0.6))
             HStack(spacing: 26) {
-                stat("보관", keeps.count, "heart.fill", .green)
-                stat("Lumen", albumed.count, "rectangle.stack.fill", .indigo)
-                stat("삭제", trash.count, "trash.fill", .red)
+                stat("보관", keeps.count, "heart.fill")
+                stat("Lumen", albumed.count, "rectangle.stack.fill")
+                stat("삭제", trash.count, "trash.fill")
             }.padding(.vertical, 8)
             VStack(spacing: 12) {
                 if !keeps.isEmpty || !albumed.isEmpty {
@@ -161,11 +161,13 @@ struct OrganizeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func stat(_ label: String, _ n: Int, _ icon: String, _ color: Color) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon).font(.title3).foregroundStyle(color)
+    private func stat(_ label: String, _ n: Int, _ icon: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 23, weight: .semibold))
+                .foregroundStyle(Color(red: 0.60, green: 0.64, blue: 0.70))   // slate
+                .frame(height: 26)
             Text("\(n)").font(.system(size: 32, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(.white)
-            Text(label).font(.caption).foregroundStyle(.white.opacity(0.6))
+            Text(label).font(.caption).foregroundStyle(.white.opacity(0.55))
         }
     }
 
