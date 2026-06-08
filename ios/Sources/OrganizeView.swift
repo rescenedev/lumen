@@ -69,6 +69,7 @@ struct OrganizeView: View {
     private var photoLayer: some View {
         OrganizeCard(asset: assets[index], library: library)
             .overlay(alignment: .top) { favoriteHint }
+            .scaleEffect(offset.height > 0 ? max(0.86, 1 - offset.height / 1100) : 1)  // shrink as you pull down
             .offset(offset)
             .id(index)
             .task(id: index) {
@@ -80,9 +81,8 @@ struct OrganizeView: View {
                 DragGesture()
                     .onChanged { v in
                         let dx = v.translation.width, dy = v.translation.height
-                        // Straight-line motion only: horizontal for navigation, and the
-                        // single exception — an upward drag — for favoriting.
-                        if dy < 0 && abs(dy) > abs(dx) {
+                        // Vertical (up = favorite, down = dismiss) vs horizontal (navigate).
+                        if abs(dy) > abs(dx) {
                             offset = CGSize(width: 0, height: dy)
                         } else {
                             offset = CGSize(width: dx, height: 0)
@@ -90,8 +90,11 @@ struct OrganizeView: View {
                     }
                     .onEnded { v in
                         let dx = v.translation.width, dy = v.translation.height
-                        if dy < -threshold && abs(dy) > abs(dx) { favorite() }
-                        else if dx < -threshold { swipeTo(next: true) }
+                        if abs(dy) > abs(dx) {
+                            if dy < -threshold { favorite() }
+                            else if dy > 110 { dismiss() }                 // pull down → back, like Photos
+                            else { withAnimation(.spring(response: 0.3)) { offset = .zero } }
+                        } else if dx < -threshold { swipeTo(next: true) }
                         else if dx > threshold { swipeTo(next: false) }
                         else { withAnimation(.spring(response: 0.3)) { offset = .zero } }
                     }
