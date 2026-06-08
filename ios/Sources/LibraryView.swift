@@ -8,7 +8,10 @@ struct LibraryView: View {
     @State private var scope: OrganizeScope?
     @Environment(\.horizontalSizeClass) private var hSize
 
-    private let gridColumns = [GridItem(.adaptive(minimum: 250), spacing: 14)]
+    // 2 columns on iPhone, ~4-5 on iPad.
+    private var gridColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: hSize == .regular ? 250 : 165), spacing: 12)]
+    }
 
     var body: some View {
         NavigationStack {
@@ -62,17 +65,9 @@ struct LibraryView: View {
                     .foregroundStyle(.white).padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
                 Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     .padding(.horizontal, 4)
-                if hSize == .regular {
-                    LazyVGrid(columns: gridColumns, spacing: 14) {
-                        ForEach(lib.scopes) { s in
-                            ScopeCard(scope: s, library: lib)
-                                .onTapGesture { scope = s }
-                        }
-                    }
-                } else {
+                LazyVGrid(columns: gridColumns, spacing: 12) {
                     ForEach(lib.scopes) { s in
-                        ScopeRow(scope: s, library: lib)
-                            .contentShape(Rectangle())
+                        ScopeCard(scope: s, library: lib)
                             .onTapGesture { scope = s }
                     }
                 }
@@ -85,42 +80,8 @@ struct LibraryView: View {
     }
 }
 
-/// One slate card in the scope picker: cover thumbnail · title · count.
-struct ScopeRow: View {
-    let scope: OrganizeScope
-    let library: PhotoLibrary
-    @State private var cover: UIImage?
-
-    var body: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.06))
-                if let cover {
-                    Image(uiImage: cover).resizable().scaledToFill()
-                } else {
-                    Image(systemName: scope.symbol).font(.title3).foregroundStyle(.white.opacity(0.4))
-                }
-            }
-            .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(scope.title).font(.headline).foregroundStyle(.white)
-                Text("\(scope.count)장").font(.subheadline).foregroundStyle(.white.opacity(0.5))
-            }
-            Spacer()
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.white.opacity(0.3))
-        }
-        .padding(14)
-        .background(Color.lumenCard, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.06)))
-        .task(id: scope.id) {
-            if cover == nil, let a = scope.cover { cover = await library.thumbnail(a, points: 60) }
-        }
-    }
-}
-
-/// Poster-style album card for the iPad grid — a big cover with title/count below.
+/// Poster-style album card — a big cover with title/count below. Used in the
+/// grid on both iPhone (2 columns) and iPad (more columns).
 struct ScopeCard: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
