@@ -39,7 +39,7 @@ struct LibraryView: View {
             }
         }
         .fullScreenCover(item: $scope, onDismiss: { lib.refresh() }) { s in
-            OrganizeView(scope: s, library: lib)
+            AlbumGalleryView(scope: s, library: lib)
         }
     }
 
@@ -116,8 +116,8 @@ struct ScopeCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.06)) }
         .contentShape(Rectangle())
-        .task(id: scope.id) {
-            if cover == nil, let a = scope.cover { cover = await library.thumbnail(a, points: 300) }
+        .task(id: scope.cover?.localIdentifier) {
+            if let a = scope.cover { cover = await library.thumbnail(a, points: 300) }
         }
     }
 }
