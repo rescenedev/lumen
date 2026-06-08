@@ -32,11 +32,11 @@ struct AlbumGalleryView: View {
                     }
                     .padding(.horizontal, 3).padding(.top, 54).padding(.bottom, 24)
                 }
-                .gesture(
+                .simultaneousGesture(
                     MagnifyGesture().onEnded { v in
                         withAnimation(.spring(response: 0.3)) {
-                            if v.magnification > 1.15 { cols = max(2, cols - 1) }       // zoom in → bigger thumbs
-                            else if v.magnification < 0.85 { cols = min(8, cols + 1) }  // pinch → smaller thumbs
+                            if v.magnification > 1.08 { cols = max(2, cols - 1) }       // zoom in → bigger thumbs
+                            else if v.magnification < 0.92 { cols = min(8, cols + 1) }  // pinch → smaller thumbs
                         }
                     }
                 )
