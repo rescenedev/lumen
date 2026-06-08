@@ -104,16 +104,17 @@ struct ScopeCard: View {
                 }
                 .clipped()
 
-            VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(scope.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
-                Text("\(scope.count)장").font(.caption).foregroundStyle(.white.opacity(0.5))
+                Spacer(minLength: 6)
+                Text("\(scope.count)장").font(.caption).foregroundStyle(.white.opacity(0.5)).layoutPriority(1)
             }
-            .padding(.horizontal, 12).frame(height: 56, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12).frame(height: 46)
+            .frame(maxWidth: .infinity)
         }
         .background(Color.lumenCard)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.06)))
+        .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.06)) }
         .contentShape(Rectangle())
         .task(id: scope.id) {
             if cover == nil, let a = scope.cover { cover = await library.thumbnail(a, points: 300) }
