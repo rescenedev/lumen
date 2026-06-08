@@ -21,9 +21,9 @@ struct OrganizeScope: Identifiable, Hashable {
 /// Loads the device photo library (PhotoKit) and serves thumbnails / full images.
 /// This is the iOS equivalent of the macOS scanner — the app's library source.
 @MainActor @Observable final class PhotoLibrary: NSObject, PHPhotoLibraryChangeObserver {
-    var assets: [PHAsset] = []
     var albums: [PHAssetCollection] = []
     var scopes: [OrganizeScope] = []
+    var hasAnyPhotos = false
     var authorized = false
     var loaded = false
 
@@ -37,6 +37,7 @@ struct OrganizeScope: Identifiable, Hashable {
     /// persist it, to show 즐겨찾기 newest-favorited-first.
     @ObservationIgnored private var favoriteOrder: [String] =
         UserDefaults.standard.stringArray(forKey: "lumen.favoriteOrder") ?? []
+    @ObservationIgnored private var favGen = 0   // bumped on every toggle, to drop stale reloads
     private let manager = PHCachingImageManager()
 
     private func saveFavoriteOrder() { UserDefaults.standard.set(favoriteOrder, forKey: "lumen.favoriteOrder") }
@@ -104,6 +105,7 @@ struct OrganizeScope: Identifiable, Hashable {
     /// waiting for PhotoKit's notification + a full reload. The reload still runs
     /// afterwards to make counts/order exact.
     func bumpFavorite(_ asset: PHAsset, added: Bool) {
+        favGen += 1
         let id = asset.localIdentifier
         favoriteOrder.removeAll { $0 == id }
         if added { favoriteOrder.insert(id, at: 0) }     // most-recent favorite first
@@ -139,12 +141,16 @@ struct OrganizeScope: Identifiable, Hashable {
     /// All the PhotoKit work happens on a background thread; only the final
     /// assignment of published state touches the main actor.
     private func reload() async {
+        let gen = favGen
         let order = favoriteOrder
         let snap = await Task.detached(priority: .userInitiated) { Self.computeSnapshot(favoriteOrder: order) }.value
-        assets = snap.assets
+        // A favorite was toggled while we were computing — this snapshot is stale,
+        // drop it and let the newer toggle's reload win (keeps the optimistic state).
+        guard gen == favGen else { return }
         albums = snap.albums
         keptIDs = snap.keptIDs
         scopes = snap.scopes
+        hasAnyPhotos = snap.hasAnyPhotos
         // Keep the next few 즐겨찾기 covers warm so un-favoriting swaps instantly.
         favoriteOrder.prefix(3)
             .compactMap { PHAsset.fetchAssets(withLocalIdentifiers: [$0], options: nil).firstObject }
@@ -154,60 +160,61 @@ struct OrganizeScope: Identifiable, Hashable {
     // MARK: - Snapshot (built off the main thread)
 
     private struct Snapshot {
-        var assets: [PHAsset]
         var albums: [PHAssetCollection]
         var keptIDs: Set<String>
         var scopes: [OrganizeScope]
+        var hasAnyPhotos: Bool
     }
 
-    nonisolated private static func imageOptions() -> PHFetchOptions {
+    /// Images only, newest first, optionally excluding already-kept (Lumen) photos
+    /// via a predicate so PhotoKit computes count/firstObject without us enumerating.
+    nonisolated private static func imageOptions(excluding kept: Set<String> = []) -> PHFetchOptions {
         let o = PHFetchOptions()
-        o.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        if kept.isEmpty {
+            o.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        } else {
+            o.predicate = NSPredicate(format: "mediaType == %d AND NOT (localIdentifier IN %@)",
+                                      PHAssetMediaType.image.rawValue, Array(kept))
+        }
         o.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         return o
     }
 
-    nonisolated private static func fetchAll(in collection: PHAssetCollection) -> [PHAsset] {
-        var arr: [PHAsset] = []
-        PHAsset.fetchAssets(in: collection, options: imageOptions()).enumerateObjects { a, _, _ in arr.append(a) }
-        return arr
-    }
-
-    /// Read everything we need in one off-main pass: all photos, the album list,
-    /// the "already kept" id set, and the resulting scopes (kept photos removed so
-    /// an interrupted session resumes instead of restarting).
+    /// Build the scope list off-main using only fetch counts + firstObject — no
+    /// enumerating thousands of assets — so it stays fast on big/iCloud libraries.
     nonisolated private static func computeSnapshot(favoriteOrder: [String] = []) -> Snapshot {
-        let opts = PHFetchOptions()
-        opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        var allAssets: [PHAsset] = []
-        PHAsset.fetchAssets(with: .image, options: opts).enumerateObjects { a, _, _ in allAssets.append(a) }
-
         var albums: [PHAssetCollection] = []
         PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
             .enumerateObjects { c, _, _ in albums.append(c) }
 
+        // Kept = members of the "Lumen" album (usually small).
         var keptIDs = Set<String>()
         if let lumen = albums.first(where: { $0.localizedTitle == "Lumen" }) {
-            fetchAll(in: lumen).forEach { keptIDs.insert($0.localIdentifier) }
+            PHAsset.fetchAssets(in: lumen, options: imageOptions()).enumerateObjects { a, _, _ in keptIDs.insert(a.localIdentifier) }
         }
-        func remaining(_ list: [PHAsset]) -> [PHAsset] { list.filter { !keptIDs.contains($0.localIdentifier) } }
+        let opts = imageOptions(excluding: keptIDs)
 
         var out: [OrganizeScope] = []
-        let allRemaining = remaining(allAssets)
-        if !allRemaining.isEmpty {
+        let all = PHAsset.fetchAssets(with: opts)
+        let hasAny = all.count > 0
+        if all.count > 0 {
             out.append(.init(id: "all", title: "전체 사진", symbol: "photo.on.rectangle",
-                             count: allRemaining.count, collection: nil, cover: allRemaining.first))
+                             count: all.count, collection: nil, cover: all.firstObject))
         }
 
         func smart(_ subtype: PHAssetCollectionSubtype, _ title: String, _ symbol: String, order: [String] = []) {
             guard let c = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil).firstObject
             else { return }
-            var rem = remaining(fetchAll(in: c))
-            if !order.isEmpty { rem = ordered(rem, by: order) }   // favorites: newest-favorited first
-            if !rem.isEmpty {
-                out.append(.init(id: c.localIdentifier, title: title, symbol: symbol,
-                                 count: rem.count, collection: c, cover: rem.first))
+            let r = PHAsset.fetchAssets(in: c, options: opts)
+            guard r.count > 0 else { return }
+            // Favorites: trust our own order for the cover so a just-toggled favorite
+            // (whose async commit may not be in this fetch yet) still shows correctly.
+            var cover = r.firstObject
+            if let top = order.first, let a = PHAsset.fetchAssets(withLocalIdentifiers: [top], options: nil).firstObject {
+                cover = a
             }
+            out.append(.init(id: c.localIdentifier, title: title, symbol: symbol,
+                             count: r.count, collection: c, cover: cover))
         }
         smart(.smartAlbumFavorites, "즐겨찾기", "heart", order: favoriteOrder)
         smart(.smartAlbumRecentlyAdded, "최근 추가", "clock")
@@ -215,13 +222,13 @@ struct OrganizeScope: Identifiable, Hashable {
 
         // Skip the Lumen album itself — it's the destination, not a queue to sort.
         for c in albums where c.localizedTitle != "Lumen" {
-            let rem = remaining(fetchAll(in: c))
-            if !rem.isEmpty {
+            let r = PHAsset.fetchAssets(in: c, options: opts)
+            if r.count > 0 {
                 out.append(.init(id: c.localIdentifier, title: c.localizedTitle ?? "앨범", symbol: "rectangle.stack",
-                                 count: rem.count, collection: c, cover: rem.first))
+                                 count: r.count, collection: c, cover: r.firstObject))
             }
         }
-        return Snapshot(assets: allAssets, albums: albums, keptIDs: keptIDs, scopes: out)
+        return Snapshot(albums: albums, keptIDs: keptIDs, scopes: out, hasAnyPhotos: hasAny)
     }
 
     /// The asset list for a scope, already-kept photos removed. Fetched off-main so
@@ -229,12 +236,14 @@ struct OrganizeScope: Identifiable, Hashable {
     func assets(for scope: OrganizeScope) async -> [PHAsset] {
         let kept = keptIDs
         let collection = scope.collection
-        let base = assets
         let order = (scope.collection?.assetCollectionSubtype == .smartAlbumFavorites) ? favoriteOrder : []
         return await Task.detached(priority: .userInitiated) {
-            let source = collection.map { Self.fetchAll(in: $0) } ?? base
-            let filtered = source.filter { !kept.contains($0.localIdentifier) }
-            return order.isEmpty ? filtered : Self.ordered(filtered, by: order)
+            let opts = Self.imageOptions(excluding: kept)
+            let result = collection.map { PHAsset.fetchAssets(in: $0, options: opts) } ?? PHAsset.fetchAssets(with: opts)
+            var arr: [PHAsset] = []
+            arr.reserveCapacity(result.count)
+            result.enumerateObjects { a, _, _ in arr.append(a) }
+            return order.isEmpty ? arr : Self.ordered(arr, by: order)
         }.value
     }
 

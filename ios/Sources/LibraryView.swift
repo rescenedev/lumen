@@ -56,9 +56,9 @@ struct LibraryView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             LumenGlyph(size: 72)
-            Text(lib.assets.isEmpty ? "사진이 없어요" : "모두 정리했어요")
+            Text(!lib.hasAnyPhotos ? "사진이 없어요" : "모두 정리했어요")
                 .font(.title2.bold()).foregroundStyle(.white)
-            Text(lib.assets.isEmpty
+            Text(!lib.hasAnyPhotos
                  ? "기기에 사진이 추가되면 여기에서 정리할 수 있어요."
                  : "정리할 사진을 모두 둘러봤어요. 보관한 사진은 ‘Lumen’ 앨범에 모여 있어요.")
                 .font(.subheadline).foregroundStyle(.white.opacity(0.55))
