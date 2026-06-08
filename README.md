@@ -53,6 +53,7 @@ macOS 14(Sonoma) 이상 · Swift 6.3 (개발/테스트는 macOS 26 “Tahoe”).
 
 ```bash
 brew tap rescenedev/tap
+brew trust --cask rescenedev/tap/lumen-photos
 brew install --cask lumen-photos
 ```
 

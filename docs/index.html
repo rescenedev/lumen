@@ -272,6 +272,7 @@
     <div class="install reveal">
       <button class="copy" onclick="copyInstall()">복사</button>
       <code>brew tap rescenedev/tap
+brew trust --cask rescenedev/tap/lumen-photos
 brew install --cask lumen-photos</code>
     </div>
     <div class="note reveal">
@@ -312,7 +313,7 @@ brew install --cask lumen-photos</code>
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 
   function copyInstall(){
-    navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew install --cask lumen-photos");
+    navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew trust --cask rescenedev/tap/lumen-photos\nbrew install --cask lumen-photos");
     document.querySelectorAll('.copy').forEach(b=>{const t=b.textContent;b.textContent='복사됨 ✓';setTimeout(()=>b.textContent=t,1500);});
   }
 </script>
