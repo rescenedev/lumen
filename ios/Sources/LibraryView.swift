@@ -23,6 +23,7 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("Lumen")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
