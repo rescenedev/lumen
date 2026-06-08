@@ -30,6 +30,17 @@ struct OrganizeScope: Identifiable {
         loaded = true
         guard authorized else { return }
 
+        reload()
+    }
+
+    /// Re-read the library (after an organize session: new "Lumen" album, changed
+    /// counts, deletions). Cheap enough to call when returning to the home.
+    func refresh() {
+        guard authorized else { return }
+        reload()
+    }
+
+    private func reload() {
         let opts = PHFetchOptions()
         opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         let result = PHAsset.fetchAssets(with: .image, options: opts)

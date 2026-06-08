@@ -21,7 +21,7 @@ struct LibraryView: View {
             .navigationTitle("Lumen")
         }
         .task { if !lib.loaded { await lib.load() } }
-        .fullScreenCover(item: $scope) { s in
+        .fullScreenCover(item: $scope, onDismiss: { lib.refresh() }) { s in
             OrganizeView(assets: lib.assets(for: s), library: lib)
         }
     }
