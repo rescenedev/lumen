@@ -5,6 +5,7 @@ import UIKit
 /// This is the iOS equivalent of the macOS scanner — the app's library source.
 @MainActor @Observable final class PhotoLibrary {
     var assets: [PHAsset] = []
+    var albums: [PHAssetCollection] = []
     var authorized = false
     var loaded = false
 
@@ -25,7 +26,40 @@ import UIKit
         arr.reserveCapacity(result.count)
         result.enumerateObjects { a, _, _ in arr.append(a) }
         assets = arr
+        loadAlbums()
     }
+
+    // MARK: - Albums (for up-swipe classification)
+
+    func loadAlbums() {
+        let r = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
+        var arr: [PHAssetCollection] = []
+        r.enumerateObjects { c, _, _ in arr.append(c) }
+        albums = arr
+    }
+
+    func createAlbum(_ title: String) async -> PHAssetCollection? {
+        var placeholder: PHObjectPlaceholder?
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                placeholder = PHAssetCollectionChangeRequest
+                    .creationRequestForAssetCollection(withTitle: title).placeholderForCreatedAssetCollection
+            }
+        } catch { return nil }
+        guard let id = placeholder?.localIdentifier,
+              let c = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [id], options: nil).firstObject
+        else { return nil }
+        albums.append(c)
+        return c
+    }
+
+    func addAssets(_ assets: [PHAsset], to collection: PHAssetCollection) async {
+        try? await PHPhotoLibrary.shared().performChanges {
+            PHAssetCollectionChangeRequest(for: collection)?.addAssets(assets as NSArray)
+        }
+    }
+
+    func album(withID id: String) -> PHAssetCollection? { albums.first { $0.localIdentifier == id } }
 
     /// Square thumbnail for the grid. `.highQualityFormat` → exactly one callback
     /// (safe to bridge to a continuation).
