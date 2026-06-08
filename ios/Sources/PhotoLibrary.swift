@@ -145,6 +145,10 @@ struct OrganizeScope: Identifiable, Hashable {
         albums = snap.albums
         keptIDs = snap.keptIDs
         scopes = snap.scopes
+        // Keep the next few 즐겨찾기 covers warm so un-favoriting swaps instantly.
+        favoriteOrder.prefix(3)
+            .compactMap { PHAsset.fetchAssets(withLocalIdentifiers: [$0], options: nil).firstObject }
+            .forEach { prewarm($0) }
     }
 
     // MARK: - Snapshot (built off the main thread)

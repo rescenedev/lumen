@@ -71,7 +71,10 @@ struct AlbumGalleryView: View {
             assets = await library.assets(for: scope)
             ready = true
         }
-        .fullScreenCover(item: $open) { start in
+        .fullScreenCover(item: $open, onDismiss: {
+            // Refresh after the viewer — e.g. un-favorited photos leave the 즐겨찾기 grid.
+            Task { assets = await library.assets(for: scope) }
+        }) { start in
             OrganizeView(scope: scope, library: library, startIndex: start.index)
         }
     }
