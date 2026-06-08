@@ -37,6 +37,13 @@ struct OrganizeScope: Identifiable, Hashable {
 
     private func saveFavoriteOrder() { UserDefaults.standard.set(favoriteOrder, forKey: "lumen.favoriteOrder") }
 
+    /// Warm the cover-size thumbnail cache for an asset so it renders immediately.
+    private func prewarm(_ asset: PHAsset) {
+        let px = 300 * UIScreen.main.scale
+        manager.startCachingImages(for: [asset], targetSize: CGSize(width: px, height: px),
+                                   contentMode: .aspectFill, options: nil)
+    }
+
     /// Sort assets so the ones in `order` come first (in that order), rest after.
     nonisolated private static func ordered(_ assets: [PHAsset], by order: [String]) -> [PHAsset] {
         guard !order.isEmpty else { return assets }
@@ -118,6 +125,7 @@ struct OrganizeScope: Identifiable, Hashable {
                         if a.localIdentifier != id { cover = a; stop.pointee = true }
                     }
                 }
+                if let cover { prewarm(cover) }   // cache the new cover so it appears instantly
             }
             scopes[i] = OrganizeScope(id: s.id, title: s.title, symbol: s.symbol,
                                       count: s.count - 1, collection: s.collection, cover: cover)
