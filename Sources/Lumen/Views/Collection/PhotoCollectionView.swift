@@ -48,6 +48,10 @@ struct PhotoCollectionView: NSViewRepresentable {
             guard let coord, let cv else { return false }
             return coord.handleArrow(dx: dx, dy: dy, shift: shift, in: cv)
         }
+        cv.onJump = { [weak coord, weak cv] kind, shift in
+            guard let coord, let cv else { return false }
+            return coord.handleJump(kind, shift: shift, in: cv)
+        }
         cv.menuProvider = { [weak coord, weak cv] event in
             guard let coord, let cv else { return nil }
             let pt = cv.convert(event.locationInWindow, from: nil)
@@ -252,8 +256,36 @@ struct PhotoCollectionView: NSViewRepresentable {
             let col = min(max(0, cur % cols + dx), cols - 1)
             var next = row * cols + col
             if next >= photos.count { next = photos.count - 1 }
-            cursorIndex = next
+            applyMove(to: next, anchorIdx: anchorIdx, shift: shift, cols: cols, in: cv)
+            return true
+        }
 
+        /// Home / End / Page Up / Page Down. Home/End jump to the first/last
+        /// photo; the page keys move by one viewport of rows. Shift extends the
+        /// rectangular block from the anchor, matching arrow-key behaviour.
+        func handleJump(_ kind: JumpKind, shift: Bool, in cv: NSCollectionView) -> Bool {
+            guard !photos.isEmpty else { return false }
+            let cols = columns(cv)
+            let anchorIdx = model.selectionAnchor.flatMap { indexByID[$0] } ?? cursorIndex ?? 0
+            let cur = cursorIndex ?? anchorIdx
+            let page = max(1, visibleRows(cv)) * cols
+            let next: Int
+            switch kind {
+            case .home: next = 0
+            case .end: next = photos.count - 1
+            case .pageUp: next = max(0, cur - page)
+            case .pageDown: next = min(photos.count - 1, cur + page)
+            }
+            applyMove(to: next, anchorIdx: anchorIdx, shift: shift, cols: cols, in: cv)
+            return true
+        }
+
+        /// Commit a navigation move: update the cursor, compute the new selection
+        /// (single item, or a rectangular block when extending with Shift), and
+        /// scroll the target into view.
+        private func applyMove(to next: Int, anchorIdx: Int, shift: Bool, cols: Int,
+                               in cv: NSCollectionView) {
+            cursorIndex = next
             let indices: Set<Int>
             if shift {
                 indices = rectBlock(anchorIdx, next, cols: cols)
@@ -268,7 +300,16 @@ struct PhotoCollectionView: NSViewRepresentable {
             model.selection = sel
             applySelection(cv, sel)
             cv.scrollToItems(at: [IndexPath(item: next, section: 0)], scrollPosition: .nearestHorizontalEdge)
-            return true
+        }
+
+        /// Number of fully/partly visible rows in the current viewport — the
+        /// page size for Page Up / Page Down.
+        private func visibleRows(_ cv: NSCollectionView) -> Int {
+            guard let layout = cv.collectionViewLayout as? NSCollectionViewFlowLayout else { return 1 }
+            let rowHeight = layout.itemSize.height + layout.minimumLineSpacing
+            guard rowHeight > 0 else { return 1 }
+            let viewport = cv.enclosingScrollView?.documentVisibleRect.height ?? cv.bounds.height
+            return max(1, Int(viewport / rowHeight))
         }
 
         private func rectBlock(_ a: Int, _ b: Int, cols: Int) -> Set<Int> {
@@ -367,6 +408,7 @@ final class AdaptiveFlowLayout: NSCollectionViewFlowLayout {
 final class LumenCollectionView: NSCollectionView {
     var onKey: ((LumenKey) -> Bool)?
     var onArrow: ((_ dx: Int, _ dy: Int, _ shift: Bool) -> Bool)?
+    var onJump: ((_ kind: JumpKind, _ shift: Bool) -> Bool)?
     var onChar: ((Character) -> Bool)?         // culling: 0–5 rate, x reject, f favorite
     var menuProvider: ((NSEvent) -> NSMenu?)?
 
@@ -382,6 +424,10 @@ final class LumenCollectionView: NSCollectionView {
         case 124: handled = onArrow?(1, 0, shift) ?? false   // →
         case 125: handled = onArrow?(0, 1, shift) ?? false   // ↓
         case 126: handled = onArrow?(0, -1, shift) ?? false  // ↑
+        case 115: handled = onJump?(.home, shift) ?? false       // Home
+        case 119: handled = onJump?(.end, shift) ?? false        // End
+        case 116: handled = onJump?(.pageUp, shift) ?? false     // Page Up
+        case 121: handled = onJump?(.pageDown, shift) ?? false   // Page Down
         default: break
         }
         // Plain character keys (no Command) drive fast culling.
@@ -398,3 +444,4 @@ final class LumenCollectionView: NSCollectionView {
 }
 
 enum LumenKey { case space, enter, delete, escape }
+enum JumpKind { case home, end, pageUp, pageDown }
