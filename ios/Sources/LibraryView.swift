@@ -44,13 +44,9 @@ struct LibraryView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { scope = s }
                 }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("묶음을 골라 좌우로 넘기며 정리하세요.")
-                    Text("오른쪽(보관)은 ‘Lumen’ 앨범에 모입니다.")
-                    Text("왼쪽은 삭제 후보입니다.")
-                }
-                .font(.footnote).foregroundStyle(.white.opacity(0.4))
-                .padding(.horizontal, 4).padding(.top, 6)
+                Text("묶음을 골라 좌우로 넘기며 정리하세요. 오른쪽(보관)은 ‘Lumen’ 앨범에 모이고, 왼쪽은 삭제 후보입니다.")
+                    .font(.footnote).foregroundStyle(.white.opacity(0.4))
+                    .padding(.horizontal, 4).padding(.top, 6)
             }
             .padding(.horizontal, 16).padding(.top, 4)
         }
