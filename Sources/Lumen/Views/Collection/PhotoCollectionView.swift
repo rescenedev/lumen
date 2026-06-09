@@ -243,19 +243,26 @@ struct PhotoCollectionView: NSViewRepresentable {
             return max(1, count)
         }
 
-        /// Grid-aware arrow navigation. Plain arrow moves a single selection;
-        /// Shift extends a RECTANGULAR block from the anchor to the cursor (so
-        /// ⇧↓ from a 2-wide selection makes a 2×2, not a full index range).
+        /// Grid-aware arrow navigation. ←/→ move linearly through the sequence,
+        /// wrapping to the next/previous row at the edges (Finder/Photos style);
+        /// ↑/↓ move by a row in the same column. Shift extends a RECTANGULAR block
+        /// from the anchor to the cursor (so ⇧↓ from a 2-wide selection makes a
+        /// 2×2, not a full index range).
         func handleArrow(dx: Int, dy: Int, shift: Bool, in cv: NSCollectionView) -> Bool {
             guard !photos.isEmpty else { return false }
             let cols = columns(cv)
             let anchorIdx = model.selectionAnchor.flatMap { indexByID[$0] } ?? cursorIndex ?? 0
             let cur = cursorIndex ?? anchorIdx
-            let lastRow = (photos.count - 1) / cols
-            let row = min(max(0, cur / cols + dy), lastRow)
-            let col = min(max(0, cur % cols + dx), cols - 1)
-            var next = row * cols + col
-            if next >= photos.count { next = photos.count - 1 }
+            let next: Int
+            if dy != 0 {
+                // Vertical: move one row, keeping the column (clamped to the grid).
+                let lastRow = (photos.count - 1) / cols
+                let row = min(max(0, cur / cols + dy), lastRow)
+                next = min(row * cols + cur % cols, photos.count - 1)
+            } else {
+                // Horizontal: linear next/prev, wrapping across row boundaries.
+                next = min(max(0, cur + dx), photos.count - 1)
+            }
             applyMove(to: next, anchorIdx: anchorIdx, shift: shift, cols: cols, in: cv)
             return true
         }
