@@ -201,6 +201,19 @@ final class ThumbnailCache {
         return q
     }()
 
+    /// Trickle mode: the app's window is closed but the app is still running —
+    /// keep warming alive at well under 1% CPU (one decode every few seconds,
+    /// single lane). Reopening a window restores full pace; queued operations
+    /// read the live flag, so the switch applies immediately either way.
+    private var trickleMode = false   // benign race: ops only read it
+    private let trickleDelay: TimeInterval = 5
+
+    func setTrickleMode(_ on: Bool) {
+        guard trickleMode != on else { return }
+        trickleMode = on
+        warmQueue.maxConcurrentOperationCount = on ? 1 : 3
+    }
+
     /// Decode + persist a thumbnail to disk for every photo whose disk cache is
     /// missing, so any folder opens instantly later. `entries` carries each
     /// file's known mtime so we don't stat the NAS just to check the cache key.
@@ -225,6 +238,10 @@ final class ThumbnailCache {
             op.queuePriority = .low
             op.addExecutionBlock { [weak self, weak op] in
                 guard let self, op?.isCancelled == false else { return }
+                if self.trickleMode {   // window closed — idle pace, sleep is 0% CPU
+                    Thread.sleep(forTimeInterval: self.trickleDelay)
+                    guard op?.isCancelled == false else { return }
+                }
                 if !FileManager.default.fileExists(atPath: disk.path) {
                     var image = Self.downsample(url: entry.url, maxPixel: maxPixel)
                     if image == nil { image = QuickLookThumbnailer.thumbnail(for: entry.url, maxPixel: maxPixel) }
