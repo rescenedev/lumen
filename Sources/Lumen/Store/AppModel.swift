@@ -391,10 +391,20 @@ final class AppModel {
     func allTags() -> [(tag: String, count: Int)] { store.allTags() }
 
     /// Kick off background warming of the on-disk thumbnail cache for every
-    /// photo, so navigating to any folder is instant even on a NAS.
+    /// photo, so navigating to any folder is instant even on a NAS. The scope
+    /// the user is currently looking at warms first, then the rest of the library.
     private func startThumbnailWarming() {
-        let entries = allPhotos.map {
-            (url: $0.url, mtime: $0.modificationDate?.timeIntervalSince1970 ?? 0)
+        var entries = allPhotos.map { (url: $0.url, mtime: $0.cacheMtime) }
+        let visible = gatherUnsorted()
+        if !visible.isEmpty, visible.count < allPhotos.count {
+            let priority = Set(visible.map(\.url))
+            var front: [(url: URL, mtime: TimeInterval)] = []
+            var back: [(url: URL, mtime: TimeInterval)] = []
+            front.reserveCapacity(priority.count)
+            for entry in entries {
+                if priority.contains(entry.url) { front.append(entry) } else { back.append(entry) }
+            }
+            entries = front + back
         }
         ThumbnailCache.shared.warmDiskCache(entries) { [weak self] remaining, folder in
             self?.warming.update(remaining: remaining, folder: folder)
@@ -506,20 +516,6 @@ final class AppModel {
         }
     }
 
-    private func filtered(_ photos: [Photo]) -> [Photo] {
-        guard filter.isActive else { return photos }
-        return photos.filter { photo in
-            if let type = filter.fileType, photo.fileExtension != type { return false }
-            let m = meta(photo)
-            if filter.minRating > 0, m.rating < filter.minRating { return false }
-            if let label = filter.label, m.label != label { return false }
-            if filter.favoritesOnly, !m.favorite { return false }
-            if filter.hideRejected, m.rejected { return false }
-            if filter.gpsOnly, !(exif[photo.url.path]?.hasGPS ?? false) { return false }
-            if let camera = filter.camera, exif[photo.url.path]?.cameraDisplay != camera { return false }
-            return true
-        }
-    }
 
     // Small LRU of recent scope results so flipping between folders is instant
     // (not just the single most-recent one).
@@ -577,33 +573,56 @@ final class AppModel {
     @ObservationIgnored private let asyncSortThreshold = 4000
 
     /// Scope + filter + search WITHOUT sorting (cheap; safe on the main thread).
+    /// Filter and search run as a single pass over the scoped list.
     private func gatherUnsorted() -> [Photo] {
-        var result = filtered(scoped(sourcePhotos))
+        let base = scoped(sourcePhotos)
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        if !query.isEmpty {
-            let names = lowerNames
-            result = result.filter { photo in
-                (names[photo.url]?.contains(query) ?? false)
-                || meta(photo).tags.contains { $0.lowercased().contains(query) }
-                || (exif[photo.url.path]?.cameraDisplay?.lowercased().contains(query) ?? false)
+        let f = filter
+        let filterActive = f.isActive
+        guard filterActive || !query.isEmpty else { return base }
+        let names = query.isEmpty ? [:] : lowerNames
+        return base.filter { photo in
+            if filterActive {
+                if let type = f.fileType, photo.fileExtension != type { return false }
+                let m = meta(photo)
+                if f.minRating > 0, m.rating < f.minRating { return false }
+                if let label = f.label, m.label != label { return false }
+                if f.favoritesOnly, !m.favorite { return false }
+                if f.hideRejected, m.rejected { return false }
+                if f.gpsOnly, !(exif[photo.url.path]?.hasGPS ?? false) { return false }
+                if let camera = f.camera, exif[photo.url.path]?.cameraDisplay != camera { return false }
             }
+            if !query.isEmpty {
+                let matches = (names[photo.url]?.contains(query) ?? false)
+                    || meta(photo).tags.contains { $0.lowercased().contains(query) }
+                    || (exif[photo.url.path]?.cameraDisplay?.lowercased().contains(query) ?? false)
+                if !matches { return false }
+            }
+            return true
         }
-        return result
     }
 
-    /// Apply the active sort. Album scope keeps its manual order unless sorted.
-    private func sortVisible(_ gathered: [Photo]) -> [Photo] {
+    /// The active sort as a Sendable closure, so large scopes — including
+    /// albums with a manual order — can sort off the main thread.
+    /// Album scope keeps its manual order unless explicitly sorted.
+    private func currentSorter() -> @Sendable ([Photo]) -> [Photo] {
         if case .album(let id) = committedSidebar, sortOrder == .dateNewest,
            let album = albums.first(where: { $0.id == id }) {
             let order = Dictionary(uniqueKeysWithValues: album.photoPaths.enumerated().map { ($1, $0) })
-            return gathered.sorted { (order[$0.url.path] ?? 0) < (order[$1.url.path] ?? 0) }
+            return { photos in photos.sorted { (order[$0.url.path] ?? 0) < (order[$1.url.path] ?? 0) } }
         }
-        return sortOrder.sorted(gathered)
+        let order = sortOrder
+        return { order.sorted($0) }
     }
+
+    /// Bumped whenever a freshly sorted result lands in the cache — derived
+    /// caches (e.g. `monthGroups`) key on this to pick up async sort results.
+    @ObservationIgnored private var visibleResultRevision = 0
 
     private func cacheVisible(_ key: Int, _ result: [Photo]) {
         visibleCacheMap[key] = result
         visibleCacheOrder.append(key)
+        visibleResultRevision &+= 1
         if visibleCacheOrder.count > visibleCacheCapacity {
             visibleCacheMap.removeValue(forKey: visibleCacheOrder.removeFirst())
         }
@@ -616,10 +635,10 @@ final class AppModel {
         if let hit = visibleCacheMap[key] { lastVisible = hit; return hit }
 
         let gathered = gatherUnsorted()
-        let isAlbum: Bool = { if case .album = committedSidebar { return true }; return false }()
+        let sorter = currentSorter()
 
-        if gathered.count <= asyncSortThreshold || isAlbum {
-            let sorted = sortVisible(gathered)
+        if gathered.count <= asyncSortThreshold {
+            let sorted = sorter(gathered)
             cacheVisible(key, sorted)
             lastVisible = sorted
             return sorted
@@ -628,11 +647,10 @@ final class AppModel {
         // Large: sort off-main; show the previous list + spinner until ready.
         if sortInFlightKey != key {
             sortInFlightKey = key
-            let order = sortOrder
             sortTask?.cancel()
             sortTask = Task { [weak self] in
                 await MainActor.run { self?.isSortingVisible = true }
-                let sorted = await Task.detached(priority: .userInitiated) { order.sorted(gathered) }.value
+                let sorted = await Task.detached(priority: .userInitiated) { sorter(gathered) }.value
                 guard let self else { return }
                 if self.visibleSignature == key {
                     self.cacheVisible(key, sorted)
@@ -737,16 +755,29 @@ final class AppModel {
         return roots.map(makeNode)
     }
 
-    /// Photos grouped by month for the timeline layout.
+    @ObservationIgnored private var monthGroupsCache:
+        (key: Int, revision: Int, groups: [(title: String, photos: [Photo])])?
+
+    /// Photos grouped by month for the timeline layout. Cached per visible
+    /// result so body re-evaluations don't re-group the whole list — the
+    /// revision picks up async sort results that land under the same signature.
     var monthGroups: [(title: String, photos: [Photo])] {
+        let photos = visiblePhotos   // computed first: may refresh the revision
+        let key = visibleSignature
+        if let cached = monthGroupsCache, cached.key == key,
+           cached.revision == visibleResultRevision {
+            return cached.groups
+        }
         let cal = Calendar.current
-        let groups = Dictionary(grouping: visiblePhotos) { photo -> Date in
+        let grouped = Dictionary(grouping: photos) { photo -> Date in
             let date = photo.creationDate ?? .distantPast
             return cal.date(from: cal.dateComponents([.year, .month], from: date)) ?? .distantPast
         }
-        return groups.keys.sorted(by: >).map { key in
-            (title: Self.monthFormatter.string(from: key), photos: groups[key] ?? [])
+        let groups = grouped.keys.sorted(by: >).map { month in
+            (title: Self.monthFormatter.string(from: month), photos: grouped[month] ?? [])
         }
+        monthGroupsCache = (key, visibleResultRevision, groups)
+        return groups
     }
 
     /// Photos that have GPS coordinates, for the map.

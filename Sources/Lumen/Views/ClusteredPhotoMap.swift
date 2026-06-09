@@ -136,11 +136,13 @@ final class PhotoMarkerView: MKAnnotationView {
         loadToken += 1
         let token = loadToken
         imageLayer.contents = nil
-        let maxPixel = ThumbnailCache.gridMaxPixel
+        // Map pins are small — the 256 tier is plenty and packs the memory cache.
+        let maxPixel = ThumbnailCache.tier(forPointSize: 64)
         if let cached = ThumbnailCache.shared.cached(for: photo.url, maxPixel: maxPixel) {
             setImage(cached)
         } else {
-            ThumbnailCache.shared.thumbnail(for: photo.url, maxPixel: maxPixel) { [weak self] img in
+            ThumbnailCache.shared.thumbnail(for: photo.url, maxPixel: maxPixel,
+                                            mtime: photo.cacheMtime) { [weak self] img in
                 guard let self, self.loadToken == token, let img else { return }
                 self.setImage(img)
             }

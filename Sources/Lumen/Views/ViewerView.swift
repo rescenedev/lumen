@@ -209,7 +209,7 @@ struct ViewerView: View {
         return Button(action: action) {
             ZStack {
                 if showEdgeThumb, let photo {
-                    AsyncThumbnail(url: photo.url)
+                    AsyncThumbnail(url: photo.url, mtime: photo.cacheMtime)
                         .frame(width: size, height: size)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(

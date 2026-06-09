@@ -33,11 +33,21 @@ struct PhotoBrowserView: View {
         .onChange(of: model.visibleToken) { _, _ in prefetch() }
     }
 
-    /// Warm thumbnails for the current list so cells appear instantly on scroll.
+    /// Warm thumbnails for a freshly opened list so the first screens appear
+    /// instantly. The NSCollectionView grid prefetches per-viewport on its own,
+    /// so it only needs the first screens here; the SwiftUI list/month views
+    /// have no viewport callback and warm deeper.
     private func prefetch() {
         guard model.viewMode != .map else { return }
         ThumbnailCache.shared.yieldWarmingToBrowsing()
-        ThumbnailCache.shared.prefetch(model.visiblePhotos.map { $0.url })
+        let usesCollectionGrid = model.viewMode == .grid && !model.groupByMonth
+        let tier = model.viewMode == .grid
+            ? ThumbnailCache.tier(forPointSize: model.thumbnailSize)
+            : ThumbnailCache.tier(forPointSize: 40)   // list rows
+        let limit = usesCollectionGrid ? 200 : 600
+        let entries: [ThumbnailCache.Entry] = model.visiblePhotos.prefix(limit)
+            .map { (url: $0.url, mtime: $0.cacheMtime) }
+        ThumbnailCache.shared.prefetch(entries, maxPixel: tier, limit: limit)
     }
 
     /// Non-intrusive "a new version exists" bar. Notify-only: Homebrew installs

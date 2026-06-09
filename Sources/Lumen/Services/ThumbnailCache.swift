@@ -9,9 +9,17 @@ import UniformTypeIdentifiers
 final class ThumbnailCache {
     static let shared = ThumbnailCache()
 
-    /// Fixed decode resolution for grid/list thumbnails (crisp at the largest
-    /// grid size, cheap to cache). Used by both display and prefetch so keys match.
+    /// Disk-cache decode resolution (crisp at the largest grid size). The disk
+    /// cache always stores this size; smaller display tiers derive from it.
     static let gridMaxPixel = 512
+
+    /// Memory-cache tier for a given cell point size (assumes Retina 2×).
+    /// Small cells decode to 256px so the byte-bounded memory cache holds ~4×
+    /// more of them — a 90pt grid on a big display shows 400+ cells at once.
+    /// Display and prefetch must use the same tier so cache keys match.
+    static func tier(forPointSize size: CGFloat) -> Int {
+        size <= 128 ? 256 : gridMaxPixel
+    }
 
     private let memory = NSCache<NSString, NSImage>()
     // Bounded so a fast scroll can't spawn hundreds of simultaneous decodes.
@@ -76,18 +84,22 @@ final class ThumbnailCache {
             .appendingPathComponent(name).appendingPathExtension("jpg")
     }
 
-    private func diskURL(_ url: URL, _ maxPixel: Int) -> URL {
-        // Stat the file for its mtime (one local/NAS call) — used on the display path.
-        let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+    private func statMtime(_ url: URL) -> TimeInterval {
+        // Stat the file for its mtime (one local/NAS call) — fallback for
+        // callers that don't already know it from the library scan.
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970 ?? 0
-        return diskURL(url, maxPixel, mtime: mtime)
     }
 
     func cached(for url: URL, maxPixel: Int) -> NSImage? {
         memory.object(forKey: memKey(url, maxPixel))
     }
 
-    func thumbnail(for url: URL, maxPixel: Int, completion: @escaping (NSImage?) -> Void) {
+    /// `mtime` is the scan-time modification date used in the disk-cache key.
+    /// Passing it avoids a per-thumbnail stat (a NAS roundtrip); nil falls back
+    /// to statting the file.
+    func thumbnail(for url: URL, maxPixel: Int, mtime: TimeInterval? = nil,
+                   completion: @escaping (NSImage?) -> Void) {
         let key = memKey(url, maxPixel)
         if let hit = memory.object(forKey: key) {
             completion(hit)
@@ -104,40 +116,79 @@ final class ThumbnailCache {
             return
         }
         decodeQueue.addOperation { [weak self] in
-            let image = self?.loadAndCache(url: url, maxPixel: maxPixel, key: key)
+            let image = self?.loadAndCache(url: url, maxPixel: maxPixel, mtime: mtime, key: key)
             DispatchQueue.main.async { completion(image) }
         }
     }
 
-    func thumbnail(for url: URL, maxPixel: Int) async -> NSImage? {
+    func thumbnail(for url: URL, maxPixel: Int, mtime: TimeInterval? = nil) async -> NSImage? {
         await withCheckedContinuation { continuation in
-            thumbnail(for: url, maxPixel: maxPixel) { continuation.resume(returning: $0) }
+            thumbnail(for: url, maxPixel: maxPixel, mtime: mtime) { continuation.resume(returning: $0) }
         }
     }
 
     // MARK: - Prefetch
 
-    /// Warm thumbnails for an ordered list of URLs ahead of scrolling. Cancels
-    /// any prior prefetch batch so we don't chase a stale viewport.
-    func prefetch(_ urls: [URL], maxPixel: Int = gridMaxPixel) {
+    typealias Entry = (url: URL, mtime: TimeInterval)
+
+    /// Warm thumbnails for the first screens of a freshly opened list. Cancels
+    /// any prior prefetch batch (including viewport ops — the list changed).
+    /// Skips Photos-library assets: the file decode path (loadAndCache →
+    /// QuickLook) would return the generic document icon for a synthetic asset
+    /// URL and poison the cache; assets load via PhotoKit in `thumbnail(...)`.
+    func prefetch(_ entries: [Entry], maxPixel: Int = gridMaxPixel, limit: Int = 200) {
         prefetchQueue.cancelAllOperations()
-        // Skip Photos-library assets: prefetch uses the file decode path
-        // (loadAndCache → QuickLook), which for a synthetic asset URL returns the
-        // generic document ICON and poisons the cache. Assets load via PhotoKit
-        // in `thumbnail(...)`; warming them here isn't needed.
-        for url in urls.prefix(1000) where url.scheme != Photo.assetScheme {
-            let key = memKey(url, maxPixel)
+        itemOpsLock.lock(); itemOps.removeAll(); itemOpsLock.unlock()
+        for entry in entries.prefix(limit) where entry.url.scheme != Photo.assetScheme {
+            let key = memKey(entry.url, maxPixel)
             if memory.object(forKey: key) != nil { continue }
             let op = BlockOperation()
             op.addExecutionBlock { [weak self, weak op] in
                 guard let self, op?.isCancelled == false else { return }
-                _ = self.loadAndCache(url: url, maxPixel: maxPixel, key: key)
+                _ = self.loadAndCache(url: entry.url, maxPixel: maxPixel, mtime: entry.mtime, key: key)
             }
             prefetchQueue.addOperation(op)
         }
     }
 
-    func cancelPrefetch() { prefetchQueue.cancelAllOperations() }
+    // Viewport prefetch: one cancellable operation per cell, driven by
+    // NSCollectionView's prefetch data source, so scroll-ahead work tracks the
+    // actual viewport instead of decoding the whole list up front.
+    private var itemOps: [NSString: Operation] = [:]
+    private let itemOpsLock = NSLock()
+
+    func prefetchItems(_ entries: [Entry], maxPixel: Int) {
+        for entry in entries where entry.url.scheme != Photo.assetScheme {
+            let key = memKey(entry.url, maxPixel)
+            if memory.object(forKey: key) != nil { continue }
+            itemOpsLock.lock()
+            if itemOps[key] != nil { itemOpsLock.unlock(); continue }
+            let op = BlockOperation()
+            op.addExecutionBlock { [weak self, weak op] in
+                guard let self, op?.isCancelled == false else { return }
+                _ = self.loadAndCache(url: entry.url, maxPixel: maxPixel, mtime: entry.mtime, key: key)
+            }
+            op.completionBlock = { [weak self] in
+                guard let self else { return }
+                self.itemOpsLock.lock(); self.itemOps[key] = nil; self.itemOpsLock.unlock()
+            }
+            itemOps[key] = op
+            itemOpsLock.unlock()
+            prefetchQueue.addOperation(op)
+        }
+    }
+
+    /// Cancel viewport prefetches for cells that scrolled out of range.
+    func cancelPrefetchItems(_ urls: [URL], maxPixel: Int) {
+        itemOpsLock.lock()
+        for url in urls { itemOps[memKey(url, maxPixel)]?.cancel() }
+        itemOpsLock.unlock()
+    }
+
+    func cancelPrefetch() {
+        prefetchQueue.cancelAllOperations()
+        itemOpsLock.lock(); itemOps.removeAll(); itemOpsLock.unlock()
+    }
 
     // MARK: - Full-library disk warming
 
@@ -221,41 +272,76 @@ final class ThumbnailCache {
 
     /// Disk → ImageIO downsample → QuickLook fallback, caching the result in
     /// memory and on disk. The single shared load path for display and prefetch.
+    /// The disk cache always stores `gridMaxPixel`; a smaller requested tier is
+    /// derived from the cached JPEG (local, cheap) so the NAS original is only
+    /// ever decoded once per photo.
     @discardableResult
-    private func loadAndCache(url: URL, maxPixel: Int, key: NSString) -> NSImage? {
+    private func loadAndCache(url: URL, maxPixel: Int, mtime: TimeInterval?, key: NSString) -> NSImage? {
         // Never run the file/QuickLook decode path on a Photos-library asset — it
         // would return the generic document icon. Assets only load via PhotoKit.
         if url.scheme == Photo.assetScheme { return nil }
-        let disk = diskURL(url, maxPixel)
-        if let data = try? Data(contentsOf: disk), let image = NSImage(data: data) {
+        let disk = diskURL(url, Self.gridMaxPixel, mtime: mtime ?? statMtime(url))
+        if let data = try? Data(contentsOf: disk), let image = Self.decode(data, maxPixel: maxPixel) {
             memory.setObject(image, forKey: key, cost: cost(of: image))
             return image
         }
         // ImageIO first; QuickLook fallback handles iCloud-dataless files and
         // formats ImageIO can't decode directly.
-        var image = Self.downsample(url: url, maxPixel: maxPixel)
-        if image == nil {
-            image = QuickLookThumbnailer.thumbnail(for: url, maxPixel: maxPixel)
+        var full = Self.downsample(url: url, maxPixel: Self.gridMaxPixel)
+        if full == nil {
+            full = QuickLookThumbnailer.thumbnail(for: url, maxPixel: Self.gridMaxPixel)
         }
-        if let image {
-            memory.setObject(image, forKey: key, cost: cost(of: image))
-            writeDisk(image, to: disk)
+        guard let full else { return nil }
+        let jpeg = Self.encodeJPEG(full)
+        if let jpeg { writeDisk(jpeg, to: disk) }
+        var image = full
+        if maxPixel < Self.gridMaxPixel, let jpeg, let small = Self.decode(jpeg, maxPixel: maxPixel) {
+            image = small
         }
+        memory.setObject(image, forKey: key, cost: cost(of: image))
         return image
     }
 
-    private func writeDisk(_ image: NSImage, to url: URL) {
+    /// Decode cached JPEG data at the requested tier. Full tier decodes as-is;
+    /// smaller tiers downsample (orientation was already baked at encode time).
+    private static func decode(_ data: Data, maxPixel: Int) -> NSImage? {
+        if maxPixel >= gridMaxPixel { return NSImage(data: data) }
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return NSImage(data: data)
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return NSImage(data: data)
+        }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }
+
+    private static func encodeJPEG(_ image: NSImage) -> Data? {
         // Encode straight from the CGImage (skips the slow NSImage→TIFF→bitmap
-        // round-trip) into in-memory data, then write atomically. Same JPEG output.
-        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        // round-trip) into in-memory data.
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
         let data = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return }
+        guard let dest = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(dest, cg, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { return }
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return data as Data
+    }
+
+    private func writeDisk(_ image: NSImage, to url: URL) {
+        guard let data = Self.encodeJPEG(image) else { return }
+        writeDisk(data, to: url)
+    }
+
+    private func writeDisk(_ data: Data, to url: URL) {
         // Ensure the shard subdirectory exists (idempotent, cheap).
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
-        try? (data as Data).write(to: url, options: .atomic)
+        try? data.write(to: url, options: .atomic)
     }
 
     private static func downsample(url: URL, maxPixel: Int) -> NSImage? {

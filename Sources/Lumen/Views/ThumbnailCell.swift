@@ -46,7 +46,8 @@ struct ThumbnailCell: View, Equatable {
     }
 
     private var thumbnail: some View {
-        AsyncThumbnail(url: photo.url)
+        AsyncThumbnail(url: photo.url, mtime: photo.cacheMtime,
+                       maxPixel: ThumbnailCache.tier(forPointSize: size))
             .frame(width: size, height: size)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(

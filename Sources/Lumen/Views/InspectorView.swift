@@ -95,7 +95,7 @@ struct InspectorView: View {
     }
 
     private func preview(for photo: Photo) -> some View {
-        AsyncThumbnail(url: photo.url)
+        AsyncThumbnail(url: photo.url, mtime: photo.cacheMtime)
             .aspectRatio(contentMode: .fit)
             .frame(maxWidth: .infinity)
             .frame(height: 180)

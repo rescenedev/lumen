@@ -148,7 +148,8 @@ struct PhotoCombineView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Array(ordered.enumerated()), id: \.element.id) { index, photo in
-                    AsyncThumbnail(url: photo.url)
+                    AsyncThumbnail(url: photo.url, mtime: photo.cacheMtime,
+                                   maxPixel: ThumbnailCache.tier(forPointSize: 52))
                         .frame(width: 52, height: 52)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .overlay(alignment: .topLeading) {

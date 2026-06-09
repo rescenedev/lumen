@@ -16,6 +16,11 @@ struct Photo: Identifiable, Hashable, Sendable, Codable {
     /// Parent directory of the file, used to build the folder sidebar.
     var folderURL: URL { url.deletingLastPathComponent() }
 
+    /// Scan-time mtime used in thumbnail disk-cache keys. Passing this to
+    /// ThumbnailCache avoids a per-thumbnail stat (a NAS roundtrip). The 0
+    /// fallback matches the cache's own fallback so keys stay consistent.
+    var cacheMtime: TimeInterval { modificationDate?.timeIntervalSince1970 ?? 0 }
+
     init(url: URL, resourceValues: URLResourceValues) {
         self.url = url
         self.filename = url.lastPathComponent

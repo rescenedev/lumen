@@ -34,6 +34,7 @@ struct PhotoCollectionView: NSViewRepresentable {
         cv.register(PhotoCollectionItem.self, forItemWithIdentifier: PhotoCollectionItem.identifier)
         cv.dataSource = context.coordinator
         cv.delegate = context.coordinator
+        cv.prefetchDataSource = context.coordinator
 
         let dbl = NSClickGestureRecognizer(target: context.coordinator,
                                            action: #selector(Coordinator.handleDoubleClick(_:)))
@@ -116,7 +117,8 @@ struct PhotoCollectionView: NSViewRepresentable {
     // MARK: - Coordinator
 
     @MainActor
-    final class Coordinator: NSObject, NSCollectionViewDataSource, NSCollectionViewDelegate {
+    final class Coordinator: NSObject, NSCollectionViewDataSource, NSCollectionViewDelegate,
+                             NSCollectionViewPrefetching {
         let model: AppModel
         var photos: [Photo] = []
         var indexByID: [Photo.ID: Int] = [:]
@@ -154,6 +156,25 @@ struct PhotoCollectionView: NSViewRepresentable {
                            rating: model.rating(photo), label: model.label(photo),
                            rejected: model.isRejected(photo))
             return item
+        }
+
+        // Viewport-driven prefetch: NSCollectionView asks ahead of the scroll
+        // direction, so only cells about to appear decode — not the whole list.
+        func collectionView(_ collectionView: NSCollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+            let tier = ThumbnailCache.tier(forPointSize: model.thumbnailSize)
+            let entries: [ThumbnailCache.Entry] = indexPaths.compactMap { ip in
+                guard photos.indices.contains(ip.item) else { return nil }
+                let photo = photos[ip.item]
+                return (url: photo.url, mtime: photo.cacheMtime)
+            }
+            ThumbnailCache.shared.prefetchItems(entries, maxPixel: tier)
+        }
+
+        func collectionView(_ collectionView: NSCollectionView,
+                            cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {
+            let tier = ThumbnailCache.tier(forPointSize: model.thumbnailSize)
+            let urls = indexPaths.compactMap { photos.indices.contains($0.item) ? photos[$0.item].url : nil }
+            ThumbnailCache.shared.cancelPrefetchItems(urls, maxPixel: tier)
         }
 
         /// Update favorite/rating/label badges on the visible cells in place,

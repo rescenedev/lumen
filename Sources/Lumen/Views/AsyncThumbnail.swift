@@ -5,10 +5,12 @@ import SwiftUI
 /// the grid only rescales an existing bitmap rather than re-decoding.
 struct AsyncThumbnail: View {
     let url: URL
-
-    /// Fixed decode resolution — generous enough to look crisp at the largest
-    /// grid size while staying cheap to cache. Shared so prefetch keys match.
-    private let maxPixel = ThumbnailCache.gridMaxPixel
+    /// Scan-time mtime for the disk-cache key — pass `photo.cacheMtime` to
+    /// avoid a per-thumbnail stat (a NAS roundtrip); nil stats the file.
+    var mtime: TimeInterval?
+    /// Decode tier. Use `ThumbnailCache.tier(forPointSize:)` for small cells so
+    /// keys match prefetch; the default is crisp at the largest grid size.
+    var maxPixel = ThumbnailCache.gridMaxPixel
 
     @State private var image: NSImage?
     @State private var failed = false
@@ -45,7 +47,7 @@ struct AsyncThumbnail: View {
             image = hit
             return
         }
-        let loaded = await ThumbnailCache.shared.thumbnail(for: url, maxPixel: maxPixel)
+        let loaded = await ThumbnailCache.shared.thumbnail(for: url, maxPixel: maxPixel, mtime: mtime)
         if let loaded {
             image = loaded
         } else {

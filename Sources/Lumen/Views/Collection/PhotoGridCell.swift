@@ -201,12 +201,19 @@ final class PhotoCollectionItem: NSCollectionViewItem {
 
         loadToken += 1
         let token = loadToken
-        let maxPixel = ThumbnailCache.gridMaxPixel
+        let maxPixel = ThumbnailCache.tier(forPointSize: size)
         if let cached = ThumbnailCache.shared.cached(for: photo.url, maxPixel: maxPixel) {
             cell.image = cached
         } else {
-            ThumbnailCache.shared.thumbnail(for: photo.url, maxPixel: maxPixel) { [weak self] img in
-                guard let self, self.loadToken == token else { return }
+            // A different tier already in memory beats a placeholder — show it
+            // now (drawing rescales) and swap in the exact tier when it lands.
+            let other = maxPixel == ThumbnailCache.gridMaxPixel ? 256 : ThumbnailCache.gridMaxPixel
+            if let nearby = ThumbnailCache.shared.cached(for: photo.url, maxPixel: other) {
+                cell.image = nearby
+            }
+            ThumbnailCache.shared.thumbnail(for: photo.url, maxPixel: maxPixel,
+                                            mtime: photo.cacheMtime) { [weak self] img in
+                guard let self, self.loadToken == token, img != nil else { return }
                 self.cell.image = img
                 self.cell.needsDisplay = true
             }

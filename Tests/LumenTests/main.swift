@@ -19,5 +19,6 @@ offlineRootTests()
 photoAssetTests()
 imageEditorTests()
 incrementalScannerTests()
+thumbnailCacheTests()
 
 exit(Harness.finish())

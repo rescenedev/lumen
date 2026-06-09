@@ -34,7 +34,8 @@ private struct PhotoRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncThumbnail(url: photo.url)
+            AsyncThumbnail(url: photo.url, mtime: photo.cacheMtime,
+                           maxPixel: ThumbnailCache.tier(forPointSize: 40))
                 .frame(width: 40, height: 40)
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 .overlay(
