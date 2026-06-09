@@ -317,8 +317,12 @@ struct OrganizeScope: Identifiable, Hashable {
             let ordered = Self.ordered(arr, by: favoriteOrder)
             return GridSource(count: ordered.count) { ordered[$0] }
         }
+        // Use the already-known scope.count (computed off-main during reload) instead
+        // of result.count, so building the source is instant — no PhotoKit count on
+        // the critical path when opening a big album.
         let result = scope.collection.map { PHAsset.fetchAssets(in: $0, options: opts) } ?? PHAsset.fetchAssets(with: opts)
-        return GridSource(count: result.count) { result.object(at: $0) }
+        let n = scope.count
+        return GridSource(count: n) { i in result.object(at: min(i, n - 1)) }
     }
 
     // MARK: - Albums (organize destination)
