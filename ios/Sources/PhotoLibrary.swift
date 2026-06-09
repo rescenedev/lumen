@@ -10,6 +10,14 @@ struct GridSource {
     func asset(_ i: Int) -> PHAsset { provider(i) }
 }
 
+/// How the user albums are ordered on the home.
+enum AlbumSort: String, CaseIterable {
+    case recent, name, count
+    var label: String {
+        switch self { case .recent: "기본순"; case .name: "이름순"; case .count: "사진 많은순" }
+    }
+}
+
 /// A pickable bundle to organize (all photos, a smart album, or a user album).
 struct OrganizeScope: Identifiable, Hashable {
     let id: String
@@ -35,6 +43,12 @@ struct OrganizeScope: Identifiable, Hashable {
     var hasAnyPhotos = false
     var authorized = false
     var loaded = false
+    var albumSort: AlbumSort = AlbumSort(rawValue: UserDefaults.standard.string(forKey: "lumen.albumSort") ?? "") ?? .recent {
+        didSet {
+            UserDefaults.standard.set(albumSort.rawValue, forKey: "lumen.albumSort")
+            Task { await reload() }
+        }
+    }
 
     /// localIdentifiers already filed into "Lumen". Cached from the last snapshot so
     /// scope filtering never re-hits PhotoKit on the main thread.
@@ -152,7 +166,8 @@ struct OrganizeScope: Identifiable, Hashable {
     private func reload() async {
         let gen = favGen
         let order = favoriteOrder
-        let snap = await Task.detached(priority: .userInitiated) { Self.computeSnapshot(favoriteOrder: order) }.value
+        let sort = albumSort
+        let snap = await Task.detached(priority: .userInitiated) { Self.computeSnapshot(favoriteOrder: order, sort: sort) }.value
         // A favorite was toggled while we were computing — this snapshot is stale,
         // drop it and let the newer toggle's reload win (keeps the optimistic state).
         guard gen == favGen else { return }
@@ -191,14 +206,15 @@ struct OrganizeScope: Identifiable, Hashable {
 
     /// Build the scope list off-main using only fetch counts + firstObject — no
     /// enumerating thousands of assets — so it stays fast on big/iCloud libraries.
-    nonisolated private static func computeSnapshot(favoriteOrder: [String] = []) -> Snapshot {
+    nonisolated private static func computeSnapshot(favoriteOrder: [String] = [], sort: AlbumSort = .recent) -> Snapshot {
         var albums: [PHAssetCollection] = []
         PHAssetCollection.fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
             .enumerateObjects { c, _, _ in albums.append(c) }
 
         // Kept = members of the "Lumen" album (usually small).
+        let lumenAlbum = albums.first(where: { $0.localizedTitle == "Lumen" })
         var keptIDs = Set<String>()
-        if let lumen = albums.first(where: { $0.localizedTitle == "Lumen" }) {
+        if let lumen = lumenAlbum {
             PHAsset.fetchAssets(in: lumen, options: imageOptions()).enumerateObjects { a, _, _ in keptIDs.insert(a.localIdentifier) }
         }
         let opts = imageOptions(excluding: keptIDs)
@@ -209,6 +225,14 @@ struct OrganizeScope: Identifiable, Hashable {
         if all.count > 0 {
             out.append(.init(id: "all", title: "전체 사진", symbol: "photo.on.rectangle",
                              count: all.count, collection: nil, cover: all.firstObject))
+        }
+        // Lumen (the keep destination) right next to 전체 — shows its own members.
+        if let lumen = lumenAlbum {
+            let r = PHAsset.fetchAssets(in: lumen, options: imageOptions())
+            if r.count > 0 {
+                out.append(.init(id: lumen.localIdentifier, title: "Lumen", symbol: "tray.full.fill",
+                                 count: r.count, collection: lumen, cover: r.firstObject))
+            }
         }
 
         func smart(_ subtype: PHAssetCollectionSubtype, _ title: String, _ symbol: String, order: [String] = []) {
@@ -229,13 +253,18 @@ struct OrganizeScope: Identifiable, Hashable {
         smart(.smartAlbumRecentlyAdded, "최근 추가", "clock")
         smart(.smartAlbumScreenshots, "스크린샷", "camera.viewfinder")
 
-        // Skip the Lumen album itself — it's the destination, not a queue to sort.
-        for c in albums where c.localizedTitle != "Lumen" {
-            let r = PHAsset.fetchAssets(in: c, options: opts)
-            if r.count > 0 {
-                out.append(.init(id: c.localIdentifier, title: c.localizedTitle ?? "앨범", symbol: "rectangle.stack",
-                                 count: r.count, collection: c, cover: r.firstObject))
-            }
+        // User albums (Lumen already shown above), in the chosen order.
+        var entries = albums.filter { $0.localizedTitle != "Lumen" }
+            .map { (c: $0, r: PHAsset.fetchAssets(in: $0, options: opts)) }
+            .filter { $0.r.count > 0 }
+        switch sort {
+        case .recent: break
+        case .name:  entries.sort { ($0.c.localizedTitle ?? "") < ($1.c.localizedTitle ?? "") }
+        case .count: entries.sort { $0.r.count > $1.r.count }
+        }
+        for e in entries {
+            out.append(.init(id: e.c.localIdentifier, title: e.c.localizedTitle ?? "앨범", symbol: "rectangle.stack",
+                             count: e.r.count, collection: e.c, cover: e.r.firstObject))
         }
         return Snapshot(albums: albums, keptIDs: keptIDs, scopes: out, hasAnyPhotos: hasAny)
     }
@@ -246,7 +275,9 @@ struct OrganizeScope: Identifiable, Hashable {
     /// (instant — no enumeration), so opening a big album doesn't show a loader.
     /// 즐겨찾기 needs custom order, so it materializes its (small) list.
     func gridSource(for scope: OrganizeScope) -> GridSource {
-        let opts = Self.imageOptions(excluding: keptIDs)
+        // The Lumen album IS the kept photos, so don't exclude them there.
+        let isLumen = scope.collection?.localizedTitle == "Lumen"
+        let opts = isLumen ? Self.imageOptions() : Self.imageOptions(excluding: keptIDs)
         if scope.collection?.assetCollectionSubtype == .smartAlbumFavorites, let c = scope.collection {
             var arr: [PHAsset] = []
             PHAsset.fetchAssets(in: c, options: opts).enumerateObjects { a, _, _ in arr.append(a) }
