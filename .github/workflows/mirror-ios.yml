@@ -1,4 +1,4 @@
-          # Auto-sync the ios/ subtree to the read-only mirror repo
+# Auto-sync the ios/ subtree to the read-only mirror repo
 # (rescenedev/lumen-ios) whenever it changes on main.
 # Auth: write deploy key on lumen-ios, stored as the MIRROR_SSH_KEY secret here.
 name: Mirror ios/ → lumen-ios
