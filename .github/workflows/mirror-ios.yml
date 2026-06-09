@@ -1,0 +1,34 @@
+          # Auto-sync the ios/ subtree to the read-only mirror repo
+# (rescenedev/lumen-ios) whenever it changes on main.
+# Auth: write deploy key on lumen-ios, stored as the MIRROR_SSH_KEY secret here.
+name: Mirror ios/ → lumen-ios
+
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**']
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-ios
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # subtree split needs full history
+
+      - name: Split ios/ history and push to mirror
+        env:
+          SSH_KEY: ${{ secrets.MIRROR_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git subtree split --prefix=ios -b ios-mirror
+          # Force-push so the mirror is always an exact image of ios/ on main.
+          git push --force git@github.com:rescenedev/lumen-ios.git ios-mirror:main

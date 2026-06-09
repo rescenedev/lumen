@@ -285,6 +285,16 @@ final class ThumbnailCache {
             memory.setObject(image, forKey: key, cost: cost(of: image))
             return image
         }
+        // A corrupt file (zero-filled — a failed copy) decodes to nothing, and
+        // QuickLook hands back a generic filetype icon for it, poisoning the
+        // cache with a plausible-looking "thumbnail". Bail early instead so the
+        // cell can show a broken-file mark. (Only bails on a positive read of
+        // 16 zero bytes — unreadable/dataless files still reach QuickLook.)
+        if let handle = try? FileHandle(forReadingFrom: url) {
+            let head = try? handle.read(upToCount: 16)
+            try? handle.close()
+            if let head, head.count == 16, head.allSatisfy({ $0 == 0 }) { return nil }
+        }
         // ImageIO first; QuickLook fallback handles iCloud-dataless files and
         // formats ImageIO can't decode directly.
         var full = Self.downsample(url: url, maxPixel: Self.gridMaxPixel)

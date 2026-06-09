@@ -7,6 +7,8 @@ private enum Badge {
     static let check = tinted("checkmark", .white, pointSize: 12)
     static let reject = tinted("xmark", .white, pointSize: 11)
     static let placeholder = tinted("photo", NSColor(white: 1, alpha: 0.16), pointSize: 44)
+    static let broken = tinted("exclamationmark.triangle.fill",
+                               NSColor.systemYellow.withAlphaComponent(0.85), pointSize: 26)
 
     static func tinted(_ name: String, _ color: NSColor, pointSize: CGFloat) -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
@@ -34,6 +36,7 @@ final class PhotoGridCellView: NSView {
     var rejected = false
     var selected = false
     var selectionActive = false   // any photo selected → dim the non-selected ones
+    var failed = false            // file couldn't be decoded (corrupt/unreadable)
     var thumbSize: CGFloat = 170
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -63,11 +66,12 @@ final class PhotoGridCellView: NSView {
             clip.fill()                       // accent frame behind the inset photo
         }
 
-        // Loading placeholder.
+        // Loading placeholder — or a broken-file mark when decode failed
+        // (corrupt/zero-filled files), so they don't masquerade as loading.
         if image == nil {
             NSColor.white.withAlphaComponent(0.045).setFill()
             photoClip.fill()
-            let g = Badge.placeholder
+            let g = failed ? Badge.broken : Badge.placeholder
             let gs = min(s * 0.30, 56)
             g.draw(in: NSRect(x: photoRect.midX - gs / 2, y: photoRect.midY - gs / 2, width: gs, height: gs))
         }
@@ -198,6 +202,7 @@ final class PhotoCollectionItem: NSCollectionViewItem {
         cell.selectionActive = selectionActive
         cell.thumbSize = size
         cell.image = nil
+        cell.failed = false
 
         loadToken += 1
         let token = loadToken
@@ -213,8 +218,12 @@ final class PhotoCollectionItem: NSCollectionViewItem {
             }
             ThumbnailCache.shared.thumbnail(for: photo.url, maxPixel: maxPixel,
                                             mtime: photo.cacheMtime) { [weak self] img in
-                guard let self, self.loadToken == token, img != nil else { return }
-                self.cell.image = img
+                guard let self, self.loadToken == token else { return }
+                if let img {
+                    self.cell.image = img
+                } else if self.cell.image == nil {
+                    self.cell.failed = true   // decode failed — mark as broken
+                }
                 self.cell.needsDisplay = true
             }
         }
