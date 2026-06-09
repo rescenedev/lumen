@@ -203,11 +203,11 @@ final class ThumbCell: UICollectionViewCell {
         self.manager = manager
         heart.isHidden = !asset.isFavorite
         let scale = UIScreen.main.scale
-        let target = CGSize(width: edge * scale, height: edge * scale)
-        let opt = PHImageRequestOptions()
-        opt.deliveryMode = .opportunistic
-        opt.resizeMode = .fast
-        opt.isNetworkAccessAllowed = true
+        // At the default 4-column layout, snap to the exact prewarm target so the
+        // warmed cache is actually hit (otherwise every cell re-decodes → slow open).
+        let raw = CGSize(width: edge * scale, height: edge * scale)
+        let target = abs(raw.width - PhotoLibrary.gridThumbTarget.width) < 1 ? PhotoLibrary.gridThumbTarget : raw
+        let opt = PhotoLibrary.gridThumbOptions()
         let id = asset.localIdentifier
         requestID = manager.requestImage(for: asset, targetSize: target, contentMode: .aspectFill, options: opt) { [weak self] img, _ in
             guard let self, self.assetID == id, let img else { return }
