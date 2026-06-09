@@ -16,3 +16,4 @@ SELLING-TODO.md
 # Xcode (if ever opened)
 *.xcuserstate
 xcuserdata/
+.gstack/
