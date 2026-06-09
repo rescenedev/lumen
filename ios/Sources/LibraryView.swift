@@ -6,6 +6,7 @@ import Photos
 struct LibraryView: View {
     @State private var lib = PhotoLibrary()
     @State private var scope: OrganizeScope?
+    @State private var showSort = false
     @Environment(\.horizontalSizeClass) private var hSize
 
     // 2 columns on iPhone, ~4-5 on iPad.
@@ -43,6 +44,9 @@ struct LibraryView: View {
         }
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
+        .sheet(isPresented: $showSort) {
+            SortSheet(current: lib.albumSort) { lib.albumSort = $0 }
+        }
         .task {
             if !lib.loaded { await lib.load() }
             // Screenshot helper: `-autoOrganize` opens the first album straight away.
@@ -75,13 +79,7 @@ struct LibraryView: View {
                 HStack {
                     Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     Spacer()
-                    Menu {
-                        ForEach(AlbumSort.allCases, id: \.self) { s in
-                            Button { lib.albumSort = s } label: {
-                                if lib.albumSort == s { Label(s.label, systemImage: "checkmark") } else { Text(s.label) }
-                            }
-                        }
-                    } label: {
+                    Button { showSort = true } label: {
                         HStack(spacing: 5) {
                             Text(lib.albumSort.label)
                             Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.bold))
@@ -91,6 +89,7 @@ struct LibraryView: View {
                         .background(.white.opacity(0.08), in: Capsule())
                         .overlay(Capsule().strokeBorder(.white.opacity(0.08)))
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 4)
                 LazyVGrid(columns: gridColumns, spacing: 12) {
@@ -105,6 +104,44 @@ struct LibraryView: View {
             }
             .padding(.horizontal, 16).padding(.top, 4)
         }
+    }
+}
+
+/// Modern bottom sheet for picking the album sort (always on-screen, slate).
+struct SortSheet: View {
+    let current: AlbumSort
+    let onSelect: (AlbumSort) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("정렬 기준").font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.5))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 6)
+            ForEach(Array(AlbumSort.allCases.enumerated()), id: \.element) { i, s in
+                Button { onSelect(s); dismiss() } label: {
+                    HStack {
+                        Text(s.label).font(.body.weight(.medium)).foregroundStyle(.white)
+                        Spacer()
+                        if current == s {
+                            Image(systemName: "checkmark").font(.body.weight(.bold)).foregroundStyle(Color.lumenAccent)
+                        }
+                    }
+                    .padding(.horizontal, 22).padding(.vertical, 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if i < AlbumSort.allCases.count - 1 {
+                    Divider().overlay(.white.opacity(0.07)).padding(.leading, 22)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .presentationDetents([.height(CGFloat(AlbumSort.allCases.count) * 56 + 64)])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Color.lumenCard)
+        .preferredColorScheme(.dark)
     }
 }
 
