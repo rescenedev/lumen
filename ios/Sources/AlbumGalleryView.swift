@@ -8,31 +8,29 @@ struct AlbumGalleryView: View {
     let library: PhotoLibrary
     let onClose: () -> Void
 
-    @State private var source: GridSource
+    @State private var source: GridSource?
     @State private var ver = 0
     @State private var open: StartAt?
-
-    init(scope: OrganizeScope, library: PhotoLibrary, onClose: @escaping () -> Void) {
-        self.scope = scope
-        self.library = library
-        self.onClose = onClose
-        _source = State(initialValue: library.gridSource(for: scope))   // ready before first frame
-    }
 
     var body: some View {
         ZStack {
             Color.lumenBG.ignoresSafeArea()
-            if source.count == 0 {
-                Text("사진이 없어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
-            } else {
-                PhotoGridView(source: source, manager: library.manager, reloadKey: ver,
-                              onTap: { open = StartAt(index: $0) },
-                              onBack: onClose)
-                    .ignoresSafeArea(edges: .bottom)
+            // Built just after appear so the slide-in starts immediately (the grid
+            // fills in during the slide instead of blocking its first frame).
+            if let source {
+                if source.count == 0 {
+                    Text("사진이 없어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                } else {
+                    PhotoGridView(source: source, manager: library.manager, reloadKey: ver,
+                                  onTap: { open = StartAt(index: $0) },
+                                  onBack: onClose)
+                        .ignoresSafeArea(edges: .bottom)
+                }
             }
             header
         }
         .preferredColorScheme(.dark)
+        .task { if source == nil { source = library.gridSource(for: scope) } }
         .fullScreenCover(item: $open, onDismiss: {
             // Refresh after the viewer — e.g. un-favorited photos leave the 즐겨찾기 grid.
             source = library.gridSource(for: scope); ver += 1
