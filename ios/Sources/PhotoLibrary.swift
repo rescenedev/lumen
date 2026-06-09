@@ -93,6 +93,23 @@ struct OrganizeScope: Identifiable, Hashable {
                                    contentMode: .aspectFill, options: nil)
     }
 
+    /// Request options for grid thumbnails. Prewarming and the cells MUST use the
+    /// SAME options or PHCachingImageManager treats them as different requests and
+    /// the prewarm cache never gets hit (the grid then re-decodes everything).
+    static func gridThumbOptions() -> PHImageRequestOptions {
+        let o = PHImageRequestOptions()
+        o.deliveryMode = .opportunistic
+        o.resizeMode = .fast
+        o.isNetworkAccessAllowed = true
+        return o
+    }
+
+    /// The target size a 4-column grid cell requests — prewarm must match it exactly.
+    static var gridThumbTarget: CGSize {
+        let edge = (UIScreen.main.bounds.width / 4) * UIScreen.main.scale
+        return CGSize(width: edge, height: edge)
+    }
+
     /// Warm the first screenful of a scope's thumbnails (called on tap), so by the
     /// time the push animation finishes the grid is already populated from cache.
     func prewarmScope(_ scope: OrganizeScope) {
@@ -100,9 +117,8 @@ struct OrganizeScope: Identifiable, Hashable {
         let n = min(src.count, 40)
         guard n > 0 else { return }
         let assets = (0..<n).map { src.asset($0) }
-        let edge = (UIScreen.main.bounds.width / 4) * UIScreen.main.scale   // ~4-column cell
-        manager.startCachingImages(for: assets, targetSize: CGSize(width: edge, height: edge),
-                                   contentMode: .aspectFill, options: nil)
+        manager.startCachingImages(for: assets, targetSize: Self.gridThumbTarget,
+                                   contentMode: .aspectFill, options: Self.gridThumbOptions())
     }
 
     /// Sort assets so the ones in `order` come first (in that order), rest after.

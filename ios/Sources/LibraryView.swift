@@ -57,9 +57,12 @@ struct LibraryView: View {
         }
         .task {
             if !lib.loaded { await lib.load() }
-            // Screenshot helper: `-autoOrganize` opens the first album straight away.
-            if scope == nil, ProcessInfo.processInfo.arguments.contains("-autoOrganize") {
-                scope = lib.scopes.first
+            // Screenshot helper: `-autoOrganize` opens the first album straight away
+            // (via the same prewarm path a real tap takes).
+            if scope == nil, ProcessInfo.processInfo.arguments.contains("-autoOrganize"),
+               let s = lib.scopes.first {
+                lib.prewarmScope(s)
+                scope = s
             }
         }
     }
@@ -104,8 +107,8 @@ struct LibraryView: View {
                     ForEach(lib.scopes) { s in
                         ScopeCard(scope: s, library: lib)
                             .onTapGesture {
+                                lib.prewarmScope(s)   // start caching before the slide so cells hit warm cache
                                 withAnimation(.easeOut(duration: 0.4)) { scope = s }
-                                Task { lib.prewarmScope(s) }   // warm thumbs off the tap's critical path
                             }
                     }
                 }
