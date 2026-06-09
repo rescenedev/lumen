@@ -22,6 +22,15 @@ struct SidebarView: View {
             foldersSection
         }
         .listStyle(.sidebar)
+        // Safety net: whenever a folder gets selected — by click, keyboard, or
+        // code — reveal its children. The row's tap gesture can miss (a tiny
+        // drag during the click defeats TapGesture while the List still
+        // selects), which used to leave the folder selected but collapsed.
+        .onChange(of: model.selectedSidebar) { _, selected in
+            if case .folder(let url) = selected {
+                withAnimation { _ = expandedFolders.insert(url) }
+            }
+        }
         .sheet(item: $renamingAlbum) { album in
             AlbumNameSheet(title: "Rename Album", confirmLabel: "Rename", text: $renameText) {
                 model.renameAlbum(album.id, to: renameText)
@@ -233,13 +242,20 @@ private struct FolderTreeNode: View {
                 // simultaneousGesture, NOT onTapGesture: the List must also see
                 // the click so it does its native selection (which focuses the
                 // list — an exclusive gesture left the highlight gray/inactive).
-                // Our handler adds the toggle: expand on click, collapse on
-                // re-click — Finder source-list feel.
+                // Selecting reveals children (List's onChange backs this up);
+                // re-clicking the already-selected folder toggles them.
                 label
                     .contentShape(Rectangle())
                     .simultaneousGesture(TapGesture().onEnded {
-                        model.selectedSidebar = .folder(node.url)
-                        withAnimation { isExpanded.wrappedValue.toggle() }
+                        let item = SidebarItem.folder(node.url)
+                        if model.selectedSidebar == item {
+                            withAnimation { isExpanded.wrappedValue.toggle() }
+                        } else {
+                            model.selectedSidebar = item
+                            if !isExpanded.wrappedValue {
+                                withAnimation { isExpanded.wrappedValue = true }
+                            }
+                        }
                     })
             }
         } else {
