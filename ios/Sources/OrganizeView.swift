@@ -67,12 +67,26 @@ struct OrganizeView: View {
 
     // MARK: - Photo (full-screen, swipe = navigate)
 
+    /// Page width: one screen plus a small gap between photos.
+    private var pageW: CGFloat { UIScreen.main.bounds.width + 24 }
+    private var visibleIndices: [Int] { [index - 1, index, index + 1].filter { $0 >= 0 && $0 < count } }
+
     private func photoLayer(_ source: GridSource) -> some View {
-        OrganizeCard(asset: source.asset(index), library: library)
-            .overlay(alignment: .top) { favoriteHint }
-            .scaleEffect(offset.height > 0 ? max(0.86, 1 - offset.height / 1100) : 1)  // shrink as you pull down
-            .offset(offset)
-            .id(index)
+        ZStack {
+            // The current photo AND both neighbors, paged side by side like the
+            // Photos app — a horizontal drag pulls the next photo in WITH your
+            // finger instead of flying the current out and popping the next in.
+            // ForEach identity is the photo index, so when `index` advances the
+            // neighbor that's already centered becomes the current view with no
+            // re-creation — the handoff is seamless (no flash, no pop).
+            ForEach(visibleIndices, id: \.self) { i in
+                OrganizeCard(asset: source.asset(i), library: library)
+                    .overlay(alignment: .top) { if i == index { favoriteHint } }
+                    .scaleEffect(i == index && offset.height > 0 ? max(0.86, 1 - offset.height / 1100) : 1)
+                    .offset(x: CGFloat(i - index) * pageW + offset.width,
+                            y: i == index ? offset.height : 0)
+            }
+        }
             .task(id: index) {
                 guard index < source.count else { return }
                 // Favorite state: session toggles are tracked locally — no per-swipe
@@ -258,8 +272,11 @@ struct OrganizeView: View {
         guard target >= 0, target < count else {
             withAnimation(.spring(response: 0.3)) { offset = .zero }; return
         }
-        withAnimation(.easeOut(duration: 0.2)) { offset = CGSize(width: next ? -1000 : 1000, height: 0) }
-        Task { try? await Task.sleep(for: .milliseconds(195)); index = target; offset = .zero }
+        // Animate exactly one page, then swap index + reset offset in the same
+        // frame: the neighbor that just animated to center IS the new current
+        // (same ForEach identity), so the handoff doesn't move a single pixel.
+        withAnimation(.easeOut(duration: 0.22)) { offset = CGSize(width: next ? -pageW : pageW, height: 0) }
+        Task { try? await Task.sleep(for: .milliseconds(215)); index = target; offset = .zero }
     }
 
     /// Record a decision for the current photo, then advance. Deciding the last
@@ -271,7 +288,7 @@ struct OrganizeView: View {
         if d == .keep { Task { await library.addToLumen(a) } }   // file into Lumen, live
         tick += 1
         showFlash(d == .keep ? .keep : .trash)
-        flyAndAdvance(CGSize(width: -1000, height: 0))
+        flyAndAdvance(CGSize(width: -pageW, height: 0))   // exactly one page → seamless handoff
     }
 
     /// Up-swipe: toggle the photo's Apple Favorite (non-destructive, lives in the
@@ -291,9 +308,9 @@ struct OrganizeView: View {
 
     /// Fly the current card out, then step to the next photo (or finish at the end).
     private func flyAndAdvance(_ fly: CGSize) {
-        withAnimation(.easeOut(duration: 0.2)) { offset = fly }
+        withAnimation(.easeOut(duration: 0.22)) { offset = fly }
         Task {
-            try? await Task.sleep(for: .milliseconds(195))
+            try? await Task.sleep(for: .milliseconds(215))
             if index < count - 1 { index += 1; offset = .zero } else { offset = .zero; finish() }
         }
     }
@@ -319,15 +336,21 @@ struct OrganizeCard: View {
     let asset: PHAsset
     let library: PhotoLibrary
     @State private var image: UIImage?
+    @State private var showSpinner = false
 
     var body: some View {
         ZStack {
             Color.lumenBG
             if let image { Image(uiImage: image).resizable().scaledToFit() }
-            else { ProgressView().tint(.white) }
+            else if showSpinner { ProgressView().tint(.white) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: asset.localIdentifier) {
+            // Spinner only if loading actually takes a moment — a cache hit lands
+            // within a frame or two and shouldn't flash a spinner first.
+            showSpinner = false
+            let spin = Task { try? await Task.sleep(for: .milliseconds(180)); if image == nil { showSpinner = true } }
+            defer { spin.cancel() }
             // Screen-size target (not an oversized square) — decodes only the pixels
             // we can show, and matches prewarmViewer so neighbors arrive from cache.
             for await img in library.imageStream(asset, target: PhotoLibrary.viewerTarget, mode: .aspectFit) { image = img }
