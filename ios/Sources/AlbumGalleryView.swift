@@ -8,33 +8,30 @@ struct AlbumGalleryView: View {
     let library: PhotoLibrary
     @Environment(\.dismiss) private var dismiss
 
-    @State private var assets: [PHAsset] = []
-    @State private var ready = false
+    @State private var source: GridSource?
+    @State private var ver = 0
     @State private var open: StartAt?
 
     var body: some View {
         ZStack {
             Color.lumenBG.ignoresSafeArea()
-            if !ready {
-                ProgressView().tint(.white)
-            } else if assets.isEmpty {
-                Text("사진이 없어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
-            } else {
-                PhotoGridView(assets: assets,
-                              onTap: { open = StartAt(index: $0) },
-                              onBack: { dismiss() })
-                    .ignoresSafeArea(edges: .bottom)
+            if let source {
+                if source.count == 0 {
+                    Text("사진이 없어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                } else {
+                    PhotoGridView(source: source, reloadKey: ver,
+                                  onTap: { open = StartAt(index: $0) },
+                                  onBack: { dismiss() })
+                        .ignoresSafeArea(edges: .bottom)
+                }
             }
             header
         }
         .preferredColorScheme(.dark)
-        .task {
-            assets = await library.assets(for: scope)
-            ready = true
-        }
+        .task { if source == nil { source = library.gridSource(for: scope) } }
         .fullScreenCover(item: $open, onDismiss: {
             // Refresh after the viewer — e.g. un-favorited photos leave the 즐겨찾기 grid.
-            Task { assets = await library.assets(for: scope) }
+            source = library.gridSource(for: scope); ver += 1
         }) { start in
             OrganizeView(scope: scope, library: library, startIndex: start.index)
         }
