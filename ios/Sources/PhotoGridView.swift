@@ -7,6 +7,7 @@ import UIKit
 /// its pinch can't be smooth — UICollectionView resizes items continuously.
 struct PhotoGridView: UIViewRepresentable {
     let source: GridSource
+    let manager: PHCachingImageManager
     var reloadKey: Int = 0
     var topInset: CGFloat = 52
     var onTap: (Int) -> Void
@@ -48,7 +49,6 @@ struct PhotoGridView: UIViewRepresentable {
         var parent: PhotoGridView
         var reloadKey = -1
         weak var collectionView: UICollectionView?
-        let manager = PHCachingImageManager()
         private var pinchStartCols: CGFloat = 4
 
         init(_ parent: PhotoGridView) { self.parent = parent }
@@ -59,7 +59,7 @@ struct PhotoGridView: UIViewRepresentable {
             let cell = cv.dequeueReusableCell(withReuseIdentifier: "c", for: ip) as! ThumbCell
             let asset = parent.source.asset(ip.item)
             let cols = (cv.collectionViewLayout as? InterpolatingGridLayout)?.cols ?? 4
-            cell.configure(asset, manager: manager, edge: cv.bounds.width / max(cols, 1))
+            cell.configure(asset, manager: parent.manager, edge: cv.bounds.width / max(cols, 1))
             return cell
         }
 

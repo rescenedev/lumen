@@ -6,15 +6,16 @@ import Photos
 struct AlbumGalleryView: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
-    @Environment(\.dismiss) private var dismiss
+    let onClose: () -> Void
 
     @State private var source: GridSource
     @State private var ver = 0
     @State private var open: StartAt?
 
-    init(scope: OrganizeScope, library: PhotoLibrary) {
+    init(scope: OrganizeScope, library: PhotoLibrary, onClose: @escaping () -> Void) {
         self.scope = scope
         self.library = library
+        self.onClose = onClose
         _source = State(initialValue: library.gridSource(for: scope))   // ready before first frame
     }
 
@@ -24,9 +25,9 @@ struct AlbumGalleryView: View {
             if source.count == 0 {
                 Text("사진이 없어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
             } else {
-                PhotoGridView(source: source, reloadKey: ver,
+                PhotoGridView(source: source, manager: library.manager, reloadKey: ver,
                               onTap: { open = StartAt(index: $0) },
-                              onBack: { dismiss() })
+                              onBack: onClose)
                     .ignoresSafeArea(edges: .bottom)
             }
             header
@@ -44,7 +45,7 @@ struct AlbumGalleryView: View {
         ZStack {
             Text(scope.title).font(.headline).foregroundStyle(.white)
             HStack {
-                Button { dismiss() } label: {
+                Button { onClose() } label: {
                     Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
                         .frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
                 }

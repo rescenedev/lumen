@@ -15,7 +15,7 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        ZStack {
             ZStack {
                 Color.lumenBG.ignoresSafeArea()
                 if !lib.loaded {
@@ -35,11 +35,13 @@ struct LibraryView: View {
                     scopeList
                 }
             }
-            .toolbar(.hidden, for: .navigationBar)
-            // Push the gallery so back is a natural horizontal slide (not a drop-down).
-            .navigationDestination(item: $scope) { s in
-                AlbumGalleryView(scope: s, library: lib)
-                    .toolbar(.hidden, for: .navigationBar)
+            // Gallery as a fast right-slide overlay (quicker than a nav push) — back
+            // slides out the same way.
+            if let s = scope {
+                AlbumGalleryView(scope: s, library: lib,
+                                 onClose: { withAnimation(.easeOut(duration: 0.22)) { scope = nil } })
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
             }
         }
         .preferredColorScheme(.dark)
@@ -95,7 +97,10 @@ struct LibraryView: View {
                 LazyVGrid(columns: gridColumns, spacing: 12) {
                     ForEach(lib.scopes) { s in
                         ScopeCard(scope: s, library: lib)
-                            .onTapGesture { scope = s }
+                            .onTapGesture {
+                                lib.prewarmScope(s)   // warm thumbs during the slide
+                                withAnimation(.easeOut(duration: 0.22)) { scope = s }
+                            }
                     }
                 }
                 Text("앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 즐겨찾기, ♥는 ‘Lumen’ 앨범에 보관, ✕는 삭제 후보입니다.")
