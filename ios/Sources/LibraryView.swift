@@ -107,8 +107,11 @@ struct LibraryView: View {
                     ForEach(lib.scopes) { s in
                         ScopeCard(scope: s, library: lib)
                             .onTapGesture {
-                                lib.prewarmScope(s)   // start caching before the slide so cells hit warm cache
+                                // Tap does ZERO PhotoKit work: the slide starts now, the
+                                // grid resolves its fetch lazily on first cell draw, and
+                                // prewarm warms the cache off-main.
                                 withAnimation(.easeOut(duration: 0.4)) { scope = s }
+                                lib.prewarmScope(s)
                             }
                     }
                 }

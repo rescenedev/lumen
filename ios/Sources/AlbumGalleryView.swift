@@ -16,9 +16,9 @@ struct AlbumGalleryView: View {
         self.scope = scope
         self.library = library
         self.onClose = onClose
-        // Build the grid eagerly so it slides in as one unit with the header,
-        // instead of the header sliding first and the photos popping in late.
-        // Cheap now that gridSource uses the already-known scope.count.
+        // Build the grid eagerly so it slides in as one unit with the header — but
+        // the source is now lazy (resolves its fetch on first cell draw), so this
+        // touches no PhotoKit and never blocks the open, even on a 60k album.
         _source = State(initialValue: library.gridSource(for: scope))
     }
 

@@ -9,6 +9,36 @@ struct GridSource {
     private let provider: (Int) -> PHAsset
     init(count: Int, _ provider: @escaping (Int) -> PHAsset) { self.count = count; self.provider = provider }
     func asset(_ i: Int) -> PHAsset { provider(i) }
+
+    /// Lazily resolves a PHFetchResult on first access and memoizes it. Building a
+    /// fetch (predicate over a big library) costs a few ms-to-tens-of-ms, so we
+    /// defer it off the album-open's critical path: the grid only resolves it when
+    /// the first cell actually draws, never on tap.
+    final class LazyFetch {
+        private let build: () -> PHFetchResult<PHAsset>
+        private var cached: PHFetchResult<PHAsset>?
+        init(_ build: @escaping () -> PHFetchResult<PHAsset>) { self.build = build }
+        func get() -> PHFetchResult<PHAsset> {
+            if let c = cached { return c }
+            let r = build(); cached = r; return r
+        }
+    }
+
+    /// Build a source backed by a lazily-resolved fetch. `count` is supplied up front
+    /// (already known from the snapshot) so construction touches no PhotoKit at all.
+    static func lazy(count: Int, _ build: @escaping () -> PHFetchResult<PHAsset>) -> GridSource {
+        let lazy = LazyFetch(build)
+        let n = count
+        return GridSource(count: n) { i in lazy.get().object(at: min(i, max(n - 1, 0))) }
+    }
+}
+
+/// Memoizes a built array on first access (e.g. the sorted 즐겨찾기 list).
+final class LazyArray {
+    private let build: () -> [PHAsset]
+    private var cached: [PHAsset]?
+    init(_ build: @escaping () -> [PHAsset]) { self.build = build }
+    func get() -> [PHAsset] { if let c = cached { return c }; let a = build(); cached = a; return a }
 }
 
 /// How the user albums are ordered on the home.
@@ -110,15 +140,34 @@ struct OrganizeScope: Identifiable, Hashable {
         return CGSize(width: edge, height: edge)
     }
 
-    /// Warm the first screenful of a scope's thumbnails (called on tap), so by the
-    /// time the push animation finishes the grid is already populated from cache.
+    /// First `limit` assets of a scope — computed OFF the main actor (the fetch +
+    /// object materialization is the costly part on a big/iCloud library).
+    nonisolated private static func prewarmAssets(scope: OrganizeScope, kept: Set<String>,
+                                                  order: [String], limit: Int) -> [PHAsset] {
+        let isLumen = scope.collection?.localizedTitle == "Lumen"
+        let opts = isLumen ? imageOptions() : imageOptions(excluding: kept)
+        if scope.collection?.assetCollectionSubtype == .smartAlbumFavorites, let c = scope.collection {
+            var arr: [PHAsset] = []
+            PHAsset.fetchAssets(in: c, options: opts).enumerateObjects { a, _, _ in arr.append(a) }
+            return Array(ordered(arr, by: order).prefix(limit))
+        }
+        let result = scope.collection.map { PHAsset.fetchAssets(in: $0, options: opts) } ?? PHAsset.fetchAssets(with: opts)
+        let n = min(result.count, limit)
+        guard n > 0 else { return [] }
+        return (0..<n).map { result.object(at: $0) }
+    }
+
+    /// Warm the first screenful of a scope's thumbnails. Runs entirely off the main
+    /// thread so tapping an album NEVER blocks the open animation — the grid loads
+    /// its visible cells lazily on its own; this just gives them a warm cache.
     func prewarmScope(_ scope: OrganizeScope) {
-        let src = gridSource(for: scope)
-        let n = min(src.count, 40)
-        guard n > 0 else { return }
-        let assets = (0..<n).map { src.asset($0) }
-        manager.startCachingImages(for: assets, targetSize: Self.gridThumbTarget,
-                                   contentMode: .aspectFill, options: Self.gridThumbOptions())
+        let kept = keptIDs, order = favoriteOrder, mgr = manager
+        let target = Self.gridThumbTarget, opts = Self.gridThumbOptions()
+        Task.detached(priority: .userInitiated) {
+            let assets = Self.prewarmAssets(scope: scope, kept: kept, order: order, limit: 40)
+            guard !assets.isEmpty else { return }
+            mgr.startCachingImages(for: assets, targetSize: target, contentMode: .aspectFill, options: opts)
+        }
     }
 
     /// Sort assets so the ones in `order` come first (in that order), rest after.
@@ -326,19 +375,31 @@ struct OrganizeScope: Identifiable, Hashable {
     func gridSource(for scope: OrganizeScope) -> GridSource {
         // The Lumen album IS the kept photos, so don't exclude them there.
         let isLumen = scope.collection?.localizedTitle == "Lumen"
-        let opts = isLumen ? Self.imageOptions() : Self.imageOptions(excluding: keptIDs)
-        if scope.collection?.assetCollectionSubtype == .smartAlbumFavorites, let c = scope.collection {
-            var arr: [PHAsset] = []
-            PHAsset.fetchAssets(in: c, options: opts).enumerateObjects { a, _, _ in arr.append(a) }
-            let ordered = Self.ordered(arr, by: favoriteOrder)
-            return GridSource(count: ordered.count) { ordered[$0] }
+        let kept = keptIDs
+        let order = favoriteOrder
+        let coll = scope.collection
+        if coll?.assetCollectionSubtype == .smartAlbumFavorites, let c = coll {
+            // 즐겨찾기 needs our custom order, so materialize its (small) list — but
+            // lazily and memoized, so the fetch+sort happens once on first draw,
+            // not on tap and not per cell.
+            let box = LazyArray {
+                var arr: [PHAsset] = []
+                PHAsset.fetchAssets(in: c, options: Self.imageOptions(excluding: kept))
+                    .enumerateObjects { a, _, _ in arr.append(a) }
+                return Self.ordered(arr, by: order)
+            }
+            return GridSource(count: scope.count) { i in
+                let a = box.get()
+                return a[min(i, max(a.count - 1, 0))]
+            }
         }
-        // Use the already-known scope.count (computed off-main during reload) instead
-        // of result.count, so building the source is instant — no PhotoKit count on
-        // the critical path when opening a big album.
-        let result = scope.collection.map { PHAsset.fetchAssets(in: $0, options: opts) } ?? PHAsset.fetchAssets(with: opts)
-        let n = scope.count
-        return GridSource(count: n) { i in result.object(at: min(i, n - 1)) }
+        // Everything else: lazily-resolved PHFetchResult. Construction touches no
+        // PhotoKit at all (count is the already-known scope.count), so opening even a
+        // 60k album never blocks the tap — the fetch resolves when the first cell draws.
+        return GridSource.lazy(count: scope.count) {
+            let opts = isLumen ? Self.imageOptions() : Self.imageOptions(excluding: kept)
+            return coll.map { PHAsset.fetchAssets(in: $0, options: opts) } ?? PHAsset.fetchAssets(with: opts)
+        }
     }
 
     // MARK: - Albums (organize destination)
