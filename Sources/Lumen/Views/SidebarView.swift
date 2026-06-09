@@ -231,11 +231,17 @@ private struct FolderTreeNode: View {
                     FolderTreeNode(node: child, expanded: $expanded)
                 }
             } label: {
+                // The tap gestures swallow clicks before List selection sees
+                // them, so a parent row must select explicitly: single click
+                // selects (like a leaf row), double-click also toggles expansion.
                 label
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
-                        model.selectedSidebar = .folder(node.url)   // move selection to this folder
+                        model.selectedSidebar = .folder(node.url)
                         withAnimation { isExpanded.wrappedValue.toggle() }
+                    }
+                    .onTapGesture {
+                        model.selectedSidebar = .folder(node.url)
                     }
             }
         } else {
