@@ -72,7 +72,11 @@ struct ViewerView: View {
         .onKeyPress(KeyEquivalent("f")) { favoriteCurrent(); return .handled }
         .onKeyPress(KeyEquivalent("x")) { rejectCurrent(); return .handled }
         .onKeyPress(KeyEquivalent("i")) { model.showExifOverlay.toggle(); return .handled }
-        .onKeyPress(.delete) { deleteCurrent(); return .handled }
+        // Backspace arrives as DEL (\u{7F}), not KeyEquivalent.delete (\u{8}) —
+        // match every delete variant or the key looks dead.
+        .onKeyPress(keys: [.delete, .deleteForward, KeyEquivalent("\u{7F}")]) { _ in
+            deleteCurrent(); return .handled
+        }
         .onKeyPress(keys: ["0", "1", "2", "3", "4", "5"]) { press in
             if let n = Int(String(press.key.character)), let photo = model.currentViewerPhoto {
                 model.setRating(n, for: [photo])

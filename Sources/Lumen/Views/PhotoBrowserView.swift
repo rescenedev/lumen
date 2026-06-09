@@ -265,7 +265,9 @@ struct BrowserKeyHandlers: ViewModifier {
                 model.clearSelection()
                 return .handled
             }
-            .onKeyPress(.delete) {
+            // Backspace arrives as DEL (\u{7F}), not KeyEquivalent.delete —
+            // match every delete variant or the key looks dead.
+            .onKeyPress(keys: [.delete, .deleteForward, KeyEquivalent("\u{7F}")]) { _ in
                 let targets = model.deletionTargets
                 guard !targets.isEmpty else { return .ignored }
                 model.requestDeletion(targets)
