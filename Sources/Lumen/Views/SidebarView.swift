@@ -231,22 +231,15 @@ private struct FolderTreeNode: View {
                     FolderTreeNode(node: child, expanded: $expanded)
                 }
             } label: {
-                // The tap gestures swallow clicks before List selection sees
-                // them, so a parent row must select explicitly: single click
-                // selects and reveals its children (never collapses, so a
-                // re-click while browsing doesn't fold the tree); double-click
-                // toggles expansion.
+                // The tap gesture swallows clicks before List selection sees
+                // them, so a parent row must select explicitly: every click
+                // selects the folder and toggles its children (expand on first
+                // click, collapse when clicked again) — Finder source-list feel.
                 label
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        model.selectedSidebar = .folder(node.url)
-                        withAnimation { isExpanded.wrappedValue.toggle() }
-                    }
                     .onTapGesture {
                         model.selectedSidebar = .folder(node.url)
-                        if !isExpanded.wrappedValue {
-                            withAnimation { isExpanded.wrappedValue = true }
-                        }
+                        withAnimation { isExpanded.wrappedValue.toggle() }
                     }
             }
         } else {
