@@ -45,7 +45,7 @@ struct LibraryView: View {
             // slides out the same way.
             if let s = scope {
                 AlbumGalleryView(scope: s, library: lib,
-                                 onClose: { withAnimation(.easeOut(duration: 0.4)) { scope = nil } })
+                                 onClose: { withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = nil } })
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
@@ -110,7 +110,7 @@ struct LibraryView: View {
                                 // Tap does ZERO PhotoKit work: the slide starts now, the
                                 // grid resolves its fetch lazily on first cell draw, and
                                 // prewarm warms the cache off-main.
-                                withAnimation(.easeOut(duration: 0.4)) { scope = s }
+                                withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = s }
                                 lib.prewarmScope(s)
                             }
                     }
