@@ -24,8 +24,7 @@ struct OrganizeView: View {
     var startIndex: Int = 0
     @Environment(\.dismiss) private var dismiss
 
-    @State private var assets: [PHAsset] = []
-    @State private var ready = false
+    @State private var source: GridSource?                 // lazy photos for this scope
     @State private var organizing = false                 // viewer first, then organize
     @State private var index = 0
     @State private var offset: CGSize = .zero
@@ -38,43 +37,44 @@ struct OrganizeView: View {
 
     private let threshold: CGFloat = 80
 
+    private var count: Int { source?.count ?? 0 }
     private var keepCount: Int { decisions.values.filter { $0 == .keep }.count }
-    private var trashAssets: [PHAsset] { decisions.compactMap { $0.value == .trash ? assets[$0.key] : nil } }
+    private var trashAssets: [PHAsset] { decisions.compactMap { $0.value == .trash ? source?.asset($0.key) : nil } }
 
     var body: some View {
         ZStack {
             Color.lumenBG.ignoresSafeArea()
-            if !ready {
-                ProgressView().tint(.white)
-            } else if finished {
-                summary
-            } else {
-                photoLayer
-                flashOverlay
-                topBar
-                if organizing { bottomControls } else { startBar }
+            if let source {
+                if finished {
+                    summary
+                } else {
+                    photoLayer(source)
+                    flashOverlay
+                    topBar
+                    if organizing { bottomControls } else { startBar }
+                }
             }
         }
         .preferredColorScheme(.dark)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: tick)
         .task {
-            assets = await library.assets(for: scope)
-            index = min(max(startIndex, 0), max(assets.count - 1, 0))
-            ready = true
+            let s = library.gridSource(for: scope)
+            index = min(max(startIndex, 0), max(s.count - 1, 0))
+            source = s
         }
     }
 
     // MARK: - Photo (full-screen, swipe = navigate)
 
-    private var photoLayer: some View {
-        OrganizeCard(asset: assets[index], library: library)
+    private func photoLayer(_ source: GridSource) -> some View {
+        OrganizeCard(asset: source.asset(index), library: library)
             .overlay(alignment: .top) { favoriteHint }
             .scaleEffect(offset.height > 0 ? max(0.86, 1 - offset.height / 1100) : 1)  // shrink as you pull down
             .offset(offset)
             .id(index)
             .task(id: index) {
-                guard index < assets.count else { return }
-                currentIsFav = PHAsset.fetchAssets(withLocalIdentifiers: [assets[index].localIdentifier], options: nil)
+                guard index < source.count else { return }
+                currentIsFav = PHAsset.fetchAssets(withLocalIdentifiers: [source.asset(index).localIdentifier], options: nil)
                     .firstObject?.isFavorite ?? false
             }
             .gesture(
@@ -133,7 +133,7 @@ struct OrganizeView: View {
     private var topBar: some View {
         ZStack {
             VStack(spacing: 6) {
-                Text("\(index + 1) / \(assets.count)").font(.subheadline.monospacedDigit().weight(.semibold))
+                Text("\(index + 1) / \(count)").font(.subheadline.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6)
                     .background(.ultraThinMaterial, in: Capsule())
                 if let d = decisions[index] {
@@ -246,7 +246,7 @@ struct OrganizeView: View {
     /// springs back — browsing never forces you into the summary.
     private func swipeTo(next: Bool) {
         let target = next ? index + 1 : index - 1
-        guard target >= 0, target < assets.count else {
+        guard target >= 0, target < count else {
             withAnimation(.spring(response: 0.3)) { offset = .zero }; return
         }
         withAnimation(.easeOut(duration: 0.2)) { offset = CGSize(width: next ? -1000 : 1000, height: 0) }
@@ -256,9 +256,9 @@ struct OrganizeView: View {
     /// Record a decision for the current photo, then advance. Deciding the last
     /// photo wraps up into the summary.
     private func decide(_ d: Decision) {
-        guard index < assets.count else { return }
+        guard let a = source?.asset(index) else { return }
         decisions[index] = d
-        if d == .keep { let a = assets[index]; Task { await library.addToLumen(a) } }   // file into Lumen, live
+        if d == .keep { Task { await library.addToLumen(a) } }   // file into Lumen, live
         tick += 1
         showFlash(d == .keep ? .keep : .trash)
         flyAndAdvance(CGSize(width: -1000, height: 0))
@@ -267,8 +267,7 @@ struct OrganizeView: View {
     /// Up-swipe: toggle the photo's Apple Favorite (non-destructive, lives in the
     /// system 즐겨찾기 album), then move on. Independent of keep/trash.
     private func favorite() {
-        guard index < assets.count else { return }
-        let a = assets[index]
+        guard let a = source?.asset(index) else { return }
         let newValue = !currentIsFav
         library.bumpFavorite(a, added: newValue)   // instant home update
         Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = newValue } }
@@ -283,7 +282,7 @@ struct OrganizeView: View {
         withAnimation(.easeOut(duration: 0.2)) { offset = fly }
         Task {
             try? await Task.sleep(for: .milliseconds(195))
-            if index < assets.count - 1 { index += 1; offset = .zero } else { offset = .zero; finish() }
+            if index < count - 1 { index += 1; offset = .zero } else { offset = .zero; finish() }
         }
     }
 

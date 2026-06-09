@@ -1,6 +1,15 @@
 import Photos
 import UIKit
 
+/// Lazy access to a scope's photos. Backed by a PHFetchResult (no array built up
+/// front, so opening 전체 사진 is instant), or by a pre-ordered array for 즐겨찾기.
+struct GridSource {
+    let count: Int
+    private let provider: (Int) -> PHAsset
+    init(count: Int, _ provider: @escaping (Int) -> PHAsset) { self.count = count; self.provider = provider }
+    func asset(_ i: Int) -> PHAsset { provider(i) }
+}
+
 /// A pickable bundle to organize (all photos, a smart album, or a user album).
 struct OrganizeScope: Identifiable, Hashable {
     let id: String
@@ -233,18 +242,19 @@ struct OrganizeScope: Identifiable, Hashable {
 
     /// The asset list for a scope, already-kept photos removed. Fetched off-main so
     /// tapping a scope opens without freezing.
-    func assets(for scope: OrganizeScope) async -> [PHAsset] {
-        let kept = keptIDs
-        let collection = scope.collection
-        let order = (scope.collection?.assetCollectionSubtype == .smartAlbumFavorites) ? favoriteOrder : []
-        return await Task.detached(priority: .userInitiated) {
-            let opts = Self.imageOptions(excluding: kept)
-            let result = collection.map { PHAsset.fetchAssets(in: $0, options: opts) } ?? PHAsset.fetchAssets(with: opts)
+    /// A lazy source for a scope. Non-favorites use the PHFetchResult directly
+    /// (instant — no enumeration), so opening a big album doesn't show a loader.
+    /// 즐겨찾기 needs custom order, so it materializes its (small) list.
+    func gridSource(for scope: OrganizeScope) -> GridSource {
+        let opts = Self.imageOptions(excluding: keptIDs)
+        if scope.collection?.assetCollectionSubtype == .smartAlbumFavorites, let c = scope.collection {
             var arr: [PHAsset] = []
-            arr.reserveCapacity(result.count)
-            result.enumerateObjects { a, _, _ in arr.append(a) }
-            return order.isEmpty ? arr : Self.ordered(arr, by: order)
-        }.value
+            PHAsset.fetchAssets(in: c, options: opts).enumerateObjects { a, _, _ in arr.append(a) }
+            let ordered = Self.ordered(arr, by: favoriteOrder)
+            return GridSource(count: ordered.count) { ordered[$0] }
+        }
+        let result = scope.collection.map { PHAsset.fetchAssets(in: $0, options: opts) } ?? PHAsset.fetchAssets(with: opts)
+        return GridSource(count: result.count) { result.object(at: $0) }
     }
 
     // MARK: - Albums (organize destination)
