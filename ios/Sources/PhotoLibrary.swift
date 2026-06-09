@@ -154,6 +154,33 @@ struct OrganizeScope: Identifiable, Hashable {
         return CGSize(width: edge, height: edge)
     }
 
+    /// Full-screen viewer target = the actual screen in pixels. Requesting more
+    /// (e.g. a square 1200pt → 3600px on 3x) decodes ~5-7x the pixels we can show,
+    /// which is most of the per-swipe latency.
+    static var viewerTarget: CGSize {
+        let b = UIScreen.main.bounds.size, s = UIScreen.main.scale
+        return CGSize(width: b.width * s, height: b.height * s)
+    }
+
+    /// Same rule as the grid: the viewer's prewarm and its on-screen request must
+    /// share options + target or the cache is never hit.
+    static func viewerOptions() -> PHImageRequestOptions {
+        let o = PHImageRequestOptions()
+        o.deliveryMode = .opportunistic
+        o.resizeMode = .fast
+        o.isNetworkAccessAllowed = true
+        return o
+    }
+
+    /// Warm full-screen images for the photos around the one being viewed, so a
+    /// swipe lands on an already-decoded (and, for iCloud, already-downloaded)
+    /// image instead of a spinner.
+    func prewarmViewer(_ assets: [PHAsset]) {
+        guard !assets.isEmpty else { return }
+        manager.startCachingImages(for: assets, targetSize: Self.viewerTarget,
+                                   contentMode: .aspectFit, options: Self.viewerOptions())
+    }
+
     /// First `limit` assets of a scope — computed OFF the main actor (the fetch +
     /// object materialization is the costly part on a big/iCloud library).
     nonisolated private static func prewarmAssets(scope: OrganizeScope, kept: Set<String>,
@@ -475,13 +502,15 @@ struct OrganizeScope: Identifiable, Hashable {
     /// blank grey box.
     func imageStream(_ asset: PHAsset, points: CGFloat, mode: PHImageContentMode) -> AsyncStream<UIImage> {
         let px = points * UIScreen.main.scale
-        let target = CGSize(width: px, height: px)
+        return imageStream(asset, target: CGSize(width: px, height: px), mode: mode)
+    }
+
+    /// Same stream with an exact pixel target — the viewer uses `viewerTarget` here
+    /// so its requests hit the `prewarmViewer` cache.
+    func imageStream(_ asset: PHAsset, target: CGSize, mode: PHImageContentMode) -> AsyncStream<UIImage> {
         let mgr = manager
         return AsyncStream { continuation in
-            let opt = PHImageRequestOptions()
-            opt.deliveryMode = .opportunistic          // fast local thumb → then full
-            opt.isNetworkAccessAllowed = true          // download iCloud originals
-            opt.resizeMode = .fast
+            let opt = Self.viewerOptions()             // opportunistic + network + fast
             let id = mgr.requestImage(for: asset, targetSize: target, contentMode: mode, options: opt) { img, info in
                 if let img { continuation.yield(img) }
                 let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
