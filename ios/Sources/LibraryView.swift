@@ -39,7 +39,7 @@ struct LibraryView: View {
             // slides out the same way.
             if let s = scope {
                 AlbumGalleryView(scope: s, library: lib,
-                                 onClose: { withAnimation(.easeOut(duration: 0.22)) { scope = nil } })
+                                 onClose: { withAnimation(.smooth(duration: 0.34)) { scope = nil } })
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
             }
@@ -99,7 +99,7 @@ struct LibraryView: View {
                         ScopeCard(scope: s, library: lib)
                             .onTapGesture {
                                 lib.prewarmScope(s)   // warm thumbs during the slide
-                                withAnimation(.easeOut(duration: 0.22)) { scope = s }
+                                withAnimation(.smooth(duration: 0.34)) { scope = s }
                             }
                     }
                 }
