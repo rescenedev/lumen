@@ -233,7 +233,9 @@ private struct FolderTreeNode: View {
             } label: {
                 // The tap gestures swallow clicks before List selection sees
                 // them, so a parent row must select explicitly: single click
-                // selects (like a leaf row), double-click also toggles expansion.
+                // selects and reveals its children (never collapses, so a
+                // re-click while browsing doesn't fold the tree); double-click
+                // toggles expansion.
                 label
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
@@ -242,6 +244,9 @@ private struct FolderTreeNode: View {
                     }
                     .onTapGesture {
                         model.selectedSidebar = .folder(node.url)
+                        if !isExpanded.wrappedValue {
+                            withAnimation { isExpanded.wrappedValue = true }
+                        }
                     }
             }
         } else {
