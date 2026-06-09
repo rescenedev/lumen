@@ -1,5 +1,6 @@
 import Photos
 import UIKit
+import SwiftUI
 
 /// Lazy access to a scope's photos. Backed by a PHFetchResult (no array built up
 /// front, so opening 전체 사진 is instant), or by a pre-ordered array for 즐겨찾기.
@@ -46,8 +47,28 @@ struct OrganizeScope: Identifiable, Hashable {
     var albumSort: AlbumSort = AlbumSort(rawValue: UserDefaults.standard.string(forKey: "lumen.albumSort") ?? "") ?? .recent {
         didSet {
             UserDefaults.standard.set(albumSort.rawValue, forKey: "lumen.albumSort")
-            Task { await reload() }
+            resortScopes()   // instant — just reorder, no re-fetch
         }
+    }
+
+    private func isSystemScope(_ s: OrganizeScope) -> Bool {
+        guard let c = s.collection else { return true }          // 전체
+        if c.localizedTitle == "Lumen" { return true }
+        return c.assetCollectionSubtype != .albumRegular         // smart albums stay pinned
+    }
+
+    /// Reorder the user albums in place by the current sort — no PhotoKit re-fetch.
+    private func resortScopes() {
+        let system = scopes.filter { isSystemScope($0) }
+        var user = scopes.filter { !isSystemScope($0) }
+        switch albumSort {
+        case .recent:
+            var rank = [String: Int](); for (i, c) in albums.enumerated() { rank[c.localIdentifier] = i }
+            user.sort { (rank[$0.id] ?? .max) < (rank[$1.id] ?? .max) }
+        case .name:  user.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case .count: user.sort { $0.count > $1.count }
+        }
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { scopes = system + user }
     }
 
     /// localIdentifiers already filed into "Lumen". Cached from the last snapshot so
