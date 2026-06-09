@@ -93,10 +93,18 @@ struct PhotoCollectionView: NSViewRepresentable {
 
         // Navigating somewhere else starts at the top; library edits within
         // the same view (delete/import → token change) keep the position.
+        // Scrolling now AND after the layout pass is deliberate: reloadData's
+        // deferred layout restores the previous offset, overwriting a scroll
+        // issued inside updateNSView — the async one wins that race.
         if navToken != coord.appliedNavToken {
             coord.appliedNavToken = navToken
-            scroll.contentView.scroll(to: .zero)
-            scroll.reflectScrolledClipView(scroll.contentView)
+            let toTop = { [weak scroll] in
+                guard let scroll else { return }
+                scroll.contentView.scroll(to: .zero)
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+            toTop()
+            DispatchQueue.main.async(execute: toTop)
         }
         coord.appliedSorting = isSorting
         coord.appliedMetaVersion = metaVersion
