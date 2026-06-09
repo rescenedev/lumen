@@ -82,7 +82,7 @@ struct OrganizeScope: Identifiable, Hashable {
     @ObservationIgnored private var favoriteOrder: [String] =
         UserDefaults.standard.stringArray(forKey: "lumen.favoriteOrder") ?? []
     @ObservationIgnored private var favGen = 0   // bumped on every toggle, to drop stale reloads
-    private let manager = PHCachingImageManager()
+    let manager = PHCachingImageManager()        // shared with the grid so prewarming hits its cache
 
     private func saveFavoriteOrder() { UserDefaults.standard.set(favoriteOrder, forKey: "lumen.favoriteOrder") }
 
@@ -90,6 +90,18 @@ struct OrganizeScope: Identifiable, Hashable {
     private func prewarm(_ asset: PHAsset) {
         let px = 300 * UIScreen.main.scale
         manager.startCachingImages(for: [asset], targetSize: CGSize(width: px, height: px),
+                                   contentMode: .aspectFill, options: nil)
+    }
+
+    /// Warm the first screenful of a scope's thumbnails (called on tap), so by the
+    /// time the push animation finishes the grid is already populated from cache.
+    func prewarmScope(_ scope: OrganizeScope) {
+        let src = gridSource(for: scope)
+        let n = min(src.count, 40)
+        guard n > 0 else { return }
+        let assets = (0..<n).map { src.asset($0) }
+        let edge = (UIScreen.main.bounds.width / 4) * UIScreen.main.scale   // ~4-column cell
+        manager.startCachingImages(for: assets, targetSize: CGSize(width: edge, height: edge),
                                    contentMode: .aspectFill, options: nil)
     }
 
