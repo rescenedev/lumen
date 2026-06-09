@@ -38,6 +38,12 @@ struct AlbumGalleryView: View {
             header
         }
         .preferredColorScheme(.dark)
+        .task {
+            // Self-test helper: jump straight into the viewer.
+            if ProcessInfo.processInfo.arguments.contains("-autoViewer"), open == nil, source.count > 0 {
+                open = StartAt(index: 0)
+            }
+        }
         .fullScreenCover(item: $open, onDismiss: {
             // Refresh after the viewer — e.g. un-favorited photos leave the 즐겨찾기 grid.
             source = library.gridSource(for: scope); ver += 1

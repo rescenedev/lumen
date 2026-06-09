@@ -24,6 +24,7 @@ struct PhotoGridView: UIViewRepresentable {
         cv.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: 28, right: 0)
         cv.dataSource = context.coordinator
         cv.delegate = context.coordinator
+        cv.prefetchDataSource = context.coordinator   // warm thumbs ahead of fast scrolls
         cv.register(ThumbCell.self, forCellWithReuseIdentifier: "c")
 
         let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePinch(_:)))
@@ -45,7 +46,8 @@ struct PhotoGridView: UIViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate {
+    final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate,
+                             UICollectionViewDataSourcePrefetching {
         var parent: PhotoGridView
         var reloadKey = -1
         weak var collectionView: UICollectionView?
@@ -53,14 +55,38 @@ struct PhotoGridView: UIViewRepresentable {
 
         init(_ parent: PhotoGridView) { self.parent = parent }
 
+        /// One target for cells AND prefetching — snapped to the shared prewarm size
+        /// at the default zoom so all three hit the same cache entries.
+        private func thumbTarget(_ cv: UICollectionView) -> CGSize {
+            let cols = (cv.collectionViewLayout as? InterpolatingGridLayout)?.cols ?? 4
+            let edge = cv.bounds.width / max(cols, 1) * UIScreen.main.scale
+            let raw = CGSize(width: edge, height: edge)
+            return abs(raw.width - PhotoLibrary.gridThumbTarget.width) < 1 ? PhotoLibrary.gridThumbTarget : raw
+        }
+
+        private func assets(at indexPaths: [IndexPath]) -> [PHAsset] {
+            indexPaths.compactMap { $0.item < parent.source.count ? parent.source.asset($0.item) : nil }
+        }
+
         func collectionView(_ cv: UICollectionView, numberOfItemsInSection s: Int) -> Int { parent.source.count }
 
         func collectionView(_ cv: UICollectionView, cellForItemAt ip: IndexPath) -> UICollectionViewCell {
             let cell = cv.dequeueReusableCell(withReuseIdentifier: "c", for: ip) as! ThumbCell
             let asset = parent.source.asset(ip.item)
-            let cols = (cv.collectionViewLayout as? InterpolatingGridLayout)?.cols ?? 4
-            cell.configure(asset, manager: parent.manager, edge: cv.bounds.width / max(cols, 1))
+            cell.configure(asset, manager: parent.manager, target: thumbTarget(cv))
             return cell
+        }
+
+        // Fast scroll: start decoding/downloading thumbs before their cells appear,
+        // and stop when the scroll direction changes away from them.
+        func collectionView(_ cv: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+            parent.manager.startCachingImages(for: assets(at: indexPaths), targetSize: thumbTarget(cv),
+                                              contentMode: .aspectFill, options: PhotoLibrary.gridThumbOptions())
+        }
+
+        func collectionView(_ cv: UICollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {
+            parent.manager.stopCachingImages(for: assets(at: indexPaths), targetSize: thumbTarget(cv),
+                                             contentMode: .aspectFill, options: PhotoLibrary.gridThumbOptions())
         }
 
         func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
@@ -198,15 +224,10 @@ final class ThumbCell: UICollectionViewCell {
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(_ asset: PHAsset, manager: PHCachingImageManager, edge: CGFloat) {
+    func configure(_ asset: PHAsset, manager: PHCachingImageManager, target: CGSize) {
         assetID = asset.localIdentifier
         self.manager = manager
         heart.isHidden = !asset.isFavorite
-        let scale = UIScreen.main.scale
-        // At the default 4-column layout, snap to the exact prewarm target so the
-        // warmed cache is actually hit (otherwise every cell re-decodes → slow open).
-        let raw = CGSize(width: edge * scale, height: edge * scale)
-        let target = abs(raw.width - PhotoLibrary.gridThumbTarget.width) < 1 ? PhotoLibrary.gridThumbTarget : raw
         let opt = PhotoLibrary.gridThumbOptions()
         let id = asset.localIdentifier
         requestID = manager.requestImage(for: asset, targetSize: target, contentMode: .aspectFill, options: opt) { [weak self] img, _ in

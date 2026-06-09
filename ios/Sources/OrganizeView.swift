@@ -39,6 +39,7 @@ struct OrganizeView: View {
     @State private var finished = false
     @State private var flash: Flash?                      // brief action confirmation
     @State private var currentIsFav = false               // live favorite state of the shown photo
+    @State private var favOverrides: [String: Bool] = [:] // session favorite toggles (avoids per-swipe refetch)
     @State private var tick = 0
     @State private var doneMsg = ""
 
@@ -74,8 +75,16 @@ struct OrganizeView: View {
             .id(index)
             .task(id: index) {
                 guard index < source.count else { return }
-                currentIsFav = PHAsset.fetchAssets(withLocalIdentifiers: [source.asset(index).localIdentifier], options: nil)
-                    .firstObject?.isFavorite ?? false
+                // Favorite state: session toggles are tracked locally — no per-swipe
+                // PhotoKit fetch on the main thread.
+                let a = source.asset(index)
+                currentIsFav = favOverrides[a.localIdentifier] ?? a.isFavorite
+                // Warm the photos around this one at full-screen size, so the next
+                // swipe shows an already-decoded/downloaded image instead of a spinner.
+                let neighbors = [index + 1, index + 2, index - 1]
+                    .filter { $0 >= 0 && $0 < source.count }
+                    .map { source.asset($0) }
+                library.prewarmViewer(neighbors)
             }
             .gesture(
                 DragGesture()
@@ -271,6 +280,7 @@ struct OrganizeView: View {
         guard index < count else { return }
         let a = source.asset(index)
         let newValue = !currentIsFav
+        favOverrides[a.localIdentifier] = newValue
         library.bumpFavorite(a, added: newValue)   // instant home update
         Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = newValue } }
         currentIsFav = newValue
@@ -318,7 +328,9 @@ struct OrganizeCard: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: asset.localIdentifier) {
-            for await img in library.imageStream(asset, points: 1200, mode: .aspectFit) { image = img }
+            // Screen-size target (not an oversized square) — decodes only the pixels
+            // we can show, and matches prewarmViewer so neighbors arrive from cache.
+            for await img in library.imageStream(asset, target: PhotoLibrary.viewerTarget, mode: .aspectFit) { image = img }
         }
     }
 }
