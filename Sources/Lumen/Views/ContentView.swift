@@ -33,8 +33,10 @@ struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers)
         }
-        .alert("Move to Trash?", isPresented: $model.showDeleteConfirmation) {
-            Button("Move to Trash", role: .destructive) { model.confirmDeletion() }
+        .alert(model.deletionIsPermanent ? "Delete Immediately?" : "Move to Trash?",
+               isPresented: $model.showDeleteConfirmation) {
+            Button(model.deletionIsPermanent ? "Delete" : "Move to Trash",
+                   role: .destructive) { model.confirmDeletion() }
             Button("Cancel", role: .cancel) { model.photosPendingDeletion = [] }
         } message: {
             Text(model.deletionMessage)

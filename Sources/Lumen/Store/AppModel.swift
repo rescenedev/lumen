@@ -1474,12 +1474,33 @@ final class AppModel {
         }
     }
 
+    /// True when a pending photo sits on a volume with no Trash (NAS/SMB
+    /// shares) — those files can't be trashed and are deleted in place,
+    /// Finder-style. Checked once per distinct volume, not per photo.
+    var deletionIsPermanent: Bool {
+        var seenVolumes = Set<String>()
+        for photo in photosPendingDeletion {
+            let comps = photo.url.pathComponents
+            let volume = comps.count > 2 && comps[1] == "Volumes" ? comps[2] : "/"
+            guard seenVolumes.insert(volume).inserted else { continue }
+            if (try? FileManager.default.url(for: .trashDirectory, in: .userDomainMask,
+                                             appropriateFor: photo.url, create: false)) == nil {
+                return true
+            }
+        }
+        return false
+    }
+
     var deletionMessage: String {
         let count = photosPendingDeletion.count
-        if count == 1, let name = photosPendingDeletion.first?.filename {
-            return "“\(name)” will be moved to the Trash."
+        let subject = count == 1
+            ? "“\(photosPendingDeletion.first?.filename ?? "")”"
+            : "\(count) photos"
+        if deletionIsPermanent {
+            return "\(subject) will be deleted immediately — this volume has no Trash. "
+                + "(A NAS-side recycle bin, if enabled, can still recover the files.)"
         }
-        return "\(count) photos will be moved to the Trash."
+        return "\(subject) will be moved to the Trash."
     }
 
     func confirmDeletion() {
@@ -1491,13 +1512,26 @@ final class AppModel {
         let firstIndex = photos.compactMap { ordered.firstIndex(of: $0) }.min()
 
         var trashed = Set<URL>()
+        var failed = 0
         for photo in photos {
             do {
                 try FileManager.default.trashItem(at: photo.url, resultingItemURL: nil)
                 trashed.insert(photo.url)
             } catch {
-                NSLog("Lumen: failed to trash \(photo.url.path): \(error.localizedDescription)")
+                // No Trash on this volume (NAS/SMB) — delete in place, like
+                // Finder does there. Synology-style server-side recycle bins
+                // still intercept the SMB delete, so it's often recoverable.
+                do {
+                    try FileManager.default.removeItem(at: photo.url)
+                    trashed.insert(photo.url)
+                } catch {
+                    failed += 1
+                    NSLog("Lumen: failed to delete \(photo.url.path): \(error.localizedDescription)")
+                }
             }
+        }
+        if failed > 0 {
+            showToast("\(failed)개 항목을 삭제하지 못했습니다 (권한/연결 상태를 확인하세요).")
         }
         guard !trashed.isEmpty else { return }
 
