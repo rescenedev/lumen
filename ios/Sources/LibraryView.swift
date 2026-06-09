@@ -82,11 +82,14 @@ struct LibraryView: View {
                             }
                         }
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
                             Text(lib.albumSort.label)
-                            Image(systemName: "arrow.up.arrow.down")
+                            Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.bold))
                         }
-                        .font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.55))
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.85))
+                        .padding(.horizontal, 13).padding(.vertical, 7)
+                        .background(.white.opacity(0.08), in: Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.08)))
                     }
                 }
                 .padding(.horizontal, 4)
