@@ -94,6 +94,22 @@
   .why h3{font-size:19px;font-weight:740}
   .why p{color:var(--muted);font-size:15px;margin-top:9px}
 
+  /* Scale */
+  .scale{display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;align-items:center;margin-top:54px}
+  .scale .big{font-size:88px;font-weight:850;letter-spacing:-.04em;line-height:1;
+    background:linear-gradient(120deg,#fff,#c4caff 55%,#e3c8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .scale .big small{font-size:30px;font-weight:780;-webkit-text-fill-color:var(--muted)}
+  .scale .lead{font-size:20px;font-weight:700;margin:18px 0 6px}
+  .scale .lead-sub{color:var(--muted);font-size:15.5px}
+  .scale .pts{margin-top:24px;display:flex;flex-direction:column;gap:14px}
+  .scale .pt{display:flex;gap:13px;align-items:flex-start}
+  .scale .pt .pi{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:15px;
+    background:linear-gradient(120deg,rgba(107,107,255,.22),rgba(154,92,255,.22))}
+  .scale .pt b{font-weight:720;font-size:15.5px}
+  .scale .pt span{color:var(--muted);font-size:14.5px}
+  @media(max-width:820px){.scale{grid-template-columns:1fr;gap:24px;text-align:center}
+    .scale .big{font-size:68px}.scale .pt{text-align:left}}
+
   /* Flow band */
   .band{background:linear-gradient(120deg,rgba(107,107,255,.1),rgba(154,92,255,.1));
     border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
@@ -134,6 +150,7 @@
     <div class="nav-links">
       <a href="#gestures">제스처</a>
       <a href="#why">왜 Lumen</a>
+      <a href="#scale">규모</a>
       <a href="#flow">정리 흐름</a>
       <a class="nav-cta" href="#get">시작하기</a>
     </div>
@@ -181,6 +198,26 @@
       <div class="card reveal"><div class="badge">🃏</div><h3>틴더처럼 가볍게</h3><p>한 장씩 큼직하게 보여주고, 좌우로 넘기기만 하면 돼요. 수백 장도 부담 없이 — 정리가 ‘일’이 아니라 ‘넘겨보기’가 됩니다.</p></div>
       <div class="card reveal"><div class="badge">🛟</div><h3>중간에 멈춰도 안전</h3><p>보관은 누르는 즉시 Lumen 앨범에 저장돼 앱이 꺼져도 남아요. 이미 정리한 사진은 다시 안 나와서, 언제든 이어서 할 수 있어요.</p></div>
       <div class="card reveal"><div class="badge">🛡️</div><h3>실수로 안 지워져요</h3><p>✕는 ‘삭제 후보’일 뿐. 실제 삭제는 마지막에 시스템 확인을 거쳐 한 번에. 그 전엔 사진이 사라지지 않습니다.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="scale">
+  <div class="wrap">
+    <p class="eyebrow reveal">규모</p>
+    <h2 class="stitle reveal">사진이 아무리 많아도 끄떡없어요</h2>
+    <p class="ssub reveal">갤러리에 수만, 수십만 장이 쌓여 있어도 멈칫거리지 않습니다.</p>
+    <div class="scale">
+      <div class="reveal">
+        <div class="big">수십만<small> 장</small></div>
+        <p class="lead">10만 장 라이브러리도 즉시 열려요</p>
+        <p class="lead-sub">앨범을 눌러도, 핀치로 줌해도 사진 앱처럼 매끄럽게.</p>
+      </div>
+      <div class="pts reveal">
+        <div class="pt"><div class="pi">⚡</div><div><b>즉시 열림</b><br><span>전체 목록을 훑지 않고 필요한 사진만 그때그때 불러와, 장수와 상관없이 바로 시작돼요.</span></div></div>
+        <div class="pt"><div class="pi">🖼️</div><div><b>끊김 없는 스크롤·줌</b><br><span>네이티브 그리드에 보이는 만큼만 그려서, 수십만 장이어도 손가락을 따라 부드럽게 반응해요.</span></div></div>
+        <div class="pt"><div class="pi">☁️</div><div><b>iCloud도 거뜬히</b><br><span>기기에 내려받지 않은 사진도 미리 데워 둔 썸네일로 빠르게 보여줘요.</span></div></div>
+      </div>
     </div>
   </div>
 </section>
