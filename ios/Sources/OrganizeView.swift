@@ -43,7 +43,15 @@ struct OrganizeView: View {
     @State private var tick = 0
     @State private var doneMsg = ""
 
+    // Pinch zoom (current photo only): drag pans while zoomed, double-tap toggles.
+    @State private var zoom: CGFloat = 1
+    @State private var zoomBase: CGFloat = 1
+    @State private var pan: CGSize = .zero
+    @State private var panBase: CGSize = .zero
+    @State private var isPinching = false
+
     private let threshold: CGFloat = 80
+    private var isZoomed: Bool { zoom > 1.01 }
 
     private var count: Int { source.count }
     private var keepCount: Int { decisions.values.filter { $0 == .keep }.count }
@@ -82,13 +90,32 @@ struct OrganizeView: View {
             ForEach(visibleIndices, id: \.self) { i in
                 OrganizeCard(asset: source.asset(i), library: library)
                     .overlay(alignment: .top) { if i == index { favoriteHint } }
-                    .scaleEffect(i == index && offset.height > 0 ? max(0.86, 1 - offset.height / 1100) : 1)
-                    .offset(x: CGFloat(i - index) * pageW + offset.width,
-                            y: i == index ? offset.height : 0)
+                    .scaleEffect(cardScale(i))
+                    .offset(x: CGFloat(i - index) * pageW + offset.width + (i == index ? pan.width : 0),
+                            y: i == index ? offset.height + pan.height : 0)
+                    .zIndex(i == index ? 1 : 0)
             }
+            // Tap the left/right edge to step photos (no swipe needed); center
+            // double-tap toggles zoom. Edge steps only apply unzoomed — while
+            // zoomed, drags pan and double-tap (anywhere) zooms back out.
+            HStack(spacing: 0) {
+                Color.clear.contentShape(Rectangle())
+                    .frame(width: 64)
+                    .onTapGesture(count: 2) { toggleZoom() }
+                    .onTapGesture { if !isZoomed { swipeTo(next: false) } }
+                Color.clear.contentShape(Rectangle())
+                    .onTapGesture(count: 2) { toggleZoom() }
+                Color.clear.contentShape(Rectangle())
+                    .frame(width: 64)
+                    .onTapGesture(count: 2) { toggleZoom() }
+                    .onTapGesture { if !isZoomed { swipeTo(next: true) } }
+            }
+            .ignoresSafeArea()
+            .zIndex(2)
         }
             .task(id: index) {
                 guard index < source.count else { return }
+                zoom = 1; zoomBase = 1; pan = .zero; panBase = .zero   // new photo starts unzoomed
                 // Favorite state: session toggles are tracked locally — no per-swipe
                 // PhotoKit fetch on the main thread.
                 let a = source.asset(index)
@@ -100,29 +127,84 @@ struct OrganizeView: View {
                     .map { source.asset($0) }
                 library.prewarmViewer(neighbors)
             }
-            .gesture(
-                DragGesture()
-                    .onChanged { v in
-                        let dx = v.translation.width, dy = v.translation.height
-                        // Vertical (up = favorite, down = dismiss) vs horizontal (navigate).
-                        if abs(dy) > abs(dx) {
-                            offset = CGSize(width: 0, height: dy)
-                        } else {
-                            offset = CGSize(width: dx, height: 0)
-                        }
-                    }
-                    .onEnded { v in
-                        let dx = v.translation.width, dy = v.translation.height
-                        if abs(dy) > abs(dx) {
-                            if dy < -threshold { favorite() }
-                            else if dy > 110 { dismiss() }                 // pull down → back, like Photos
-                            else { withAnimation(.spring(response: 0.3)) { offset = .zero } }
-                        } else if dx < -threshold { swipeTo(next: true) }
-                        else if dx > threshold { swipeTo(next: false) }
-                        else { withAnimation(.spring(response: 0.3)) { offset = .zero } }
-                    }
-            )
+            .gesture(dragGesture)
+            .simultaneousGesture(pinchGesture)
             .ignoresSafeArea()
+    }
+
+    /// Current card: pinch zoom × pull-down shrink. Neighbors: 1.
+    private func cardScale(_ i: Int) -> CGFloat {
+        guard i == index else { return 1 }
+        let pull = offset.height > 0 ? max(0.86, 1 - offset.height / 1100) : 1
+        return zoom * pull
+    }
+
+    private var pinchGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { v in
+                isPinching = true
+                zoom = min(max(zoomBase * v, 0.7), 5)   // rubber-band below 1, cap at 5 mid-pinch
+            }
+            .onEnded { _ in
+                isPinching = false
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    zoom = min(max(zoom, 1), 4)
+                    if zoom <= 1.01 { zoom = 1; pan = .zero }
+                }
+                zoomBase = zoom
+                panBase = pan
+            }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { v in
+                guard !isPinching else { return }     // two-finger pinch also moves the centroid — ignore it
+                if isZoomed {
+                    // Zoomed: drag pans the photo instead of navigating.
+                    pan = CGSize(width: panBase.width + v.translation.width,
+                                 height: panBase.height + v.translation.height)
+                    return
+                }
+                let dx = v.translation.width, dy = v.translation.height
+                // Vertical (up = favorite, down = dismiss) vs horizontal (navigate).
+                if abs(dy) > abs(dx) {
+                    offset = CGSize(width: 0, height: dy)
+                } else {
+                    offset = CGSize(width: dx, height: 0)
+                }
+            }
+            .onEnded { v in
+                guard !isPinching else { return }
+                if isZoomed {
+                    // Keep the photo's visible area on screen (clamp, with a spring).
+                    let b = UIScreen.main.bounds.size
+                    let maxX = (zoom - 1) * b.width / 2, maxY = (zoom - 1) * b.height / 2
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        pan = CGSize(width: min(max(pan.width, -maxX), maxX),
+                                     height: min(max(pan.height, -maxY), maxY))
+                    }
+                    panBase = pan
+                    return
+                }
+                let dx = v.translation.width, dy = v.translation.height
+                if abs(dy) > abs(dx) {
+                    if dy < -threshold { favorite() }
+                    else if dy > 110 { dismiss() }                 // pull down → back, like Photos
+                    else { withAnimation(.spring(response: 0.3)) { offset = .zero } }
+                } else if dx < -threshold { swipeTo(next: true) }
+                else if dx > threshold { swipeTo(next: false) }
+                else { withAnimation(.spring(response: 0.3)) { offset = .zero } }
+            }
+    }
+
+    /// Double-tap: zoom to 2.5x, or back to fit.
+    private func toggleZoom() {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+            if isZoomed { zoom = 1; pan = .zero } else { zoom = 2.5 }
+        }
+        zoomBase = zoom
+        panBase = pan
     }
 
     /// A star that grows as you drag up — hint that releasing favorites the photo.
