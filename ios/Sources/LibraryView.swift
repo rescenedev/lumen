@@ -35,6 +35,12 @@ struct LibraryView: View {
                     scopeList
                 }
             }
+            // Parallax: the home slides left a touch while the gallery comes in, so
+            // both move together (like a nav push) instead of the gallery sliding
+            // over a static background.
+            .offset(x: scope != nil ? -UIScreen.main.bounds.width * 0.22 : 0)
+            .overlay(Color.black.opacity(scope != nil ? 0.25 : 0).ignoresSafeArea())
+
             // Gallery as a fast right-slide overlay (quicker than a nav push) — back
             // slides out the same way.
             if let s = scope {
