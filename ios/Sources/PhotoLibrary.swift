@@ -10,6 +10,13 @@ struct GridSource {
     init(count: Int, _ provider: @escaping (Int) -> PHAsset) { self.count = count; self.provider = provider }
     func asset(_ i: Int) -> PHAsset { provider(i) }
 
+    /// Resolve the backing fetch off the main thread so the first cell draw doesn't
+    /// pay for it mid-slide. Safe to call before the grid renders.
+    func warm() {
+        guard count > 0 else { return }
+        Task.detached(priority: .userInitiated) { _ = self.asset(0) }
+    }
+
     /// Lazily resolves a PHFetchResult on first access and memoizes it. Building a
     /// fetch (predicate over a big library) costs a few ms-to-tens-of-ms, so we
     /// defer it off the album-open's critical path: the grid only resolves it when
@@ -17,8 +24,10 @@ struct GridSource {
     final class LazyFetch {
         private let build: () -> PHFetchResult<PHAsset>
         private var cached: PHFetchResult<PHAsset>?
+        private let lock = NSLock()
         init(_ build: @escaping () -> PHFetchResult<PHAsset>) { self.build = build }
         func get() -> PHFetchResult<PHAsset> {
+            lock.lock(); defer { lock.unlock() }
             if let c = cached { return c }
             let r = build(); cached = r; return r
         }
@@ -37,8 +46,13 @@ struct GridSource {
 final class LazyArray {
     private let build: () -> [PHAsset]
     private var cached: [PHAsset]?
+    private let lock = NSLock()
     init(_ build: @escaping () -> [PHAsset]) { self.build = build }
-    func get() -> [PHAsset] { if let c = cached { return c }; let a = build(); cached = a; return a }
+    func get() -> [PHAsset] {
+        lock.lock(); defer { lock.unlock() }
+        if let c = cached { return c }
+        let a = build(); cached = a; return a
+    }
 }
 
 /// How the user albums are ordered on the home.

@@ -19,7 +19,9 @@ struct AlbumGalleryView: View {
         // Build the grid eagerly so it slides in as one unit with the header — but
         // the source is now lazy (resolves its fetch on first cell draw), so this
         // touches no PhotoKit and never blocks the open, even on a 60k album.
-        _source = State(initialValue: library.gridSource(for: scope))
+        let gs = library.gridSource(for: scope)
+        gs.warm()   // resolve the fetch off-main now, so the first cell draws from cache mid-slide
+        _source = State(initialValue: gs)
     }
 
     var body: some View {
