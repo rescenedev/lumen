@@ -21,12 +21,19 @@ private enum Flash {
 struct OrganizeView: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
-    var startIndex: Int = 0
     @Environment(\.dismiss) private var dismiss
 
-    @State private var source: GridSource?                 // lazy photos for this scope
+    @State private var source: GridSource                  // photos for this scope (ready at init)
     @State private var organizing = false                 // viewer first, then organize
-    @State private var index = 0
+    @State private var index: Int
+
+    init(scope: OrganizeScope, library: PhotoLibrary, startIndex: Int = 0) {
+        self.scope = scope
+        self.library = library
+        let s = library.gridSource(for: scope)
+        _source = State(initialValue: s)
+        _index = State(initialValue: min(max(startIndex, 0), max(s.count - 1, 0)))
+    }
     @State private var offset: CGSize = .zero
     @State private var decisions: [Int: Decision] = [:]   // index → keep/trash
     @State private var finished = false
@@ -37,31 +44,24 @@ struct OrganizeView: View {
 
     private let threshold: CGFloat = 80
 
-    private var count: Int { source?.count ?? 0 }
+    private var count: Int { source.count }
     private var keepCount: Int { decisions.values.filter { $0 == .keep }.count }
-    private var trashAssets: [PHAsset] { decisions.compactMap { $0.value == .trash ? source?.asset($0.key) : nil } }
+    private var trashAssets: [PHAsset] { decisions.compactMap { $0.value == .trash ? source.asset($0.key) : nil } }
 
     var body: some View {
         ZStack {
             Color.lumenBG.ignoresSafeArea()
-            if let source {
-                if finished {
-                    summary
-                } else {
-                    photoLayer(source)
-                    flashOverlay
-                    topBar
-                    if organizing { bottomControls } else { startBar }
-                }
+            if finished {
+                summary
+            } else {
+                photoLayer(source)
+                flashOverlay
+                topBar
+                if organizing { bottomControls } else { startBar }
             }
         }
         .preferredColorScheme(.dark)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: tick)
-        .task {
-            let s = library.gridSource(for: scope)
-            index = min(max(startIndex, 0), max(s.count - 1, 0))
-            source = s
-        }
     }
 
     // MARK: - Photo (full-screen, swipe = navigate)
@@ -256,7 +256,8 @@ struct OrganizeView: View {
     /// Record a decision for the current photo, then advance. Deciding the last
     /// photo wraps up into the summary.
     private func decide(_ d: Decision) {
-        guard let a = source?.asset(index) else { return }
+        guard index < count else { return }
+        let a = source.asset(index)
         decisions[index] = d
         if d == .keep { Task { await library.addToLumen(a) } }   // file into Lumen, live
         tick += 1
@@ -267,7 +268,8 @@ struct OrganizeView: View {
     /// Up-swipe: toggle the photo's Apple Favorite (non-destructive, lives in the
     /// system 즐겨찾기 album), then move on. Independent of keep/trash.
     private func favorite() {
-        guard let a = source?.asset(index) else { return }
+        guard index < count else { return }
+        let a = source.asset(index)
         let newValue = !currentIsFav
         library.bumpFavorite(a, added: newValue)   // instant home update
         Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = newValue } }
