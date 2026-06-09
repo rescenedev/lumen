@@ -49,6 +49,12 @@ struct PhotoGridView: View {
                     proxy.scrollTo(newValue, anchor: .center)
                 }
             }
+            // Navigating to another scope starts at the top.
+            .onChange(of: model.navigationToken) { _, _ in
+                if let first = model.visiblePhotos.first {
+                    proxy.scrollTo(first.id, anchor: .top)
+                }
+            }
             .background(
                 GeometryReader { geo in
                     Color.clear

@@ -127,6 +127,7 @@ struct PhotoBrowserView: View {
                 PhotoCollectionView(
                     model: model,
                     token: model.visibleToken,
+                    navToken: model.navigationToken,
                     isSorting: model.isSortingVisible,
                     metaVersion: model.metaRevision,
                     thumbnailSize: model.thumbnailSize,

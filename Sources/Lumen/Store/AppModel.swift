@@ -563,6 +563,19 @@ final class AppModel {
     /// to trigger prefetching without diffing the whole array.
     var visibleToken: Int { visibleSignature }
 
+    /// Changes only when the user navigates somewhere else (scope, sort,
+    /// search, filter) — use it to reset scroll position. Unlike
+    /// `visibleToken` it ignores library edits (delete/import), where the
+    /// scroll position should be kept.
+    var navigationToken: Int {
+        var hasher = Hasher()
+        hasher.combine(committedSidebar)
+        hasher.combine(sortOrder)
+        hasher.combine(searchText)
+        hasher.combine(filter)
+        return hasher.finalize()
+    }
+
     /// True while a large scope's sort is running on a background thread (the
     /// grid shows the previous content + a spinner until it lands).
     private(set) var isSortingVisible = false

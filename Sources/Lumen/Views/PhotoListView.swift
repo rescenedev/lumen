@@ -7,23 +7,31 @@ struct PhotoListView: View {
 
     var body: some View {
         @Bindable var model = model
-        return List(selection: $model.selection) {
-            ForEach(model.visiblePhotos) { photo in
-                PhotoRow(photo: photo)
-                    .tag(photo.id)
-                    .contextMenu { PhotoContextMenu(photo: photo) }
-                    .simultaneousGesture(TapGesture(count: 2).onEnded {
-                        model.openViewer(photo)
-                    })
+        return ScrollViewReader { proxy in
+            List(selection: $model.selection) {
+                ForEach(model.visiblePhotos) { photo in
+                    PhotoRow(photo: photo)
+                        .tag(photo.id)
+                        .contextMenu { PhotoContextMenu(photo: photo) }
+                        .simultaneousGesture(TapGesture(count: 2).onEnded {
+                            model.openViewer(photo)
+                        })
+                }
             }
+            .listStyle(.inset(alternatesRowBackgrounds: true))
+            .onChange(of: model.selection) { _, sel in
+                // Keep the inspector anchor pointing at a still-selected photo.
+                if let anchor = model.selectionAnchor, sel.contains(anchor) { return }
+                model.selectionAnchor = sel.first
+            }
+            // Navigating to another scope starts at the top.
+            .onChange(of: model.navigationToken) { _, _ in
+                if let first = model.visiblePhotos.first {
+                    proxy.scrollTo(first.id, anchor: .top)
+                }
+            }
+            .browserKeyHandlers()
         }
-        .listStyle(.inset(alternatesRowBackgrounds: true))
-        .onChange(of: model.selection) { _, sel in
-            // Keep the inspector anchor pointing at a still-selected photo.
-            if let anchor = model.selectionAnchor, sel.contains(anchor) { return }
-            model.selectionAnchor = sel.first
-        }
-        .browserKeyHandlers()
     }
 }
 

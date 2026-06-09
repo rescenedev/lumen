@@ -6,6 +6,7 @@ import AppKit
 struct PhotoCollectionView: NSViewRepresentable {
     let model: AppModel
     let token: Int                 // visibleSignature — changes when the list changes
+    let navToken: Int              // changes on user navigation — resets scroll to top
     let isSorting: Bool            // true while a big scope sorts off-main
     let metaVersion: Int           // changes when favorites/ratings/labels change
     let thumbnailSize: Double
@@ -66,6 +67,7 @@ struct PhotoCollectionView: NSViewRepresentable {
         scroll.automaticallyAdjustsContentInsets = false
 
         coord.appliedToken = token
+        coord.appliedNavToken = navToken
         coord.reload(cv)
         return scroll
     }
@@ -87,6 +89,14 @@ struct PhotoCollectionView: NSViewRepresentable {
             coord.reload(cv)            // async sort just landed — refresh content
         } else if metaVersion != coord.appliedMetaVersion {
             coord.refreshVisibleBadges(cv)   // favorites/ratings/labels — no reload
+        }
+
+        // Navigating somewhere else starts at the top; library edits within
+        // the same view (delete/import → token change) keep the position.
+        if navToken != coord.appliedNavToken {
+            coord.appliedNavToken = navToken
+            scroll.contentView.scroll(to: .zero)
+            scroll.reflectScrolledClipView(scroll.contentView)
         }
         coord.appliedSorting = isSorting
         coord.appliedMetaVersion = metaVersion
@@ -123,6 +133,7 @@ struct PhotoCollectionView: NSViewRepresentable {
         var photos: [Photo] = []
         var indexByID: [Photo.ID: Int] = [:]
         var appliedToken = -1
+        var appliedNavToken = -1
         var appliedSorting = false
         var appliedMetaVersion = -1
         var appliedSelection: Set<Photo.ID> = []
