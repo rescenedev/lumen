@@ -50,6 +50,10 @@ struct OrganizeView: View {
     @State private var panBase: CGSize = .zero
     @State private var isPinching = false
 
+    // In-flight page transition (so rapid taps complete it early instead of being dropped).
+    @State private var advanceTask: Task<Void, Never>?
+    @State private var pendingTarget: Int?
+
     private let threshold: CGFloat = 80
     private var isZoomed: Bool { zoom > 1.01 }
 
@@ -98,16 +102,17 @@ struct OrganizeView: View {
             // Tap the left/right edge to step photos (no swipe needed); center
             // double-tap toggles zoom. Edge steps only apply unzoomed — while
             // zoomed, drags pan and double-tap (anywhere) zooms back out.
+            // Edge zones are single-tap ONLY — pairing them with a double-tap
+            // recognizer makes every tap wait ~0.3s for the double to fail, which
+            // reads as lag. Zoom toggling lives on the (wide) center zone instead.
             HStack(spacing: 0) {
                 Color.clear.contentShape(Rectangle())
                     .frame(width: 64)
-                    .onTapGesture(count: 2) { toggleZoom() }
                     .onTapGesture { if !isZoomed { swipeTo(next: false) } }
                 Color.clear.contentShape(Rectangle())
                     .onTapGesture(count: 2) { toggleZoom() }
                 Color.clear.contentShape(Rectangle())
                     .frame(width: 64)
-                    .onTapGesture(count: 2) { toggleZoom() }
                     .onTapGesture { if !isZoomed { swipeTo(next: true) } }
             }
             .ignoresSafeArea()
@@ -349,7 +354,15 @@ struct OrganizeView: View {
 
     /// Move to the next/previous photo. At the last photo, a forward swipe just
     /// springs back — browsing never forces you into the summary.
+    /// If a page transition is mid-flight, finish it NOW (jump-cut) so a rapid
+    /// tap/swipe starts the next step immediately instead of being swallowed.
+    private func commitPendingStep() {
+        advanceTask?.cancel()
+        if let t = pendingTarget { index = t; offset = .zero; pendingTarget = nil }
+    }
+
     private func swipeTo(next: Bool) {
+        commitPendingStep()
         let target = next ? index + 1 : index - 1
         guard target >= 0, target < count else {
             withAnimation(.spring(response: 0.3)) { offset = .zero }; return
@@ -357,8 +370,13 @@ struct OrganizeView: View {
         // Animate exactly one page, then swap index + reset offset in the same
         // frame: the neighbor that just animated to center IS the new current
         // (same ForEach identity), so the handoff doesn't move a single pixel.
+        pendingTarget = target
         withAnimation(.easeOut(duration: 0.22)) { offset = CGSize(width: next ? -pageW : pageW, height: 0) }
-        Task { try? await Task.sleep(for: .milliseconds(215)); index = target; offset = .zero }
+        advanceTask = Task {
+            try? await Task.sleep(for: .milliseconds(215))
+            guard !Task.isCancelled else { return }
+            index = target; offset = .zero; pendingTarget = nil
+        }
     }
 
     /// Record a decision for the current photo, then advance. Deciding the last
@@ -390,10 +408,15 @@ struct OrganizeView: View {
 
     /// Fly the current card out, then step to the next photo (or finish at the end).
     private func flyAndAdvance(_ fly: CGSize) {
+        commitPendingStep()
+        let target = index < count - 1 ? index + 1 : nil
+        pendingTarget = target
         withAnimation(.easeOut(duration: 0.22)) { offset = fly }
-        Task {
+        advanceTask = Task {
             try? await Task.sleep(for: .milliseconds(215))
-            if index < count - 1 { index += 1; offset = .zero } else { offset = .zero; finish() }
+            guard !Task.isCancelled else { return }
+            pendingTarget = nil
+            if let target { index = target; offset = .zero } else { offset = .zero; finish() }
         }
     }
 
