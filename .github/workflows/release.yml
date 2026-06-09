@@ -1,0 +1,99 @@
+name: Release
+
+# One-button brew release: bumps the version, builds the app bundle on a
+# macOS runner, creates the GitHub Release, verifies the download sha, and
+# pushes the updated cask to the live tap (rescenedev/homebrew-tap).
+# Trigger from the Actions tab → Release → Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.3.4)"
+        required: true
+      notes:
+        description: "Release notes (markdown). Empty = auto-generated from commits."
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run tests
+        run: ./Scripts/test.sh
+
+      - name: Bump version (build number auto-increments)
+        run: |
+          V="${{ inputs.version }}"
+          BUILD=$(( $(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Scripts/Info.plist) + 1 ))
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" \
+                                  -c "Set :CFBundleVersion $BUILD" Scripts/Info.plist
+
+      - name: Build app bundle
+        run: bash Scripts/make_app.sh
+
+      - name: Package zip
+        run: |
+          V="${{ inputs.version }}"
+          ditto -c -k --keepParent dist/Lumen.app "dist/Lumen-$V.zip"
+          echo "SHA=$(shasum -a 256 "dist/Lumen-$V.zip" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Update cask (version + sha256)
+        run: |
+          V="${{ inputs.version }}"
+          sed -i '' "s/^  version \".*\"/  version \"$V\"/" Casks/lumen-photos.rb
+          sed -i '' "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/lumen-photos.rb
+
+      - name: Commit release bump to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Scripts/Info.plist Casks/lumen-photos.rb
+          git commit -m "chore: release ${{ inputs.version }}"
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          V="${{ inputs.version }}"
+          if [ -n "$NOTES" ]; then
+            printf '%s\n' "$NOTES" > /tmp/notes.md
+            gh release create "v$V" "dist/Lumen-$V.zip" --title "Lumen $V" --notes-file /tmp/notes.md
+          else
+            gh release create "v$V" "dist/Lumen-$V.zip" --title "Lumen $V" --generate-notes
+          fi
+
+      - name: Verify download sha matches
+        run: |
+          V="${{ inputs.version }}"
+          sleep 5
+          curl -sL -o /tmp/verify.zip "https://github.com/${{ github.repository }}/releases/download/v$V/Lumen-$V.zip"
+          DOWN=$(shasum -a 256 /tmp/verify.zip | cut -d' ' -f1)
+          echo "built=$SHA downloaded=$DOWN"
+          test "$DOWN" = "$SHA"
+
+      - name: Push cask to the live tap
+        env:
+          TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$TAP_DEPLOY_KEY" > ~/.ssh/tap_key
+          chmod 600 ~/.ssh/tap_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap_key -o IdentitiesOnly=yes"
+          git clone --depth 1 git@github.com:rescenedev/homebrew-tap.git /tmp/tap
+          cp Casks/lumen-photos.rb /tmp/tap/Casks/
+          cd /tmp/tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "lumen-photos ${{ inputs.version }}"
+          git push
