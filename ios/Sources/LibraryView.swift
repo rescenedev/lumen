@@ -72,8 +72,24 @@ struct LibraryView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Lumen").font(.system(size: 30, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white).padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
-                Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
-                    .padding(.horizontal, 4)
+                HStack {
+                    Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
+                    Spacer()
+                    Menu {
+                        ForEach(AlbumSort.allCases, id: \.self) { s in
+                            Button { lib.albumSort = s } label: {
+                                if lib.albumSort == s { Label(s.label, systemImage: "checkmark") } else { Text(s.label) }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(lib.albumSort.label)
+                            Image(systemName: "arrow.up.arrow.down")
+                        }
+                        .font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.55))
+                    }
+                }
+                .padding(.horizontal, 4)
                 LazyVGrid(columns: gridColumns, spacing: 12) {
                     ForEach(lib.scopes) { s in
                         ScopeCard(scope: s, library: lib)
