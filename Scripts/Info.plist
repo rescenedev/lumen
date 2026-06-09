@@ -2,33 +2,33 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
-    <string>Lumen</string>
-    <key>CFBundleDisplayName</key>
-    <string>Lumen</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.prototype.lumen</string>
-    <key>CFBundleExecutable</key>
-    <string>Lumen</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.3.0</string>
-    <key>CFBundleVersion</key>
-    <string>3</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSPrincipalClass</key>
-    <string>NSApplication</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.photography</string>
-    <key>NSHumanReadableCopyright</key>
-    <string>Lumen — prototype photo viewer.</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Lumen reads your Photos library so you can browse and view it alongside your files and NAS. Your photos are never modified.</string>
+	<key>CFBundleDisplayName</key>
+	<string>Lumen</string>
+	<key>CFBundleExecutable</key>
+	<string>Lumen</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.prototype.lumen</string>
+	<key>CFBundleName</key>
+	<string>Lumen</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.3.1</string>
+	<key>CFBundleVersion</key>
+	<string>4</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.photography</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Lumen — prototype photo viewer.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Lumen reads your Photos library so you can browse and view it alongside your files and NAS. Your photos are never modified.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
 </dict>
 </plist>
