@@ -207,9 +207,8 @@ struct SidebarView: View {
 
 }
 
-/// One node of the folder tree. Folders with children expand/collapse via the
-/// disclosure chevron *or* a double-click on the row — the latter mirrors the
-/// Photos-albums section and matches Finder muscle memory.
+/// One node of the folder tree. A click on a folder with children selects it
+/// and toggles its children; the disclosure chevron still works as usual.
 private struct FolderTreeNode: View {
     @Environment(AppModel.self) private var model
     let node: FolderNode
@@ -231,16 +230,17 @@ private struct FolderTreeNode: View {
                     FolderTreeNode(node: child, expanded: $expanded)
                 }
             } label: {
-                // The tap gesture swallows clicks before List selection sees
-                // them, so a parent row must select explicitly: every click
-                // selects the folder and toggles its children (expand on first
-                // click, collapse when clicked again) — Finder source-list feel.
+                // simultaneousGesture, NOT onTapGesture: the List must also see
+                // the click so it does its native selection (which focuses the
+                // list — an exclusive gesture left the highlight gray/inactive).
+                // Our handler adds the toggle: expand on click, collapse on
+                // re-click — Finder source-list feel.
                 label
                     .contentShape(Rectangle())
-                    .onTapGesture {
+                    .simultaneousGesture(TapGesture().onEnded {
                         model.selectedSidebar = .folder(node.url)
                         withAnimation { isExpanded.wrappedValue.toggle() }
-                    }
+                    })
             }
         } else {
             label
