@@ -13,15 +13,9 @@ struct LumenIOSApp: App {
 }
 
 struct RootView: View {
-    @AppStorage("lumen.lastOrganizedScopeId") private var lastOrganizedScopeId = "all"
-
     @State private var lib = PhotoLibrary()
     @State private var selectedTab: LumenTab = .home
     @State private var showSplash = true
-    /// Cached organize scope — only swapped when scope *identity* (id) changes,
-    /// not on count/cover updates, so a library reload never collapses the
-    /// fullScreenCover that OrganizeView is presenting.
-    @State private var organizeScope: OrganizeScope?
 
     var body: some View {
         ZStack {
@@ -41,23 +35,10 @@ struct RootView: View {
             if showSplash { SplashView().transition(.opacity) }
         }
         .task {
-            // Run load + minimum splash timer concurrently.
-            // Splash hides after max(load time, 600ms) so the tab bar is always
-            // ready before the user sees the home screen.
             async let minWait: Void = Task.sleep(for: .milliseconds(600))
             if !lib.loaded { await lib.load() }
             try? await minWait
             withAnimation(.easeOut(duration: 0.4)) { showSplash = false }
-        }
-        .onChange(of: lib.scopes) { _, scopes in
-            let target = scopes.first(where: { $0.id == lastOrganizedScopeId })
-                      ?? scopes.first(where: { $0.id == "all" })
-            if target?.id != organizeScope?.id { organizeScope = target }
-        }
-        .onChange(of: lastOrganizedScopeId) { _, newId in
-            if let scope = lib.scopes.first(where: { $0.id == newId }) {
-                organizeScope = scope
-            }
         }
     }
 
@@ -72,11 +53,7 @@ struct RootView: View {
                 emptyTab("photo.stack", lib.loaded ? "사진이 없어요" : nil)
             }
         case .organize:
-            if let scope = organizeScope {
-                AlbumGalleryView(scope: scope, library: lib, onClose: nil)
-            } else {
-                emptyTab("sparkles", lib.loaded ? "정리할 사진이 없어요" : nil)
-            }
+            OrganizePickerView(library: lib)
         case .favorites:
             if let scope = lib.scopes.first(where: { $0.title == "즐겨찾기" }) {
                 AlbumGalleryView(scope: scope, library: lib, onClose: nil)

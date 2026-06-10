@@ -253,3 +253,112 @@ struct OnboardingView: View {
         }
     }
 }
+
+struct OrganizePickerView: View {
+    let library: PhotoLibrary
+    @State private var scope: OrganizeScope?
+
+    var body: some View {
+        ZStack {
+            ZStack {
+                Color.lumenBG.ignoresSafeArea()
+                if !library.loaded {
+                    ProgressView().tint(.white.opacity(0.4))
+                } else if library.scopes.isEmpty {
+                    VStack(spacing: 14) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 48, weight: .thin))
+                            .foregroundStyle(.white.opacity(0.22))
+                        Text("정리할 사진이 없어요")
+                            .font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                    }
+                } else {
+                    pickerList
+                }
+            }
+            .offset(x: scope != nil ? -UIScreen.main.bounds.width * 0.22 : 0)
+            .overlay(Color.black.opacity(scope != nil ? 0.25 : 0).ignoresSafeArea())
+
+            if let s = scope {
+                AlbumGalleryView(scope: s, library: library,
+                                 onClose: { withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = nil } })
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .tint(.lumenAccent)
+    }
+
+    private var pickerList: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                // 헤더
+                VStack(spacing: 8) {
+                    Text("정리해볼까요?")
+                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("앨범을 골라보세요")
+                        .font(.subheadline).foregroundStyle(.white.opacity(0.4))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 48).padding(.bottom, 32)
+
+                // 리스트
+                VStack(spacing: 1) {
+                    ForEach(library.scopes) { s in
+                        ScopeRow(scope: s, library: library)
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = s }
+                                library.prewarmScope(s)
+                            }
+                    }
+                }
+                .background(Color.lumenCard)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.06)))
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+}
+
+private struct ScopeRow: View {
+    let scope: OrganizeScope
+    let library: PhotoLibrary
+    @State private var cover: UIImage?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            // 썸네일
+            ZStack {
+                Color.white.opacity(0.06)
+                if let cover {
+                    Image(uiImage: cover).resizable().scaledToFill()
+                } else {
+                    Image(systemName: scope.symbol)
+                        .font(.system(size: 16)).foregroundStyle(.white.opacity(0.4))
+                }
+            }
+            .frame(width: 52, height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(scope.title)
+                    .font(.body.weight(.semibold)).foregroundStyle(.white)
+                Text("\(scope.count)장")
+                    .font(.caption).foregroundStyle(.white.opacity(0.45))
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.25))
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .task(id: scope.cover?.localIdentifier) {
+            if let a = scope.cover {
+                for await img in library.imageStream(a, points: 52, mode: .aspectFill) { cover = img }
+            }
+        }
+    }
+}
