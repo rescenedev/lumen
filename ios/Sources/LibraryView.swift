@@ -305,13 +305,16 @@ struct OrganizePickerView: View {
                 .padding(.top, 48).padding(.bottom, 32)
 
                 // 리스트
-                VStack(spacing: 1) {
-                    ForEach(library.scopes) { s in
+                VStack(spacing: 0) {
+                    ForEach(Array(library.scopes.enumerated()), id: \.element.id) { i, s in
                         ScopeRow(scope: s, library: library)
                             .onTapGesture {
                                 withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = s }
                                 library.prewarmScope(s)
                             }
+                        if i < library.scopes.count - 1 {
+                            Divider().overlay(.white.opacity(0.07)).padding(.leading, 82)
+                        }
                     }
                 }
                 .background(Color.lumenCard)
