@@ -28,10 +28,10 @@ struct RootView: View {
             tabContent
                 // Push scroll content up so nothing hides behind the floating bar.
                 .safeAreaInset(edge: .bottom) {
-                    Color.clear.frame(height: lib.authorized ? 88 : 0)
+                    Color.clear.frame(height: lib.authorized ? 76 : 0)
                 }
 
-            if lib.authorized && lib.loaded {
+            if lib.authorized {
                 FloatingTabBar(selected: $selectedTab)
             }
 
@@ -40,11 +40,13 @@ struct RootView: View {
             }
         }
         .task {
+            // Run load + minimum splash timer concurrently.
+            // Splash hides after max(load time, 600ms) so the tab bar is always
+            // ready before the user sees the home screen.
+            async let minWait: Void = Task.sleep(for: .milliseconds(600))
             if !lib.loaded { await lib.load() }
-            organizeScope = lib.scopes.first(where: { $0.id == lastOrganizedScopeId })
-                         ?? lib.scopes.first(where: { $0.id == "all" })
-            try? await Task.sleep(for: .milliseconds(1100))
-            withAnimation(.easeOut(duration: 0.45)) { showSplash = false }
+            try? await minWait
+            withAnimation(.easeOut(duration: 0.4)) { showSplash = false }
         }
         .onChange(of: lib.scopes) { _, scopes in
             let target = scopes.first(where: { $0.id == lastOrganizedScopeId })
@@ -52,7 +54,6 @@ struct RootView: View {
             if target?.id != organizeScope?.id { organizeScope = target }
         }
         .onChange(of: lastOrganizedScopeId) { _, newId in
-            // User tapped a photo in a different album — point the tab there.
             if let scope = lib.scopes.first(where: { $0.id == newId }) {
                 organizeScope = scope
             }
@@ -129,7 +130,7 @@ struct FloatingTabBar: View {
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(.white.opacity(0.09)))
         .padding(.horizontal, 28)
-        .padding(.bottom, 16)
+        .padding(.bottom, 1)
         .shadow(color: .black.opacity(0.45), radius: 22, y: 8)
     }
 
