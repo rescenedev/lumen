@@ -4,7 +4,7 @@ import Photos
 /// Home: pick what to organize (전체 / 즐겨찾기 / 최근 / 스크린샷 / each album),
 /// then swipe just that bundle. Slate dark theme to match the organize screen.
 struct LibraryView: View {
-    @State private var lib = PhotoLibrary()
+    let library: PhotoLibrary
     @State private var scope: OrganizeScope?
     @State private var showSort = false
     @Environment(\.horizontalSizeClass) private var hSize
@@ -18,7 +18,7 @@ struct LibraryView: View {
         ZStack {
             ZStack {
                 Color.lumenBG.ignoresSafeArea()
-                if !lib.loaded {
+                if !library.loaded {
                     TimelineView(.periodic(from: .now, by: 0.4)) { ctx in
                         let n = Int(ctx.date.timeIntervalSince1970 / 0.4) % 4
                         HStack(spacing: 0) {
@@ -27,9 +27,9 @@ struct LibraryView: View {
                         }
                         .font(.subheadline).foregroundStyle(.white.opacity(0.5))
                     }
-                } else if !lib.authorized {
-                    OnboardingView { Task { await lib.load() } }
-                } else if lib.scopes.isEmpty {
+                } else if !library.authorized {
+                    OnboardingView { Task { await library.load() } }
+                } else if library.scopes.isEmpty {
                     emptyState
                 } else {
                     scopeList
@@ -44,7 +44,7 @@ struct LibraryView: View {
             // Gallery as a fast right-slide overlay (quicker than a nav push) — back
             // slides out the same way.
             if let s = scope {
-                AlbumGalleryView(scope: s, library: lib,
+                AlbumGalleryView(scope: s, library: library,
                                  onClose: { withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = nil } })
                     .transition(.move(edge: .trailing))
                     .zIndex(1)
@@ -53,15 +53,12 @@ struct LibraryView: View {
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
         .sheet(isPresented: $showSort) {
-            SortSheet(current: lib.albumSort) { lib.albumSort = $0 }
+            SortSheet(current: library.albumSort) { library.albumSort = $0 }
         }
-        .task {
-            if !lib.loaded { await lib.load() }
-            // Screenshot helper: `-autoOrganize` opens the first album straight away
-            // (via the same prewarm path a real tap takes).
-            if scope == nil, ProcessInfo.processInfo.arguments.contains("-autoOrganize"),
-               let s = lib.scopes.first {
-                lib.prewarmScope(s)
+        .onChange(of: library.loaded) { _, loaded in
+            guard loaded, scope == nil else { return }
+            if ProcessInfo.processInfo.arguments.contains("-autoOrganize"), let s = library.scopes.first {
+                library.prewarmScope(s)
                 scope = s
             }
         }
@@ -71,9 +68,9 @@ struct LibraryView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             LumenGlyph(size: 72)
-            Text(!lib.hasAnyPhotos ? "사진이 없어요" : "모두 정리했어요")
+            Text(!library.hasAnyPhotos ? "사진이 없어요" : "모두 정리했어요")
                 .font(.title2.bold()).foregroundStyle(.white)
-            Text(!lib.hasAnyPhotos
+            Text(!library.hasAnyPhotos
                  ? "기기에 사진이 추가되면 여기에서 정리할 수 있어요."
                  : "정리할 사진을 모두 둘러봤어요. 보관한 사진은 ‘Lumen’ 앨범에 모여 있어요.")
                 .font(.subheadline).foregroundStyle(.white.opacity(0.55))
@@ -92,7 +89,7 @@ struct LibraryView: View {
                     Spacer()
                     Button { showSort = true } label: {
                         HStack(spacing: 5) {
-                            Text(lib.albumSort.label)
+                            Text(library.albumSort.label)
                             Image(systemName: "chevron.up.chevron.down").font(.caption2.weight(.bold))
                         }
                         .font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.85))
@@ -104,14 +101,14 @@ struct LibraryView: View {
                 }
                 .padding(.horizontal, 4)
                 LazyVGrid(columns: gridColumns, spacing: 12) {
-                    ForEach(lib.scopes) { s in
-                        ScopeCard(scope: s, library: lib)
+                    ForEach(library.scopes) { s in
+                        ScopeCard(scope: s, library: library)
                             .onTapGesture {
                                 // Tap does ZERO PhotoKit work: the slide starts now, the
                                 // grid resolves its fetch lazily on first cell draw, and
                                 // prewarm warms the cache off-main.
                                 withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = s }
-                                lib.prewarmScope(s)
+                                library.prewarmScope(s)
                             }
                     }
                 }

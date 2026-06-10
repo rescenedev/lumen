@@ -6,13 +6,15 @@ import Photos
 struct AlbumGalleryView: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
-    let onClose: () -> Void
+    let onClose: (() -> Void)?      // nil = shown as a tab (no close button, no back-swipe)
+
+    @AppStorage("lumen.lastOrganizedScopeId") private var lastOrganizedScopeId = "all"
 
     @State private var source: GridSource
     @State private var ver = 0
     @State private var open: StartAt?
 
-    init(scope: OrganizeScope, library: PhotoLibrary, onClose: @escaping () -> Void) {
+    init(scope: OrganizeScope, library: PhotoLibrary, onClose: (() -> Void)?) {
         self.scope = scope
         self.library = library
         self.onClose = onClose
@@ -31,8 +33,9 @@ struct AlbumGalleryView: View {
                 Text("사진이 없어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
             } else {
                 PhotoGridView(source: source, manager: library.manager, reloadKey: ver,
-                              onTap: { open = StartAt(index: $0) },
-                              onBack: onClose)
+                              onTap: { lastOrganizedScopeId = scope.id; open = StartAt(index: $0) },
+                              onBack: onClose ?? {},
+                              bottomInset: onClose == nil ? 88 : 28)
                     .ignoresSafeArea(edges: .bottom)
             }
             header
@@ -55,12 +58,14 @@ struct AlbumGalleryView: View {
     private var header: some View {
         ZStack {
             Text(scope.title).font(.headline).foregroundStyle(.white)
-            HStack {
-                Button { onClose() } label: {
-                    Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
-                        .frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
+            if let onClose {
+                HStack {
+                    Button { onClose() } label: {
+                        Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
+                            .frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
+                    }
+                    Spacer()
                 }
-                Spacer()
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)

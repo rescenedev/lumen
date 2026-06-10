@@ -432,6 +432,8 @@ struct OrganizeView: View {
         do {
             try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(targets as NSArray) }
             doneMsg = "삭제 완료"
+            try? await Task.sleep(for: .milliseconds(1000))
+            dismiss()
         } catch { doneMsg = "삭제 취소됨" }
     }
 }

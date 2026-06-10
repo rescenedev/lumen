@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Lumen for iOS — a native photo *manager* for people who find organizing
-/// photos painful: browse the library, then keep/favorite/trash with light
-/// gestures. (Editing/combine come later.)
+enum LumenTab { case home, allPhotos, organize, favorites, vault }
+
 @main
 struct LumenIOSApp: App {
     var body: some Scene {
@@ -13,26 +12,152 @@ struct LumenIOSApp: App {
     }
 }
 
-/// Hosts the app and shows a brief "Lumen" splash on launch, fading into the
-/// library once it's had a moment to load.
 struct RootView: View {
+    @AppStorage("lumen.lastOrganizedScopeId") private var lastOrganizedScopeId = "all"
+
+    @State private var lib = PhotoLibrary()
+    @State private var selectedTab: LumenTab = .home
     @State private var showSplash = true
+    /// Cached organize scope — only swapped when scope *identity* (id) changes,
+    /// not on count/cover updates, so a library reload never collapses the
+    /// fullScreenCover that OrganizeView is presenting.
+    @State private var organizeScope: OrganizeScope?
 
     var body: some View {
-        ZStack {
-            LibraryView()
+        ZStack(alignment: .bottom) {
+            tabContent
+                // Push scroll content up so nothing hides behind the floating bar.
+                .safeAreaInset(edge: .bottom) {
+                    Color.clear.frame(height: lib.authorized ? 88 : 0)
+                }
+
+            if lib.authorized && lib.loaded {
+                FloatingTabBar(selected: $selectedTab)
+            }
+
             if showSplash {
                 SplashView().transition(.opacity)
             }
         }
         .task {
+            if !lib.loaded { await lib.load() }
+            organizeScope = lib.scopes.first(where: { $0.id == lastOrganizedScopeId })
+                         ?? lib.scopes.first(where: { $0.id == "all" })
             try? await Task.sleep(for: .milliseconds(1100))
             withAnimation(.easeOut(duration: 0.45)) { showSplash = false }
         }
+        .onChange(of: lib.scopes) { _, scopes in
+            let target = scopes.first(where: { $0.id == lastOrganizedScopeId })
+                      ?? scopes.first(where: { $0.id == "all" })
+            if target?.id != organizeScope?.id { organizeScope = target }
+        }
+        .onChange(of: lastOrganizedScopeId) { _, newId in
+            // User tapped a photo in a different album — point the tab there.
+            if let scope = lib.scopes.first(where: { $0.id == newId }) {
+                organizeScope = scope
+            }
+        }
+    }
+
+    @ViewBuilder private var tabContent: some View {
+        switch selectedTab {
+        case .home:
+            LibraryView(library: lib)
+        case .allPhotos:
+            if let scope = lib.scopes.first(where: { $0.id == "all" }) {
+                AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+            } else {
+                emptyTab("photo.stack", lib.loaded ? "사진이 없어요" : nil)
+            }
+        case .organize:
+            if let scope = organizeScope {
+                AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+            } else {
+                emptyTab("sparkles", lib.loaded ? "정리할 사진이 없어요" : nil)
+            }
+        case .favorites:
+            if let scope = lib.scopes.first(where: { $0.title == "즐겨찾기" }) {
+                AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+            } else {
+                emptyTab("star", lib.loaded ? "즐겨찾기한 사진이 없어요" : nil,
+                         sub: "위로 올리면 즐겨찾기에 추가돼요")
+            }
+        case .vault:
+            if let scope = lib.scopes.first(where: { $0.collection?.localizedTitle == "Lumen" }) {
+                AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+            } else {
+                emptyTab("tray", lib.loaded ? "보관한 사진이 없어요" : nil,
+                         sub: "♥로 보관한 사진이 여기 모여요")
+            }
+        }
+    }
+
+    private func emptyTab(_ icon: String, _ msg: String?, sub: String? = nil) -> some View {
+        ZStack {
+            Color.lumenBG.ignoresSafeArea()
+            if let msg {
+                VStack(spacing: 14) {
+                    Image(systemName: icon)
+                        .font(.system(size: 48, weight: .thin))
+                        .foregroundStyle(.white.opacity(0.22))
+                    Text(msg).font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                    if let sub {
+                        Text(sub).font(.footnote).foregroundStyle(.white.opacity(0.3))
+                    }
+                }
+            } else {
+                ProgressView().tint(.white.opacity(0.4))
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 }
 
-/// Dead-simple splash: the word "Lumen" on the app's slate.
+struct FloatingTabBar: View {
+    @Binding var selected: LumenTab
+
+    var body: some View {
+        HStack(spacing: 0) {
+            tabBtn(.home,       "house.fill")
+            tabBtn(.allPhotos,  "photo.stack.fill")
+            tabBtn(.organize,   "sparkles")
+            tabBtn(.favorites,  "star.fill")
+            tabBtn(.vault,      "tray.full.fill")
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 64)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.09)))
+        .padding(.horizontal, 28)
+        .padding(.bottom, 16)
+        .shadow(color: .black.opacity(0.45), radius: 22, y: 8)
+    }
+
+    private func tabBtn(_ tab: LumenTab, _ icon: String) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.70)) { selected = tab }
+        } label: {
+            ZStack {
+                if selected == tab {
+                    // Capsule gives maximum roundness — basically a pill/circle feel
+                    Capsule()
+                        .fill(.white.opacity(0.16))
+                        .padding(.horizontal, 2)
+                        .padding(.vertical, 4)
+                }
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(selected == tab ? .white : .white.opacity(0.38))
+                    .scaleEffect(selected == tab ? 1.1 : 1)
+            }
+            .frame(height: 50)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct SplashView: View {
     var body: some View {
         ZStack {

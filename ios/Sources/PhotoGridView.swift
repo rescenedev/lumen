@@ -12,6 +12,7 @@ struct PhotoGridView: UIViewRepresentable {
     var topInset: CGFloat = 52
     var onTap: (Int) -> Void
     var onBack: () -> Void
+    var bottomInset: CGFloat = 28
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -21,7 +22,7 @@ struct PhotoGridView: UIViewRepresentable {
         let cv = UICollectionView(frame: .zero, collectionViewLayout: layout)
         cv.backgroundColor = .clear
         cv.contentInsetAdjustmentBehavior = .always
-        cv.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: 28, right: 0)
+        cv.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: bottomInset, right: 0)
         cv.dataSource = context.coordinator
         cv.delegate = context.coordinator
         cv.prefetchDataSource = context.coordinator   // warm thumbs ahead of fast scrolls
