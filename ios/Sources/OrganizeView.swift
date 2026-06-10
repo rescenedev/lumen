@@ -310,29 +310,37 @@ struct OrganizeView: View {
     // MARK: - Summary
 
     private var summary: some View {
-        VStack(spacing: 0) {
-            Spacer()
-            LumenGlyph(size: 64)
-            Text("정리 완료").font(.title2.bold()).foregroundStyle(.white).padding(.top, 14)
-            Text(keepCount > 0 ? "보관한 \(keepCount)장은 Lumen 앨범에 모았어요" : "수고하셨어요!")
-                .font(.subheadline).foregroundStyle(.white.opacity(0.55))
-                .multilineTextAlignment(.center).padding(.top, 6)
-            Spacer()
-            if !trashAssets.isEmpty {
-                Button(role: .destructive) { Task { await deleteTrash() } } label: {
-                    Label("\(trashAssets.count)장 한번에 삭제", systemImage: "trash")
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 16)
-                        .background(Color.red.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        ZStack {
+            // 삭제 후보 사진 블러 배경
+            TrashMosaicBackground(assets: trashAssets, library: library)
+
+            // 다크 딤
+            Color.black.opacity(0.55).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer()
+                LumenGlyph(size: 64)
+                Text("정리 완료").font(.title2.bold()).foregroundStyle(.white).padding(.top, 14)
+                Text(keepCount > 0 ? "보관한 \(keepCount)장은 Lumen 앨범에 모았어요" : "수고하셨어요!")
+                    .font(.subheadline).foregroundStyle(.white.opacity(0.65))
+                    .multilineTextAlignment(.center).padding(.top, 6)
+                Spacer()
+                if !trashAssets.isEmpty {
+                    Button(role: .destructive) { Task { await deleteTrash() } } label: {
+                        Label("\(trashAssets.count)장 한번에 삭제", systemImage: "trash")
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).padding(.vertical, 16)
+                            .background(Color.red.opacity(0.75), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 28)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 28)
+                Button("닫기") { dismiss() }
+                    .font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                    .padding(.top, 14).padding(.bottom, 24)
             }
-            Button("닫기") { dismiss() }
-                .font(.subheadline).foregroundStyle(.white.opacity(0.5))
-                .padding(.top, 14).padding(.bottom, 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Navigation (swipe) & decisions (buttons)
@@ -429,6 +437,56 @@ struct OrganizeView: View {
             try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(targets as NSArray) }
             dismiss()
         } catch { /* 사용자가 iOS 다이얼로그 취소 — 요약 화면에 머뭄 */ }
+    }
+}
+
+/// Blurred mosaic of trash-marked photos shown behind the summary screen.
+private struct TrashMosaicBackground: View {
+    let assets: [PHAsset]
+    let library: PhotoLibrary
+
+    // Show up to 9 photos in a 3-column grid
+    private var displayed: [PHAsset] { Array(assets.prefix(9)) }
+
+    var body: some View {
+        GeometryReader { geo in
+            let cols = min(displayed.count, 3)
+            let size = cols > 0 ? geo.size.width / CGFloat(cols) : geo.size.width
+            let rows = Int(ceil(Double(displayed.count) / Double(max(cols, 1))))
+            ZStack(alignment: .topLeading) {
+                Color.lumenBG
+                ForEach(displayed.indices, id: \.self) { i in
+                    let col = CGFloat(i % cols)
+                    let row = CGFloat(i / cols)
+                    MosaicCell(asset: displayed[i], library: library, size: size)
+                        .frame(width: size, height: size)
+                        .offset(x: col * size, y: row * size + (geo.size.height - CGFloat(rows) * size) / 2)
+                }
+            }
+            .blur(radius: 24)
+            .ignoresSafeArea()
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct MosaicCell: View {
+    let asset: PHAsset
+    let library: PhotoLibrary
+    let size: CGFloat
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Color.white.opacity(0.06)
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+            }
+        }
+        .clipped()
+        .task(id: asset.localIdentifier) {
+            for await img in library.imageStream(asset, points: size, mode: .aspectFill) { image = img }
+        }
     }
 }
 
