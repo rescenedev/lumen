@@ -105,8 +105,8 @@ struct FloatingTabBar: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 64)
-        .background(Capsule().fill(.ultraThinMaterial).opacity(0.9))
-        .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
+        .background(Capsule().fill(Color(white: 0.11)))
+        .overlay(Capsule().strokeBorder(.white.opacity(0.07)))
         .padding(.horizontal, 28)
         .padding(.top, 4)
         .padding(.bottom, 16)
@@ -119,16 +119,15 @@ struct FloatingTabBar: View {
         } label: {
             ZStack {
                 if selected == tab {
-                    // Capsule gives maximum roundness — basically a pill/circle feel
-                    Capsule()
-                        .fill(.white.opacity(0.16))
-                        .padding(.horizontal, 2)
-                        .padding(.vertical, 4)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color(white: 0.26))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 6)
                 }
                 Image(systemName: icon)
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(selected == tab ? .white : .white.opacity(0.38))
-                    .scaleEffect(selected == tab ? 1.1 : 1)
+                    .foregroundStyle(selected == tab ? .white : Color(white: 0.55))
+                    .scaleEffect(selected == tab ? 1.05 : 1)
             }
             .frame(height: 50)
             .frame(maxWidth: .infinity)
