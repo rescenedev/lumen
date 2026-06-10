@@ -305,6 +305,7 @@ struct OrganizePickerView: View {
                         .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
                 .padding(.top, 48).padding(.bottom, 32)
 
                 // 리스트
