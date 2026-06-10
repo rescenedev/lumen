@@ -26,12 +26,17 @@ struct RootView: View {
     var body: some View {
         ZStack {
             tabContent
-            if showSplash { SplashView().transition(.opacity) }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: lib.authorized ? 72 : 0)
+                }
             if lib.authorized {
-                FloatingTabBar(selected: $selectedTab)
+                VStack(spacing: 0) {
+                    Spacer()
+                    FloatingTabBar(selected: $selectedTab)
+                }
+                .ignoresSafeArea(edges: .bottom)
             }
+            if showSplash { SplashView().transition(.opacity) }
         }
         .task {
             // Run load + minimum splash timer concurrently.
@@ -121,10 +126,11 @@ struct FloatingTabBar: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 64)
-        .background(Capsule().fill(.ultraThinMaterial).opacity(0.55))
+        .background(Capsule().fill(.ultraThinMaterial).opacity(0.80))
         .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
         .padding(.horizontal, 28)
-        .padding(.vertical, 4)
+        .padding(.top, 4)
+        .padding(.bottom, 16)
         .shadow(color: .black.opacity(0.45), radius: 22, y: 8)
     }
 
