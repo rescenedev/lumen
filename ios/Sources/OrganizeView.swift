@@ -315,7 +315,7 @@ struct OrganizeView: View {
             TrashMosaicBackground(assets: trashAssets, library: library)
 
             // 다크 딤
-            Color.black.opacity(0.55).ignoresSafeArea()
+            Color.black.opacity(0.30).ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer()
@@ -463,7 +463,7 @@ private struct TrashMosaicBackground: View {
                         .offset(x: col * size, y: row * size + (geo.size.height - CGFloat(rows) * size) / 2)
                 }
             }
-            .blur(radius: 8)
+            .blur(radius: 3)
             .ignoresSafeArea()
         }
         .ignoresSafeArea()

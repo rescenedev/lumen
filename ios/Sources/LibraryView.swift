@@ -298,11 +298,8 @@ struct OrganizePickerView: View {
                     Text("정리해볼까요?")
                         .font(.system(size: 28, weight: .heavy, design: .rounded))
                         .foregroundStyle(.white)
-                    Text("앨범을 골라보세요")
-                        .font(.subheadline).foregroundStyle(.white.opacity(0.4))
-                    Text("위로 올리면 삭제 · 정리가 끝나면 한번에 삭제")
-                        .font(.caption).foregroundStyle(.white.opacity(0.25))
-                        .padding(.top, 4)
+                    Text("앨범을 골라보세요 · 위로 올리면 삭제 · 정리가 끝나면 한번에 삭제")
+                        .font(.subheadline).foregroundStyle(.white.opacity(0.35))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
