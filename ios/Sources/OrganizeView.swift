@@ -310,44 +310,29 @@ struct OrganizeView: View {
     // MARK: - Summary
 
     private var summary: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 0) {
             Spacer()
-            LumenGlyph(size: 76)
-            Text("정리 완료").font(.title.bold()).foregroundStyle(.white).padding(.top, 6)
-            Text(keepCount == 0 ? "정리한 사진이 없어요"
-                                : "보관한 \(keepCount)장은 Lumen 앨범에 모았어요")
-                .font(.subheadline).foregroundStyle(.white.opacity(0.6)).multilineTextAlignment(.center)
-            HStack(spacing: 40) {
-                stat("보관", keepCount, "rectangle.stack.fill")
-                stat("삭제", trashAssets.count, "trash.fill")
-            }.padding(.vertical, 8)
-            VStack(spacing: 12) {
-                if !trashAssets.isEmpty {
-                    Button(role: .destructive) { Task { await deleteTrash() } } label: {
-                        Label("\(trashAssets.count)장 삭제", systemImage: "trash")
-                            .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-                            .padding(.horizontal, 22).padding(.vertical, 12)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
-                    }.buttonStyle(.plain)
+            LumenGlyph(size: 64)
+            Text("정리 완료").font(.title2.bold()).foregroundStyle(.white).padding(.top, 14)
+            Text(keepCount > 0 ? "보관한 \(keepCount)장은 Lumen 앨범에 모았어요" : "수고하셨어요!")
+                .font(.subheadline).foregroundStyle(.white.opacity(0.55))
+                .multilineTextAlignment(.center).padding(.top, 6)
+            Spacer()
+            if !trashAssets.isEmpty {
+                Button(role: .destructive) { Task { await deleteTrash() } } label: {
+                    Label("\(trashAssets.count)장 한번에 삭제", systemImage: "trash")
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 16)
+                        .background(Color.red.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                if !doneMsg.isEmpty {
-                    Label(doneMsg, systemImage: "checkmark.circle.fill").font(.subheadline).foregroundStyle(.secondary)
-                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 28)
             }
-            Spacer()
-            Button("닫기") { dismiss() }.tint(.white).padding(.bottom, 8)
+            Button("닫기") { dismiss() }
+                .font(.subheadline).foregroundStyle(.white.opacity(0.5))
+                .padding(.top, 14).padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func stat(_ label: String, _ n: Int, _ icon: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon).font(.system(size: 23, weight: .semibold))
-                .foregroundStyle(Color(red: 0.60, green: 0.64, blue: 0.70)).frame(height: 26)
-            Text("\(n)").font(.system(size: 32, weight: .bold, design: .rounded)).monospacedDigit().foregroundStyle(.white)
-            Text(label).font(.caption).foregroundStyle(.white.opacity(0.55))
-        }
     }
 
     // MARK: - Navigation (swipe) & decisions (buttons)
@@ -435,7 +420,7 @@ struct OrganizeView: View {
 
     private func finish() {
         if trashAssets.isEmpty { dismiss(); return }
-        Task { await deleteTrash() }
+        withAnimation { finished = true }
     }
 
     private func deleteTrash() async {
@@ -443,10 +428,7 @@ struct OrganizeView: View {
         do {
             try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(targets as NSArray) }
             dismiss()
-        } catch {
-            // 시스템 다이얼로그에서 취소 → 요약 화면으로 폴백
-            withAnimation { finished = true }
-        }
+        } catch { /* 사용자가 iOS 다이얼로그 취소 — 요약 화면에 머뭄 */ }
     }
 }
 

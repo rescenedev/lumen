@@ -300,6 +300,9 @@ struct OrganizePickerView: View {
                         .foregroundStyle(.white)
                     Text("앨범을 골라보세요")
                         .font(.subheadline).foregroundStyle(.white.opacity(0.4))
+                    Text("위로 올리면 삭제 · 정리가 끝나면 한번에 삭제")
+                        .font(.caption).foregroundStyle(.white.opacity(0.25))
+                        .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 48).padding(.bottom, 32)
