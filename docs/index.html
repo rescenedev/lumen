@@ -109,8 +109,8 @@
   .feat h3{font-size:27px;font-weight:800;letter-spacing:-.01em}
   .feat p{color:var(--muted);font-size:16.5px;margin-top:14px}
   .feat ul{margin-top:16px;list-style:none;display:flex;flex-direction:column;gap:9px}
-  .feat li{display:flex;gap:10px;color:var(--text);font-size:15px}
-  .feat li::before{content:"✓";color:var(--blue);font-weight:800}
+  .feat li{list-style:none;color:var(--text);font-size:15px;padding-left:22px;position:relative}
+  .feat li::before{content:"✓";color:var(--blue);font-weight:800;position:absolute;left:0;top:0}
   .feat-media{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:18px;
     box-shadow:0 24px 60px rgba(0,0,0,.4);min-height:240px}
   .mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
