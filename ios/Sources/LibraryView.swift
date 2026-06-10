@@ -294,7 +294,7 @@ struct OrganizePickerView: View {
         ScrollView {
             VStack(spacing: 0) {
                 // 헤더
-                VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("정리해볼까요?")
                         .font(.system(size: 28, weight: .heavy, design: .rounded))
                         .foregroundStyle(.white)
@@ -304,7 +304,7 @@ struct OrganizePickerView: View {
                         .font(.caption).foregroundStyle(.white.opacity(0.25))
                         .padding(.top, 4)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 48).padding(.bottom, 32)
 
                 // 리스트
