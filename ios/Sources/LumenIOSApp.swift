@@ -24,19 +24,13 @@ struct RootView: View {
     @State private var organizeScope: OrganizeScope?
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             tabContent
-                // Push scroll content up so nothing hides behind the floating bar.
-                .safeAreaInset(edge: .bottom) {
-                    Color.clear.frame(height: lib.authorized ? 76 : 0)
-                }
-
+            if showSplash { SplashView().transition(.opacity) }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if lib.authorized {
                 FloatingTabBar(selected: $selectedTab)
-            }
-
-            if showSplash {
-                SplashView().transition(.opacity)
             }
         }
         .task {
@@ -127,10 +121,11 @@ struct FloatingTabBar: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 64)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(0.09)))
+        .background(Capsule().fill(.ultraThinMaterial).opacity(0.55))
+        .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
         .padding(.horizontal, 28)
-        .padding(.bottom, 0)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
         .shadow(color: .black.opacity(0.45), radius: 22, y: 8)
     }
 
