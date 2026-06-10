@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lumen — 대용량 사진 라이브러리를 위한 macOS 뷰어</title>
-<meta name="description" content="로컬·NAS·Apple Photos를 한 앱에서. 6만 장 넘는 라이브러리도 휙휙 넘기는 네이티브 macOS 사진 뷰어 & 매니저. 크롭·회전·합치기·워터마크까지 전부 비파괴.">
-<meta property="og:title" content="Lumen — 대용량 사진 라이브러리를 위한 macOS 뷰어">
-<meta property="og:description" content="로컬·NAS·Apple Photos를 한 앱에서. 6만 장+ 라이브러리도 가볍게.">
+<title>Lumen — macOS Photo Viewer for Large Libraries</title>
+<meta name="description" content="Local, NAS, and Apple Photos in one app. A native macOS photo viewer & manager that flies through 60,000+ photo libraries. Crop, rotate, merge, watermark — all non-destructive.">
+<meta property="og:title" content="Lumen — macOS Photo Viewer for Large Libraries">
+<meta property="og:description" content="Local, NAS, and Apple Photos in one app. Handles 60,000+ libraries with ease.">
 <meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
 <meta property="og:type" content="website">
-<link rel="icon" type="image/png" href="favicon.png">
+<link rel="icon" type="image/png" href="../favicon.png">
 <style>
   :root{
     --blue:#5b86ff; --purple:#9a5cff; --pink:#ff6fae;
@@ -22,7 +22,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Segoe UI",sans-serif;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
     background:var(--bg); color:var(--text); line-height:1.65; -webkit-font-smoothing:antialiased;
     overflow-x:hidden;
   }
@@ -167,160 +167,159 @@
 
 <nav>
   <div class="wrap nav-in">
-    <a class="brand" href="#top"><img src="icon.png" alt="">Lumen</a>
+    <a class="brand" href="#top"><img src="../icon.png" alt="">Lumen</a>
     <div class="nav-links">
-      <a href="#why">왜 Lumen</a>
-      <a href="#features">기능</a>
-      <a href="#perf">성능</a>
-      <a href="releases.html">릴리즈 노트</a>
-      <a href="en/index.html" class="lang-switch">English</a>
-      <a class="nav-cta" href="#download">다운로드</a>
+      <a href="#why">Why Lumen</a>
+      <a href="#features">Features</a>
+      <a href="#perf">Performance</a>
+      <a href="../releases.html">Release Notes</a>
+      <a href="../index.html" class="lang-switch">한국어</a>
+      <a class="nav-cta" href="#download">Download</a>
     </div>
   </div>
 </nav>
 
 <header class="hero" id="top">
-  <span class="pill">macOS 14+ · 네이티브 · 비파괴 뷰어</span>
-  <h1 class="grad-text">사진 수만 장,<br>한 곳에서 가볍게.</h1>
-  <p class="sub">로컬 · NAS · Apple Photos를 하나의 빠른 네이티브 앱에서. 6만 장이 넘어도 휙휙 넘어가는 macOS 사진 뷰어 &amp; 매니저.</p>
+  <span class="pill">macOS 14+ · Native · Non-destructive</span>
+  <h1 class="grad-text">Tens of thousands<br>of photos. One fast app.</h1>
+  <p class="sub">Local · NAS · Apple Photos in one native app. Scrolls through 60,000+ libraries without breaking a sweat.</p>
   <div class="cta">
-    <a class="btn btn-primary" href="#download">⬇️ 무료 다운로드</a>
-    <a class="btn btn-ghost" href="https://github.com/rescenedev/lumen">GitHub에서 보기</a>
+    <a class="btn btn-primary" href="#download">⬇️ Free Download</a>
+    <a class="btn btn-ghost" href="https://github.com/rescenedev/lumen">View on GitHub</a>
   </div>
-  <p class="micro">Apple Silicon · Intel · 오픈소스(MIT)</p>
+  <p class="micro">Apple Silicon · Intel · Open Source (MIT)</p>
 
   <div class="shot reveal">
-    <img class="screen" src="screenshots/grid.png" alt="Lumen 그리드 — 대용량 사진 라이브러리">
+    <img class="screen" src="../screenshots/grid.png" alt="Lumen grid — large photo library">
   </div>
 </header>
 
 <section id="why">
   <div class="wrap">
-    <p class="eyebrow reveal">왜 Lumen인가</p>
-    <h2 class="stitle reveal">사진앱은 NAS를 못 보고,<br>대부분의 뷰어는 6만 장에서 버벅댑니다.</h2>
+    <p class="eyebrow reveal">Why Lumen</p>
+    <h2 class="stitle reveal">Photos.app can't see your NAS.<br>Most viewers choke at 60,000 photos.</h2>
     <div class="why">
-      <div class="card reveal"><div class="badge">⚡</div><h3>대용량에 진심</h3><p>6만 장 넘는 NAS 라이브러리로 실사용 테스트. 셀 재사용 그리드, 2단 썸네일 캐시, 백그라운드 워밍으로 어느 폴더든 즉시 열립니다.</p></div>
-      <div class="card reveal"><div class="badge">🗂️</div><h3>모든 소스를 한 곳에</h3><p>로컬 폴더, <b>NAS</b>, 그리고 <b>Apple Photos(iCloud)</b>까지 한 창에서. 사진앱이 못 보는 NAS와, 뷰어가 못 보는 iCloud를 동시에.</p></div>
-      <div class="card reveal"><div class="badge">🛡️</div><h3>비파괴가 기본</h3><p>크롭·리사이즈·회전·합치기·워터마크까지 <b>전부 새 파일로 저장</b>해 원본을 보존합니다(덮어쓰기는 확인 후 선택). 즐겨찾기·태그·별점은 원본과 분리 저장.</p></div>
+      <div class="card reveal"><div class="badge">⚡</div><h3>Built for large libraries</h3><p>Tested daily with a 67K-photo NAS library. Cell-reuse grid, two-tier thumbnail cache, and background warming mean any folder opens instantly.</p></div>
+      <div class="card reveal"><div class="badge">🗂️</div><h3>All sources, one place</h3><p>Local folders, <b>NAS</b>, and <b>Apple Photos (iCloud)</b> side-by-side in a single window. The gap Photos.app and generic viewers leave — filled.</p></div>
+      <div class="card reveal"><div class="badge">🛡️</div><h3>Non-destructive by default</h3><p>Crop · resize · rotate · merge · watermark — <b>all saved as new files</b>, originals untouched (overwrite is opt-in). Favorites, tags, and ratings are stored separately from the source files.</p></div>
     </div>
   </div>
 </section>
 
 <section id="features">
   <div class="wrap">
-    <p class="eyebrow reveal">기능</p>
-    <h2 class="stitle reveal">보고, 찾고, 정리하고, 다듬는 데 필요한 전부</h2>
+    <p class="eyebrow reveal">Features</p>
+    <h2 class="stitle reveal">Everything you need to view, find,<br>organize, and refine</h2>
 
     <div class="feat">
       <div class="feat-text reveal">
-        <h3>로컬 · NAS · Apple Photos를 한 곳에</h3>
-        <p>흩어진 사진을 하나의 사이드바에서. iCloud 전용 사진은 필요할 때만 내려받고, GPS 사진은 지도에 클러스터로 묶어 보여줍니다.</p>
+        <h3>Local · NAS · Apple Photos in one sidebar</h3>
+        <p>All your scattered photos in one place. iCloud-only photos download on demand; GPS photos cluster on a map by zoom level.</p>
         <ul>
-          <li>로컬 폴더 · <b>NAS</b> · <b>Apple Photos(iCloud)</b> · iCloud Drive</li>
-          <li>지도 핀 <b>클러스터링</b> — 수만 장도 줌별로 묶고 펼침</li>
-          <li>실시간 폴더 감시(FSEvents) · 증분 캐시 · 온디맨드 다운로드</li>
+          <li>Local folders · <b>NAS</b> · <b>Apple Photos (iCloud)</b> · iCloud Drive</li>
+          <li>Map pin <b>clustering</b> — zoom in/out to expand or collapse thousands of pins</li>
+          <li>Live folder watching (FSEvents) · incremental cache · on-demand download</li>
         </ul>
       </div>
       <div class="feat-media reveal" style="padding:0;background:none;border:none;box-shadow:none">
-        <img class="screen" src="screenshots/map.png" alt="Lumen 지도 — 클러스터링 + Apple Photos 연동">
+        <img class="screen" src="../screenshots/map.png" alt="Lumen map — clustering + Apple Photos integration">
       </div>
     </div>
 
     <div class="feat">
       <div class="feat-text reveal">
-        <h3>몰입형 뷰어 · <span style="background:linear-gradient(120deg,#8fb0ff,#c69bff);-webkit-background-clip:text;background-clip:text;color:transparent">Space로 퀵 리뷰</span></h3>
-        <p>풀스크린으로 몰입. 그리고 사진가를 위한 가장 빠른 컬링 동작:</p>
+        <h3>Immersive viewer · <span style="background:linear-gradient(120deg,#8fb0ff,#c69bff);-webkit-background-clip:text;background-clip:text;color:transparent">Space-key quick cull</span></h3>
+        <p>Go full-screen and stay there. The fastest culling flow for photographers:</p>
         <ul>
-          <li><b>Space</b> = 즐겨찾기 + 바로 다음 사진 — 손 안 떼고 수천 장을 순식간에 리뷰</li>
-          <li>키보드 컬링: <b>별점 1–5</b> · 즐겨찾기(F) · <b>거부(X)</b> — 그리드·뷰어 어디서나. 거부 숨김 필터로 골라낸 컷만</li>
-          <li>좌우 썸네일 미리보기 · EXIF 오버레이 · 2장 비교 · 슬라이드쇼 · 줌/팬</li>
+          <li><b>Space</b> = favorite + advance — cull thousands of shots without lifting a hand</li>
+          <li>Keyboard culling: <b>star ratings 1–5</b> · favorite (F) · <b>reject (X)</b> — works in grid and viewer. Hide rejected photos to see only the keepers.</li>
+          <li>Adjacent thumbnail strip · EXIF overlay · two-up compare · slideshow · zoom &amp; pan</li>
         </ul>
       </div>
       <div class="feat-media reveal" style="padding:0;background:none;border:none;box-shadow:none">
-        <img class="screen" src="screenshots/viewer.png" alt="Lumen 뷰어 — Space로 빠른 컬링">
+        <img class="screen" src="../screenshots/viewer.png" alt="Lumen viewer — Space-key quick cull">
       </div>
     </div>
 
     <div class="why" style="margin-top:66px">
-      <div class="card reveal"><div class="badge">✂️</div><h3>가벼운 비파괴 편집</h3><p>크롭(비율 고정·자유) · 회전/뒤집기 · <b>수평 맞추기</b> · 리사이즈/정사각 캔버스(여백 채움). 큰 편집창에서 <b>줌·정밀 크롭</b>, 결과 크기 미리보기까지. 전부 새 파일로.</p></div>
-      <div class="card reveal"><div class="badge">🧩</div><h3>합치기 &amp; 워터마크</h3><p>여러 장을 <b>가로/세로/그리드</b>로 한 장에(드래그로 순서·행 지정). 텍스트·로고 <b>워터마크</b>(위치·색·투명도) — 편집·합치기·<b>배치</b> 어디서나.</p></div>
-      <div class="card reveal"><div class="badge">🚀</div><h3>배치 처리</h3><p>여러 장을 한 번에 같은 크기·캔버스·워터마크로 리사이즈해 폴더로 내보내기. 원본은 그대로.</p></div>
-      <div class="card reveal"><div class="badge">🏷️</div><h3>비파괴 정리</h3><p>앨범 · 태그 · 별점 · 색상 라벨 · 거부 플래그 · 스마트 모음(즐겨찾기·최근·오늘·중복). 원본은 절대 변경하지 않습니다.</p></div>
-      <div class="card reveal"><div class="badge">🔍</div><h3>검색 &amp; 필터</h3><p>파일명 · 태그 · 카메라 모델 검색. 별점 · 라벨 · 위치 · 카메라(예: SONY) · 거부 숨김으로 필터.</p></div>
-      <div class="card reveal"><div class="badge">📤</div><h3>공유 · 내보내기</h3><p>시스템 공유, 원본/리사이즈/zip 내보내기, 일괄 이름변경, 배경화면 설정.</p></div>
+      <div class="card reveal"><div class="badge">✂️</div><h3>Lightweight non-destructive editing</h3><p>Crop (free or locked ratio) · rotate / flip · <b>straighten</b> · resize / square canvas (letterbox fill). Large edit canvas with <b>zoom and precision crop</b>, output-size preview. Always a new file.</p></div>
+      <div class="card reveal"><div class="badge">🧩</div><h3>Merge &amp; watermark</h3><p>Combine multiple photos <b>horizontally, vertically, or in a grid</b> (drag to reorder, set rows). Text or logo <b>watermarks</b> (position · color · opacity) — in the editor, merge tool, and <b>batch export</b>.</p></div>
+      <div class="card reveal"><div class="badge">🚀</div><h3>Batch processing</h3><p>Resize, apply canvas rules, and stamp watermarks across many photos at once and export to a folder. Originals stay untouched.</p></div>
+      <div class="card reveal"><div class="badge">🏷️</div><h3>Non-destructive organization</h3><p>Albums · tags · star ratings · color labels · reject flag · smart collections (favorites, recent, today, duplicates). Originals never modified.</p></div>
+      <div class="card reveal"><div class="badge">🔍</div><h3>Search &amp; filter</h3><p>Search by filename, tag, or camera model. Filter by star rating, label, location, camera (e.g. SONY), and hide-rejected toggle.</p></div>
+      <div class="card reveal"><div class="badge">📤</div><h3>Share &amp; export</h3><p>System share sheet, export original / resized / zip, bulk rename, set as desktop wallpaper.</p></div>
     </div>
   </div>
 </section>
 
 <section class="band" id="perf">
   <div class="wrap">
-    <p class="eyebrow reveal">성능</p>
-    <h2 class="stitle reveal">대용량 라이브러리를 위해 설계</h2>
-    <p class="ssub reveal">NAS에 흩어진 수만 장도 휙휙. 한 번 캐싱하면 어느 폴더든 즉시.</p>
+    <p class="eyebrow reveal">Performance</p>
+    <h2 class="stitle reveal">Designed for large libraries</h2>
+    <p class="ssub reveal">Tens of thousands of photos on a NAS, scrolling instantly. One cache warm-up — then any folder opens right away.</p>
     <div class="stats">
-      <div class="stat reveal"><div class="num">67K+</div><div class="lbl">장 실사용 테스트</div></div>
-      <div class="stat reveal"><div class="num">2-tier</div><div class="lbl">메모리+디스크 캐시 (재실행 유지)</div></div>
-      <div class="stat reveal"><div class="num">AppKit</div><div class="lbl">셀 재사용 그리드 (60fps)</div></div>
-      <div class="stat reveal"><div class="num">즉시</div><div class="lbl">증분 스캔으로 빠른 재실행</div></div>
+      <div class="stat reveal"><div class="num">67K+</div><div class="lbl">photos in real-world testing</div></div>
+      <div class="stat reveal"><div class="num">2-tier</div><div class="lbl">memory + disk cache (survives relaunch)</div></div>
+      <div class="stat reveal"><div class="num">AppKit</div><div class="lbl">cell-reuse grid (60 fps)</div></div>
+      <div class="stat reveal"><div class="num">Fast</div><div class="lbl">incremental scan on relaunch</div></div>
     </div>
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
-      메모이즈된 목록 · 폴더 인덱스 · 디바운스 내비게이션 · 백그라운드 썸네일 워밍 · 지연 EXIF 인덱싱 · 점진적 이미지 로딩
+      Memoized lists · folder index · debounced navigation · background thumbnail warming · lazy EXIF indexing · progressive image loading
     </p>
   </div>
 </section>
 
 <section id="download">
   <div class="wrap" style="text-align:center">
-    <p class="eyebrow reveal">다운로드</p>
-    <h2 class="stitle reveal">지금 바로 시작</h2>
-    <p class="ssub reveal">Homebrew로 한 줄. macOS 14(Sonoma) 이상.</p>
+    <p class="eyebrow reveal">Download</p>
+    <h2 class="stitle reveal">Get started in seconds</h2>
+    <p class="ssub reveal">One Homebrew command. Requires macOS 14 Sonoma or later.</p>
     <div class="install reveal">
-      <button class="copy" onclick="copyInstall(event)">복사</button>
+      <button class="copy" onclick="copyInstall(event)">Copy</button>
       <code>brew tap rescenedev/tap
 brew trust --cask rescenedev/tap/lumen-photos
 brew install --cask lumen-photos</code>
     </div>
     <div class="note reveal">
-      현재는 노타라이즈되지 않은 빌드라, 첫 실행 시 Gatekeeper가 막으면
-      앱을 <b>우클릭 → 열기</b> 하거나, 아래 명령으로 격리 속성을 제거하세요:
+      This build is not yet notarized. If Gatekeeper blocks the app on first launch,
+      <b>right-click → Open</b> the app, or run the command below to remove the quarantine flag:
     </div>
     <div class="install compact reveal">
-      <button class="copy" onclick="copyXattr(event)">복사</button>
+      <button class="copy" onclick="copyXattr(event)">Copy</button>
       <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code>
     </div>
     <div class="note reveal">
-      소스로 빌드: <code>git clone</code> 후 <code>./Scripts/make_app.sh</code> — Xcode 불필요, Command Line Tools만.
+      Build from source: <code>git clone</code> the repo, then run <code>./Scripts/make_app.sh</code> — no Xcode needed, just Command Line Tools.
     </div>
   </div>
 </section>
 
 <section class="band" id="sponsor" style="padding:64px 0">
   <div class="wrap" style="text-align:center">
-    <p class="eyebrow reveal">후원</p>
-    <h2 class="stitle reveal">Lumen이 마음에 드시나요?</h2>
-    <p class="ssub reveal">Lumen은 무료 오픈소스로 계속 만들어갑니다.<br>
-      커피 한 잔의 후원이 다음 업데이트의 큰 힘이 돼요.</p>
+    <p class="eyebrow reveal">Sponsor</p>
+    <h2 class="stitle reveal">Enjoying Lumen?</h2>
+    <p class="ssub reveal">Lumen is free and open source, and will stay that way.<br>
+      A small sponsorship goes a long way toward the next update.</p>
     <div class="cta reveal" style="margin-top:26px;display:flex;justify-content:center">
-      <a class="btn btn-primary" href="https://fairy.hada.io/@rescene">후원하기</a>
+      <a class="btn btn-primary" href="https://fairy.hada.io/@rescene">Sponsor</a>
     </div>
   </div>
 </section>
 
 <footer>
-  <p><b>Lumen</b> · 대용량 사진 라이브러리를 위한 네이티브 macOS 뷰어 &amp; 매니저</p>
+  <p><b>Lumen</b> · Native macOS photo viewer &amp; manager for large libraries</p>
   <p style="margin-top:8px">
     <a href="https://github.com/rescenedev/lumen">GitHub</a> ·
-    <a href="releases.html">릴리즈 노트</a> ·
-    <a href="opensource.html">오픈소스</a> ·
-    <a href="https://fairy.hada.io/@rescene">후원하기</a> ·
-    <a href="https://github.com/rescenedev/lumen/blob/main/CONTRIBUTING.md">기여</a> ·
+    <a href="../releases.html">Release Notes</a> ·
+    <a href="../opensource.html">Open Source</a> ·
+    <a href="https://fairy.hada.io/@rescene">Sponsor</a> ·
+    <a href="https://github.com/rescenedev/lumen/blob/main/CONTRIBUTING.md">Contributing</a> ·
     MIT License ·
-    <a href="en/index.html">English</a>
+    <a href="../index.html">한국어</a>
   </p>
 </footer>
 
 <script>
-  // Stylish placeholder tiles (gradient swatches — no personal photos)
   const hues = [[91,134,255],[154,92,255],[255,111,174],[80,200,180],[255,176,90],[120,160,255],[210,120,255],[90,180,255]];
   function tile(){
     const a=hues[Math.floor(Math.random()*hues.length)], b=hues[Math.floor(Math.random()*hues.length)];
@@ -332,11 +331,10 @@ brew install --cask lumen-photos</code>
   function fill(id,n){const el=document.getElementById(id); if(!el)return; for(let i=0;i<n;i++)el.appendChild(tile());}
   fill('board',20); fill('mini',8); fill('mini2',8);
 
-  // Scroll reveal
   const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.12});
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 
-  function flashCopied(btn){const t=btn.textContent;btn.textContent='복사됨 ✓';setTimeout(()=>btn.textContent=t,1500);}
+  function flashCopied(btn){const t=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=t,1500);}
   function copyInstall(e){
     navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew trust --cask rescenedev/tap/lumen-photos\nbrew install --cask lumen-photos");
     flashCopied(e.currentTarget);
