@@ -260,34 +260,26 @@ struct OrganizePickerView: View {
 
     var body: some View {
         ZStack {
-            ZStack {
-                Color.lumenBG.ignoresSafeArea()
-                if !library.loaded {
-                    ProgressView().tint(.white.opacity(0.4))
-                } else if library.scopes.isEmpty {
-                    VStack(spacing: 14) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 48, weight: .thin))
-                            .foregroundStyle(.white.opacity(0.22))
-                        Text("정리할 사진이 없어요")
-                            .font(.subheadline).foregroundStyle(.white.opacity(0.5))
-                    }
-                } else {
-                    pickerList
+            Color.lumenBG.ignoresSafeArea()
+            if !library.loaded {
+                ProgressView().tint(.white.opacity(0.4))
+            } else if library.scopes.isEmpty {
+                VStack(spacing: 14) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 48, weight: .thin))
+                        .foregroundStyle(.white.opacity(0.22))
+                    Text("정리할 사진이 없어요")
+                        .font(.subheadline).foregroundStyle(.white.opacity(0.5))
                 }
-            }
-            .offset(x: scope != nil ? -UIScreen.main.bounds.width * 0.22 : 0)
-            .overlay(Color.black.opacity(scope != nil ? 0.25 : 0).ignoresSafeArea())
-
-            if let s = scope {
-                AlbumGalleryView(scope: s, library: library,
-                                 onClose: { withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = nil } })
-                    .transition(.move(edge: .trailing))
-                    .zIndex(1)
+            } else {
+                pickerList
             }
         }
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
+        .fullScreenCover(item: $scope) { s in
+            OrganizeView(scope: s, library: library)
+        }
     }
 
     private var pickerList: some View {
