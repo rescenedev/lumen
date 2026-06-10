@@ -93,7 +93,7 @@ struct OrganizeView: View {
             // re-creation — the handoff is seamless (no flash, no pop).
             ForEach(visibleIndices, id: \.self) { i in
                 OrganizeCard(asset: source.asset(i), library: library)
-                    .overlay(alignment: .top) { if i == index { favoriteHint } }
+                    .overlay(alignment: .top) { if i == index { trashHint } }
                     .scaleEffect(cardScale(i))
                     .offset(x: CGFloat(i - index) * pageW + offset.width + (i == index ? pan.width : 0),
                             y: i == index ? offset.height + pan.height : 0)
@@ -194,7 +194,7 @@ struct OrganizeView: View {
                 }
                 let dx = v.translation.width, dy = v.translation.height
                 if abs(dy) > abs(dx) {
-                    if dy < -threshold { favorite() }
+                    if dy < -threshold { trashFromSwipe() }
                     else if dy > 110 { dismiss() }                 // pull down → back, like Photos
                     else { withAnimation(.spring(response: 0.3)) { offset = .zero } }
                 } else if dx < -threshold { swipeTo(next: true) }
@@ -212,11 +212,11 @@ struct OrganizeView: View {
         panBase = pan
     }
 
-    /// A star that grows as you drag up — hint that releasing favorites the photo.
-    @ViewBuilder private var favoriteHint: some View {
+    /// Trash icon that grows as you drag up — hint that releasing deletes the photo.
+    @ViewBuilder private var trashHint: some View {
         let p = min(max(-offset.height / threshold, 0), 1)
         if p > 0.02 {
-            Label(currentIsFav ? "즐겨찾기 해제" : "즐겨찾기", systemImage: currentIsFav ? "star.slash.fill" : "star.fill")
+            Label("삭제", systemImage: "trash.fill")
                 .font(.headline.bold()).foregroundStyle(.white)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
@@ -283,13 +283,13 @@ struct OrganizeView: View {
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
 
-    // MARK: - Bottom controls (✕ and ♥ — decide only this photo)
+    // MARK: - Bottom controls (♥ Lumen left, ★ favorite right)
 
     private var bottomControls: some View {
         HStack {
-            control("xmark") { decide(.trash) }
-            Spacer()
             control("heart.fill") { decide(.keep) }
+            Spacer()
+            control("star.fill") { favorite() }
         }
         .padding(.horizontal, 52)
         .padding(.bottom, 18)
@@ -391,8 +391,16 @@ struct OrganizeView: View {
         flyAndAdvance(CGSize(width: -pageW, height: 0))   // exactly one page → seamless handoff
     }
 
-    /// Up-swipe: toggle the photo's Apple Favorite (non-destructive, lives in the
-    /// system 즐겨찾기 album), then move on. Independent of keep/trash.
+    /// Up-swipe: mark the photo for deletion and fly it up.
+    private func trashFromSwipe() {
+        guard index < count else { return }
+        decisions[index] = .trash
+        tick += 1
+        showFlash(.trash)
+        flyAndAdvance(CGSize(width: 0, height: -1200))
+    }
+
+    /// Right button: toggle Apple Favorite.
     private func favorite() {
         guard index < count else { return }
         let a = source.asset(index)
