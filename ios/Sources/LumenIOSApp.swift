@@ -26,6 +26,8 @@ struct RootView: View {
     var body: some View {
         ZStack {
             tabContent
+                .id(selectedTab)
+                .transition(.opacity.animation(.easeOut(duration: 0.10)))
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     Color.clear.frame(height: lib.authorized ? 72 : 0)
                 }
@@ -136,7 +138,7 @@ struct FloatingTabBar: View {
 
     private func tabBtn(_ tab: LumenTab, _ icon: String) -> some View {
         Button {
-            withAnimation(.spring(response: 0.26, dampingFraction: 0.70)) { selected = tab }
+            withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) { selected = tab }
         } label: {
             ZStack {
                 if selected == tab {
