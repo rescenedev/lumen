@@ -433,16 +433,20 @@ struct OrganizeView: View {
         Task { try? await Task.sleep(for: .milliseconds(500)); if flash == f { withAnimation { flash = nil } } }
     }
 
-    private func finish() { withAnimation { finished = true } }
+    private func finish() {
+        if trashAssets.isEmpty { dismiss(); return }
+        Task { await deleteTrash() }
+    }
 
     private func deleteTrash() async {
         let targets = trashAssets
         do {
             try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(targets as NSArray) }
-            doneMsg = "삭제 완료"
-            try? await Task.sleep(for: .milliseconds(1000))
             dismiss()
-        } catch { doneMsg = "삭제 취소됨" }
+        } catch {
+            // 시스템 다이얼로그에서 취소 → 요약 화면으로 폴백
+            withAnimation { finished = true }
+        }
     }
 }
 
