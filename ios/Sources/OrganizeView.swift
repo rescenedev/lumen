@@ -463,7 +463,7 @@ private struct TrashMosaicBackground: View {
                         .offset(x: col * size, y: row * size + (geo.size.height - CGFloat(rows) * size) / 2)
                 }
             }
-            .blur(radius: 24)
+            .blur(radius: 8)
             .ignoresSafeArea()
         }
         .ignoresSafeArea()
