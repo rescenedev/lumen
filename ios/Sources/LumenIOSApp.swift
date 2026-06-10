@@ -130,7 +130,7 @@ struct FloatingTabBar: View {
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(.white.opacity(0.09)))
         .padding(.horizontal, 28)
-        .padding(.bottom, 1)
+        .padding(.bottom, 0)
         .shadow(color: .black.opacity(0.45), radius: 22, y: 8)
     }
 
