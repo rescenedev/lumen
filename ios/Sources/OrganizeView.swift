@@ -27,12 +27,13 @@ struct OrganizeView: View {
     @State private var organizing = false                 // viewer first, then organize
     @State private var index: Int
 
-    init(scope: OrganizeScope, library: PhotoLibrary, startIndex: Int = 0) {
+    init(scope: OrganizeScope, library: PhotoLibrary, startIndex: Int = 0, autoStart: Bool = false) {
         self.scope = scope
         self.library = library
         let s = library.gridSource(for: scope)
         _source = State(initialValue: s)
         _index = State(initialValue: min(max(startIndex, 0), max(s.count - 1, 0)))
+        _organizing = State(initialValue: autoStart)
     }
     @State private var offset: CGSize = .zero
     @State private var decisions: [Int: Decision] = [:]   // index → keep/trash
@@ -441,29 +442,41 @@ struct OrganizeView: View {
 }
 
 /// Blurred mosaic of trash-marked photos shown behind the summary screen.
+/// Grid columns grow with photo count: 1→1, 2→2, 3-4→2, 5-9→3, 10-16→4, 17+→5
 private struct TrashMosaicBackground: View {
     let assets: [PHAsset]
     let library: PhotoLibrary
 
-    // Show up to 9 photos in a 3-column grid
-    private var displayed: [PHAsset] { Array(assets.prefix(9)) }
+    private var cols: Int {
+        let n = assets.count
+        switch n {
+        case 0: return 1
+        case 1: return 1
+        case 2...4: return 2
+        case 5...9: return 3
+        case 10...16: return 4
+        default: return 5
+        }
+    }
+
+    private var displayed: [PHAsset] { Array(assets.prefix(cols * cols)) }
 
     var body: some View {
         GeometryReader { geo in
-            let cols = min(displayed.count, 3)
-            let size = cols > 0 ? geo.size.width / CGFloat(cols) : geo.size.width
-            let rows = Int(ceil(Double(displayed.count) / Double(max(cols, 1))))
+            let c = cols
+            let size = geo.size.width / CGFloat(c)
+            let rows = Int(ceil(Double(displayed.count) / Double(c)))
             ZStack(alignment: .topLeading) {
                 Color.lumenBG
                 ForEach(displayed.indices, id: \.self) { i in
-                    let col = CGFloat(i % cols)
-                    let row = CGFloat(i / cols)
+                    let col = CGFloat(i % c)
+                    let row = CGFloat(i / c)
                     MosaicCell(asset: displayed[i], library: library, size: size)
                         .frame(width: size, height: size)
                         .offset(x: col * size, y: row * size + (geo.size.height - CGFloat(rows) * size) / 2)
                 }
             }
-            .blur(radius: 3)
+            .blur(radius: 1.5)
             .ignoresSafeArea()
         }
         .ignoresSafeArea()

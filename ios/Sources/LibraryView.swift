@@ -278,7 +278,7 @@ struct OrganizePickerView: View {
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
         .fullScreenCover(item: $scope) { s in
-            OrganizeView(scope: s, library: library)
+            OrganizeView(scope: s, library: library, autoStart: true)
         }
     }
 
