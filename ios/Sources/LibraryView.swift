@@ -313,7 +313,7 @@ struct OrganizePickerView: View {
                                 library.prewarmScope(s)
                             }
                         if i < library.scopes.count - 1 {
-                            Divider().overlay(.white.opacity(0.07)).padding(.leading, 82)
+                            Divider().overlay(.white.opacity(0.07))
                         }
                     }
                 }
