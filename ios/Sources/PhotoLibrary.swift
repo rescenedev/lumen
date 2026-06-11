@@ -1,6 +1,7 @@
 import Photos
 import UIKit
 import SwiftUI
+import AVFoundation
 
 /// Lazy access to a scope's photos. Backed by a PHFetchResult (no array built up
 /// front, so opening 전체 사진 is instant), or by a pre-ordered array for 즐겨찾기.
@@ -59,7 +60,11 @@ final class LazyArray {
 enum AlbumSort: String, CaseIterable {
     case recent, name, count
     var label: String {
-        switch self { case .recent: "기본순"; case .name: "이름순"; case .count: "사진 많은순" }
+        switch self {
+        case .recent: String(localized: "기본순")
+        case .name: String(localized: "이름순")
+        case .count: String(localized: "사진 많은순")
+        }
     }
 }
 
@@ -331,15 +336,18 @@ struct OrganizeScope: Identifiable, Hashable {
         var hasAnyPhotos: Bool
     }
 
-    /// Images only, newest first, optionally excluding already-kept (Lumen) photos
-    /// via a predicate so PhotoKit computes count/firstObject without us enumerating.
+    /// Photos AND videos, newest first, optionally excluding already-kept (Lumen)
+    /// items via a predicate so PhotoKit computes count/firstObject without us
+    /// enumerating.
     nonisolated private static func imageOptions(excluding kept: Set<String> = []) -> PHFetchOptions {
         let o = PHFetchOptions()
+        let media = "(mediaType == %d OR mediaType == %d)"
         if kept.isEmpty {
-            o.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+            o.predicate = NSPredicate(format: media,
+                                      PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
         } else {
-            o.predicate = NSPredicate(format: "mediaType == %d AND NOT (localIdentifier IN %@)",
-                                      PHAssetMediaType.image.rawValue, Array(kept))
+            o.predicate = NSPredicate(format: media + " AND NOT (localIdentifier IN %@)",
+                                      PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue, Array(kept))
         }
         o.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         return o
@@ -364,7 +372,7 @@ struct OrganizeScope: Identifiable, Hashable {
         let all = PHAsset.fetchAssets(with: opts)
         let hasAny = all.count > 0
         if all.count > 0 {
-            out.append(.init(id: "all", title: "전체 사진", symbol: "photo.on.rectangle",
+            out.append(.init(id: "all", title: String(localized: "전체 사진"), symbol: "photo.on.rectangle",
                              count: all.count, collection: nil, cover: all.firstObject))
         }
         // Lumen (the keep destination) right next to 전체 — shows its own members.
@@ -390,9 +398,10 @@ struct OrganizeScope: Identifiable, Hashable {
             out.append(.init(id: c.localIdentifier, title: title, symbol: symbol,
                              count: r.count, collection: c, cover: cover))
         }
-        smart(.smartAlbumFavorites, "즐겨찾기", "heart", order: favoriteOrder)
-        smart(.smartAlbumRecentlyAdded, "최근 추가", "clock")
-        smart(.smartAlbumScreenshots, "스크린샷", "camera.viewfinder")
+        smart(.smartAlbumFavorites, String(localized: "즐겨찾기"), "heart", order: favoriteOrder)
+        smart(.smartAlbumRecentlyAdded, String(localized: "최근 추가"), "clock")
+        smart(.smartAlbumScreenshots, String(localized: "스크린샷"), "camera.viewfinder")
+        smart(.smartAlbumVideos, String(localized: "동영상"), "video")
 
         // User albums (Lumen already shown above), in the chosen order.
         var entries = albums.filter { $0.localizedTitle != "Lumen" }
@@ -404,7 +413,7 @@ struct OrganizeScope: Identifiable, Hashable {
         case .count: entries.sort { $0.r.count > $1.r.count }
         }
         for e in entries {
-            out.append(.init(id: e.c.localIdentifier, title: e.c.localizedTitle ?? "앨범", symbol: "rectangle.stack",
+            out.append(.init(id: e.c.localIdentifier, title: e.c.localizedTitle ?? String(localized: "앨범"), symbol: "rectangle.stack",
                              count: e.r.count, collection: e.c, cover: e.r.firstObject))
         }
         return Snapshot(albums: albums, keptIDs: keptIDs, scopes: out, hasAnyPhotos: hasAny)
@@ -503,6 +512,28 @@ struct OrganizeScope: Identifiable, Hashable {
         if lumenCollection == nil { lumenCollection = await lumenAlbum() }
         guard let c = lumenCollection else { return }
         await addAssets([asset], to: c)
+    }
+
+    /// AVPlayerItem for a video asset, downloading from iCloud if needed.
+    func playerItem(for asset: PHAsset) async -> AVPlayerItem? {
+        await withCheckedContinuation { c in
+            let o = PHVideoRequestOptions()
+            o.isNetworkAccessAllowed = true
+            o.deliveryMode = .automatic
+            manager.requestPlayerItem(forVideo: asset, options: o) { item, _ in
+                c.resume(returning: item)
+            }
+        }
+    }
+
+    /// Undo helper: pull a photo back out of the Lumen album. Never creates the
+    /// album — if it doesn't exist, there's nothing to remove from.
+    func removeFromLumen(_ asset: PHAsset) async {
+        if lumenCollection == nil { lumenCollection = albums.first(where: { $0.localizedTitle == "Lumen" }) }
+        guard let c = lumenCollection else { return }
+        try? await PHPhotoLibrary.shared().performChanges {
+            PHAssetCollectionChangeRequest(for: c)?.removeAssets([asset] as NSArray)
+        }
     }
 
     /// Square thumbnail for the grid. `.highQualityFormat` → exactly one callback

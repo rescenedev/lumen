@@ -1,16 +1,26 @@
 import SwiftUI
 import Photos
+import AVFoundation
 
-private enum Decision { case keep, trash }
+private typealias Decision = OrganizeSession.Decision
 
 /// What the brief centered confirmation shows after an action.
 private enum Flash {
-    case keep, trash, favorite, unfavorite
+    case keep, trash, favorite, unfavorite, undo
     var text: String {
-        switch self { case .keep: "보관"; case .trash: "삭제"; case .favorite: "즐겨찾기"; case .unfavorite: "즐겨찾기 해제" }
+        switch self {
+        case .keep: String(localized: "보관")
+        case .trash: String(localized: "삭제")
+        case .favorite: String(localized: "즐겨찾기")
+        case .unfavorite: String(localized: "즐겨찾기 해제")
+        case .undo: String(localized: "되돌림")
+        }
     }
     var icon: String {
-        switch self { case .keep: "rectangle.stack.fill"; case .trash: "trash.fill"; case .favorite: "star.fill"; case .unfavorite: "star.slash.fill" }
+        switch self {
+        case .keep: "rectangle.stack.fill"; case .trash: "trash.fill"; case .favorite: "star.fill"
+        case .unfavorite: "star.slash.fill"; case .undo: "arrow.uturn.backward"
+        }
     }
 }
 
@@ -35,7 +45,7 @@ struct OrganizeView: View {
         _index = State(initialValue: min(max(startIndex, 0), max(s.count - 1, 0)))
     }
     @State private var offset: CGSize = .zero
-    @State private var decisions: [Int: Decision] = [:]   // index → keep/trash
+    @State private var session = OrganizeSession()         // decisions + undo history
     @State private var finished = false
     @State private var flash: Flash?                      // brief action confirmation
     @State private var currentIsFav = false               // live favorite state of the shown photo
@@ -54,12 +64,17 @@ struct OrganizeView: View {
     @State private var advanceTask: Task<Void, Never>?
     @State private var pendingTarget: Int?
 
+    // Video playback (current item only) — tap plays/pauses, swiping away stops.
+    @State private var player: AVPlayer?
+    @State private var playing = false
+
     private let threshold: CGFloat = 80
     private var isZoomed: Bool { zoom > 1.01 }
+    private var currentIsVideo: Bool { index < count && source.asset(index).mediaType == .video }
 
     private var count: Int { source.count }
-    private var keepCount: Int { decisions.values.filter { $0 == .keep }.count }
-    private var trashAssets: [PHAsset] { decisions.compactMap { $0.value == .trash ? source.asset($0.key) : nil } }
+    private var keepCount: Int { session.keepCount }
+    private var trashAssets: [PHAsset] { session.trashIndices.map { source.asset($0) } }
 
     var body: some View {
         ZStack {
@@ -75,6 +90,12 @@ struct OrganizeView: View {
         }
         .preferredColorScheme(.dark)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: tick)
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            // Our video finished → rewind and show the play badge again.
+            guard let item = note.object as? AVPlayerItem, item === player?.currentItem else { return }
+            player?.seek(to: .zero)
+            playing = false
+        }
     }
 
     // MARK: - Photo (full-screen, swipe = navigate)
@@ -92,7 +113,9 @@ struct OrganizeView: View {
             // neighbor that's already centered becomes the current view with no
             // re-creation — the handoff is seamless (no flash, no pop).
             ForEach(visibleIndices, id: \.self) { i in
-                OrganizeCard(asset: source.asset(i), library: library)
+                OrganizeCard(asset: source.asset(i), library: library,
+                             player: i == index ? player : nil,
+                             isPlaying: i == index && playing)
                     .overlay(alignment: .top) { if i == index { trashHint } }
                     .scaleEffect(cardScale(i))
                     .offset(x: CGFloat(i - index) * pageW + offset.width + (i == index ? pan.width : 0),
@@ -109,8 +132,15 @@ struct OrganizeView: View {
                 Color.clear.contentShape(Rectangle())
                     .frame(width: 64)
                     .onTapGesture { if !isZoomed { swipeTo(next: false) } }
-                Color.clear.contentShape(Rectangle())
-                    .onTapGesture(count: 2) { toggleZoom() }
+                // Center zone: videos play/pause on a single tap (no double-tap
+                // recognizer, so no 0.3s wait); photos keep double-tap zoom.
+                if currentIsVideo {
+                    Color.clear.contentShape(Rectangle())
+                        .onTapGesture { togglePlayback() }
+                } else {
+                    Color.clear.contentShape(Rectangle())
+                        .onTapGesture(count: 2, coordinateSpace: .global) { p in toggleZoom(at: p) }
+                }
                 Color.clear.contentShape(Rectangle())
                     .frame(width: 64)
                     .onTapGesture { if !isZoomed { swipeTo(next: true) } }
@@ -121,6 +151,7 @@ struct OrganizeView: View {
             .task(id: index) {
                 guard index < source.count else { return }
                 zoom = 1; zoomBase = 1; pan = .zero; panBase = .zero   // new photo starts unzoomed
+                player?.pause(); player = nil; playing = false         // leaving a video stops it
                 // Favorite state: session toggles are tracked locally — no per-swipe
                 // PhotoKit fetch on the main thread.
                 let a = source.asset(index)
@@ -145,20 +176,47 @@ struct OrganizeView: View {
     }
 
     private var pinchGesture: some Gesture {
-        MagnificationGesture()
+        MagnifyGesture()
             .onChanged { v in
                 isPinching = true
-                zoom = min(max(zoomBase * v, 0.7), 5)   // rubber-band below 1, cap at 5 mid-pinch
+                let b = UIScreen.main.bounds.size
+                // Zoom about the pinch centroid (like Photos), not the screen
+                // center: shift pan so the content point under the fingers stays
+                // under the fingers while the scale changes.
+                let c = CGPoint(x: v.startLocation.x - b.width / 2,
+                                y: v.startLocation.y - b.height / 2)
+                let z = rubberZoom(zoomBase * v.magnification)
+                pan = CGSize(width: c.x - (c.x - panBase.width) * (z / zoomBase),
+                             height: c.y - (c.y - panBase.height) * (z / zoomBase))
+                zoom = z
             }
             .onEnded { _ in
                 isPinching = false
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                     zoom = min(max(zoom, 1), 4)
                     if zoom <= 1.01 { zoom = 1; pan = .zero }
+                    else { pan = clampedPan(pan, zoom: zoom) }
                 }
                 zoomBase = zoom
                 panBase = pan
             }
+    }
+
+    /// Soft scale limits: past fit (1x) or max (4x) the pinch keeps responding
+    /// with diminishing effect — a progressive rubber band instead of the old
+    /// hard stop at 0.7x/5x, which read as the gesture "sticking".
+    private func rubberZoom(_ raw: CGFloat) -> CGFloat {
+        if raw < 1 { return pow(raw, 0.5) }
+        if raw > 4 { return 4 * pow(raw / 4, 0.35) }
+        return raw
+    }
+
+    /// Keep the photo's visible area on screen for a given zoom.
+    private func clampedPan(_ p: CGSize, zoom: CGFloat) -> CGSize {
+        let b = UIScreen.main.bounds.size
+        let maxX = (zoom - 1) * b.width / 2, maxY = (zoom - 1) * b.height / 2
+        return CGSize(width: min(max(p.width, -maxX), maxX),
+                      height: min(max(p.height, -maxY), maxY))
     }
 
     private var dragGesture: some Gesture {
@@ -183,11 +241,8 @@ struct OrganizeView: View {
                 guard !isPinching else { return }
                 if isZoomed {
                     // Keep the photo's visible area on screen (clamp, with a spring).
-                    let b = UIScreen.main.bounds.size
-                    let maxX = (zoom - 1) * b.width / 2, maxY = (zoom - 1) * b.height / 2
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        pan = CGSize(width: min(max(pan.width, -maxX), maxX),
-                                     height: min(max(pan.height, -maxY), maxY))
+                        pan = clampedPan(pan, zoom: zoom)
                     }
                     panBase = pan
                     return
@@ -203,13 +258,43 @@ struct OrganizeView: View {
             }
     }
 
-    /// Double-tap: zoom to 2.5x, or back to fit.
-    private func toggleZoom() {
+    /// Double-tap: zoom to 2.5x about the tapped point (Photos-style), or back to fit.
+    private func toggleZoom(at location: CGPoint? = nil) {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
-            if isZoomed { zoom = 1; pan = .zero } else { zoom = 2.5 }
+            if isZoomed {
+                zoom = 1; pan = .zero
+            } else {
+                zoom = 2.5
+                if let location {
+                    let b = UIScreen.main.bounds.size
+                    let c = CGPoint(x: location.x - b.width / 2, y: location.y - b.height / 2)
+                    pan = clampedPan(CGSize(width: c.x * (1 - zoom), height: c.y * (1 - zoom)), zoom: zoom)
+                }
+            }
         }
         zoomBase = zoom
         panBase = pan
+    }
+
+    /// Tap on a video: load (first tap) then play/pause. The player belongs to the
+    /// current index only — stepping or swiping away tears it down.
+    private func togglePlayback() {
+        guard currentIsVideo else { return }
+        if let p = player {
+            if p.timeControlStatus == .playing { p.pause(); playing = false }
+            else { p.play(); playing = true }
+            return
+        }
+        let a = source.asset(index)
+        Task {
+            guard let item = await library.playerItem(for: a) else { return }
+            // Still on the same video? (the user may have swiped on during the load)
+            guard index < count, source.asset(index).localIdentifier == a.localIdentifier else { return }
+            let p = AVPlayer(playerItem: item)
+            player = p
+            p.play()
+            playing = true
+        }
     }
 
     /// Trash icon that grows as you drag up — hint that releasing deletes the photo.
@@ -246,8 +331,8 @@ struct OrganizeView: View {
                 Text("\(index + 1) / \(count)").font(.subheadline.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6)
                     .background(.ultraThinMaterial, in: Capsule())
-                if let d = decisions[index] {
-                    Text(d == .keep ? "보관됨" : "삭제 예정").font(.caption.weight(.medium))
+                if let d = session.decision(at: index) {
+                    Text(d == .keep ? String(localized: "보관됨") : String(localized: "삭제 예정")).font(.caption.weight(.medium))
                         .foregroundStyle(.white.opacity(0.85))
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(.ultraThinMaterial, in: Capsule())
@@ -259,6 +344,13 @@ struct OrganizeView: View {
                         .frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
                 }
                 Spacer()
+                if session.canUndo {
+                    Button { undoLast() } label: {
+                        Image(systemName: "arrow.uturn.backward").font(.headline.bold()).foregroundStyle(.white)
+                            .frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
+                    }
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
@@ -321,7 +413,7 @@ struct OrganizeView: View {
                 Spacer()
                 LumenGlyph(size: 64)
                 Text("정리 완료").font(.title2.bold()).foregroundStyle(.white).padding(.top, 14)
-                Text(keepCount > 0 ? "보관한 \(keepCount)장은 Lumen 앨범에 모았어요" : "수고하셨어요!")
+                Text(keepCount > 0 ? String(localized: "보관한 \(keepCount)장은 Lumen 앨범에 모았어요") : String(localized: "수고하셨어요!"))
                     .font(.subheadline).foregroundStyle(.white.opacity(0.65))
                     .multilineTextAlignment(.center).padding(.top, 6)
                 Spacer()
@@ -335,9 +427,19 @@ struct OrganizeView: View {
                     .buttonStyle(.plain)
                     .padding(.horizontal, 28)
                 }
+                // The "정리 완료" moment is when Lumen just earned its keep — the one
+                // low-key place we ask for support. (Lumen is free; this is it.)
+                Button {
+                    UIApplication.shared.open(SettingsSheet.sponsorURL)
+                } label: {
+                    Label("개발자 응원하기", systemImage: "heart.fill")
+                        .font(.footnote.weight(.medium)).foregroundStyle(.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 14)
                 Button("닫기") { dismiss() }
                     .font(.subheadline).foregroundStyle(.white.opacity(0.5))
-                    .padding(.top, 14).padding(.bottom, 24)
+                    .padding(.top, 12).padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -377,7 +479,7 @@ struct OrganizeView: View {
     private func decide(_ d: Decision) {
         guard index < count else { return }
         let a = source.asset(index)
-        decisions[index] = d
+        session.decide(d, at: index)
         if d == .keep { Task { await library.addToLumen(a) } }   // file into Lumen, live
         tick += 1
         showFlash(d == .keep ? .keep : .trash)
@@ -387,7 +489,7 @@ struct OrganizeView: View {
     /// Up-swipe: mark the photo for deletion and fly it up.
     private func trashFromSwipe() {
         guard index < count else { return }
-        decisions[index] = .trash
+        session.decide(.trash, at: index)
         tick += 1
         showFlash(.trash)
         flyAndAdvance(CGSize(width: 0, height: -1200))
@@ -397,6 +499,7 @@ struct OrganizeView: View {
     private func favorite() {
         guard index < count else { return }
         let a = source.asset(index)
+        session.recordFavorite(at: index, assetID: a.localIdentifier, wasFavorite: currentIsFav)
         let newValue = !currentIsFav
         favOverrides[a.localIdentifier] = newValue
         library.bumpFavorite(a, added: newValue)   // instant home update
@@ -405,6 +508,29 @@ struct OrganizeView: View {
         tick += 1
         showFlash(newValue ? .favorite : .unfavorite)
         flyAndAdvance(CGSize(width: 0, height: -1200))
+    }
+
+    /// Undo the most recent action: restore the decision table, revert the side
+    /// effect (Lumen filing / favorite toggle), and jump back to that photo.
+    private func undoLast() {
+        commitPendingStep()
+        guard let action = session.undo() else { return }
+        switch action {
+        case .decide(let i, let d, let previous):
+            // Only pull the photo back out of Lumen if THIS action put it there.
+            if d == .keep, previous != .keep {
+                let a = source.asset(i)
+                Task { await library.removeFromLumen(a) }
+            }
+        case .favorite(let i, let id, let wasFavorite):
+            favOverrides[id] = wasFavorite
+            let a = source.asset(i)
+            library.bumpFavorite(a, added: wasFavorite)
+            Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = wasFavorite } }
+        }
+        withAnimation(.spring(response: 0.3)) { index = action.index; offset = .zero }
+        tick += 1
+        showFlash(.undo)
     }
 
     /// Fly the current card out, then step to the next photo (or finish at the end).
@@ -437,6 +563,28 @@ struct OrganizeView: View {
             try await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest.deleteAssets(targets as NSArray) }
             dismiss()
         } catch { /* 사용자가 iOS 다이얼로그 취소 — 요약 화면에 머뭄 */ }
+    }
+}
+
+/// AVPlayerLayer host — a bare video surface (no system controls), so our own
+/// gestures (swipe to organize, tap to pause) keep working on top of it.
+private struct PlayerLayerView: UIViewRepresentable {
+    let player: AVPlayer
+
+    final class LayerView: UIView {
+        override static var layerClass: AnyClass { AVPlayerLayer.self }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    }
+
+    func makeUIView(context: Context) -> LayerView {
+        let v = LayerView()
+        v.playerLayer.videoGravity = .resizeAspect
+        v.playerLayer.player = player
+        return v
+    }
+
+    func updateUIView(_ v: LayerView, context: Context) {
+        if v.playerLayer.player !== player { v.playerLayer.player = player }
     }
 }
 
@@ -502,18 +650,35 @@ private struct MosaicCell: View {
     }
 }
 
-/// Full-screen photo (fits the screen; black fills the rest).
+/// Full-screen photo (fits the screen; black fills the rest). Videos show their
+/// poster frame with a play badge; once a player is handed in, it renders live.
 struct OrganizeCard: View {
     let asset: PHAsset
     let library: PhotoLibrary
+    var player: AVPlayer? = nil
+    var isPlaying: Bool = false
     @State private var image: UIImage?
     @State private var showSpinner = false
 
     var body: some View {
         ZStack {
             Color.lumenBG
-            if let image { Image(uiImage: image).resizable().scaledToFit() }
-            else if showSpinner { ProgressView().tint(.white) }
+            if let player {
+                PlayerLayerView(player: player)
+            } else if let image {
+                Image(uiImage: image).resizable().scaledToFit()
+            } else if showSpinner {
+                ProgressView().tint(.white)
+            }
+            if asset.mediaType == .video, !isPlaying {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 26, weight: .bold)).foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 72, height: 72)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().strokeBorder(.white.opacity(0.15)))
+                    .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+                    .allowsHitTesting(false)   // taps go to the center zone, which plays
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: asset.localIdentifier) {

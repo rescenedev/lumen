@@ -192,10 +192,11 @@ final class InterpolatingGridLayout: UICollectionViewLayout {
     }
 }
 
-/// One square thumbnail cell with a favorite heart.
+/// One square thumbnail cell with a favorite heart (and a duration badge for videos).
 final class ThumbCell: UICollectionViewCell {
     let imageView = UIImageView()
     private let heart = UIImageView(image: UIImage(systemName: "heart.fill"))
+    private let duration = UILabel()
     private var assetID: String?
     private var requestID: PHImageRequestID = 0
     private weak var manager: PHCachingImageManager?
@@ -218,17 +219,43 @@ final class ThumbCell: UICollectionViewCell {
         heart.isHidden = true
         heart.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(heart)
+
+        // Photos-style video duration, bottom-left (heart keeps bottom-right).
+        duration.textColor = .white
+        duration.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        duration.layer.shadowColor = UIColor.black.cgColor
+        duration.layer.shadowOpacity = 0.5
+        duration.layer.shadowRadius = 2
+        duration.layer.shadowOffset = .zero
+        duration.isHidden = true
+        duration.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(duration)
+
         NSLayoutConstraint.activate([
             heart.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -5),
             heart.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -5),
+            duration.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 5),
+            duration.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    private static func durationText(_ seconds: TimeInterval) -> String {
+        let t = Int(seconds.rounded())
+        return t >= 3600 ? String(format: "%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60)
+                         : String(format: "%d:%02d", t / 60, t % 60)
+    }
 
     func configure(_ asset: PHAsset, manager: PHCachingImageManager, target: CGSize) {
         assetID = asset.localIdentifier
         self.manager = manager
         heart.isHidden = !asset.isFavorite
+        if asset.mediaType == .video {
+            duration.text = Self.durationText(asset.duration)
+            duration.isHidden = false
+        } else {
+            duration.isHidden = true
+        }
         let opt = PhotoLibrary.gridThumbOptions()
         let id = asset.localIdentifier
         requestID = manager.requestImage(for: asset, targetSize: target, contentMode: .aspectFill, options: opt) { [weak self] img, _ in

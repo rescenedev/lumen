@@ -6,6 +6,9 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+  # Korean is the source language (string-catalog keys are Korean); English
+  # ships via Sources/Localizable.xcstrings + InfoPlist.xcstrings.
+  developmentLanguage: ko
 
 schemes:
   LumenIOS:
@@ -53,6 +56,8 @@ targets:
     sources:
       - path: Tests
       - path: ../Sources/Lumen/Services/ImageEditor.swift
+      # Pure-logic app types under test, compiled straight into the bundle.
+      - path: Sources/OrganizeSession.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prototype.lumen.ios.tests
