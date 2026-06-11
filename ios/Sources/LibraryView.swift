@@ -144,6 +144,9 @@ struct LibraryView: View {
                                        value: g.frame(in: .named("homeScroll")).minY)
             })
         }
+        // Short album lists fit the screen and would never rubber-band — force
+        // bouncing so the pull-down gesture works regardless of content height.
+        .scrollBounceBehavior(.always, axes: .vertical)
         .coordinateSpace(name: "homeScroll")
         // Hidden settings: pull the list down past the threshold and the sheet
         // opens (with a haptic). A gear rides in with the pull so the gesture
