@@ -35,6 +35,7 @@ struct AlbumGalleryView: View {
                 Text("사진이 없어요").font(.subheadline).foregroundStyle(.white.opacity(0.5))
             } else {
                 PhotoGridView(source: source, manager: library.manager, reloadKey: ver,
+                              topInset: onClose == nil ? 60 : 52,   // room for the big tab title
                               onTap: { lastOrganizedScopeId = scope.id; open = StartAt(index: $0) },
                               onBack: onClose ?? {},
                               bottomInset: onClose == nil ? 88 : 28,
@@ -66,7 +67,20 @@ struct AlbumGalleryView: View {
 
     private var header: some View {
         ZStack {
-            Text(scope.title).font(.headline).foregroundStyle(.white)
+            if onClose != nil {
+                // Pushed from a list: compact centered title + close button.
+                Text(scope.title).font(.headline).foregroundStyle(.white)
+            } else {
+                // Tab pane: big left title, identical to the home's "Lumen" so
+                // all five tabs share one header style.
+                HStack {
+                    Text(scope.title)
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                    Spacer()
+                }
+                .padding(.horizontal, 4)
+            }
             if let onClose {
                 HStack {
                     Button { onClose() } label: {

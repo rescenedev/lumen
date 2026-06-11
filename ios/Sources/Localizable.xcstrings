@@ -469,6 +469,11 @@
         }
       }
     },
+    "정리" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Organize" } }
+      }
+    },
     "정리 시작" : {
       "localizations" : {
         "en" : {

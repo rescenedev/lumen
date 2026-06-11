@@ -381,17 +381,17 @@ struct OrganizePickerView: View {
     private var pickerList: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // 헤더
+                // 헤더 — 다섯 탭 공통 타이틀 스타일 (홈의 "Lumen"과 동일)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("정리해볼까요?")
-                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                    Text("정리")
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
                         .foregroundStyle(.white)
                     Text("앨범을 골라보세요 · 위로 올리면 삭제 · 정리가 끝나면 한번에 삭제")
                         .font(.subheadline).foregroundStyle(.white.opacity(0.35))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 48).padding(.bottom, 32)
+                .padding(.horizontal, 20)
+                .padding(.top, 10).padding(.bottom, 24)
                 .id("organize-top")
 
                 // 리스트
