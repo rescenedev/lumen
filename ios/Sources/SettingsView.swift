@@ -8,7 +8,7 @@ struct SettingsSheet: View {
 
     static let sponsorURL = URL(string: "https://fairy.hada.io/@lumen")!
     static let privacyURL = URL(string: "https://rescenedev.github.io/lumen/lumen-ios/privacy.html")!
-    static let contactURL = URL(string: "mailto:zihado@gmail.com?subject=Lumen%20iOS")!
+    static let contactURL = URL(string: "mailto:tellme@duck.com?subject=Lumen%20iOS")!
     static let sourceURL = URL(string: "https://github.com/rescenedev/lumen-ios")!
 
     private var version: String {
