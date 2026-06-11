@@ -60,7 +60,11 @@ final class LazyArray {
 enum AlbumSort: String, CaseIterable {
     case recent, name, count
     var label: String {
-        switch self { case .recent: "기본순"; case .name: "이름순"; case .count: "사진 많은순" }
+        switch self {
+        case .recent: String(localized: "기본순")
+        case .name: String(localized: "이름순")
+        case .count: String(localized: "사진 많은순")
+        }
     }
 }
 
@@ -368,7 +372,7 @@ struct OrganizeScope: Identifiable, Hashable {
         let all = PHAsset.fetchAssets(with: opts)
         let hasAny = all.count > 0
         if all.count > 0 {
-            out.append(.init(id: "all", title: "전체 사진", symbol: "photo.on.rectangle",
+            out.append(.init(id: "all", title: String(localized: "전체 사진"), symbol: "photo.on.rectangle",
                              count: all.count, collection: nil, cover: all.firstObject))
         }
         // Lumen (the keep destination) right next to 전체 — shows its own members.
@@ -394,10 +398,10 @@ struct OrganizeScope: Identifiable, Hashable {
             out.append(.init(id: c.localIdentifier, title: title, symbol: symbol,
                              count: r.count, collection: c, cover: cover))
         }
-        smart(.smartAlbumFavorites, "즐겨찾기", "heart", order: favoriteOrder)
-        smart(.smartAlbumRecentlyAdded, "최근 추가", "clock")
-        smart(.smartAlbumScreenshots, "스크린샷", "camera.viewfinder")
-        smart(.smartAlbumVideos, "동영상", "video")
+        smart(.smartAlbumFavorites, String(localized: "즐겨찾기"), "heart", order: favoriteOrder)
+        smart(.smartAlbumRecentlyAdded, String(localized: "최근 추가"), "clock")
+        smart(.smartAlbumScreenshots, String(localized: "스크린샷"), "camera.viewfinder")
+        smart(.smartAlbumVideos, String(localized: "동영상"), "video")
 
         // User albums (Lumen already shown above), in the chosen order.
         var entries = albums.filter { $0.localizedTitle != "Lumen" }
@@ -409,7 +413,7 @@ struct OrganizeScope: Identifiable, Hashable {
         case .count: entries.sort { $0.r.count > $1.r.count }
         }
         for e in entries {
-            out.append(.init(id: e.c.localIdentifier, title: e.c.localizedTitle ?? "앨범", symbol: "rectangle.stack",
+            out.append(.init(id: e.c.localIdentifier, title: e.c.localizedTitle ?? String(localized: "앨범"), symbol: "rectangle.stack",
                              count: e.r.count, collection: e.c, cover: e.r.firstObject))
         }
         return Snapshot(albums: albums, keptIDs: keptIDs, scopes: out, hasAnyPhotos: hasAny)

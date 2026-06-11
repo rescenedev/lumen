@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 
 enum LumenTab { case home, allPhotos, organize, favorites, vault }
 
@@ -69,11 +70,12 @@ struct RootView: View {
     }
 
     @ViewBuilder private var favoritesTab: some View {
-        if let scope = lib.scopes.first(where: { $0.title == "즐겨찾기" }) {
+        // Match by subtype, not title — titles are localized.
+        if let scope = lib.scopes.first(where: { $0.collection?.assetCollectionSubtype == .smartAlbumFavorites }) {
             AlbumGalleryView(scope: scope, library: lib, onClose: nil)
         } else {
             emptyTab("star", lib.loaded ? "즐겨찾기한 사진이 없어요" : nil,
-                     sub: "위로 올리면 즐겨찾기에 추가돼요")
+                     sub: "정리 화면에서 ★를 누르면 여기에 모여요")
         }
     }
 
@@ -86,7 +88,8 @@ struct RootView: View {
         }
     }
 
-    private func emptyTab(_ icon: String, _ msg: String?, sub: String? = nil) -> some View {
+    // LocalizedStringKey params so the literal call-site strings localize.
+    private func emptyTab(_ icon: String, _ msg: LocalizedStringKey?, sub: LocalizedStringKey? = nil) -> some View {
         ZStack {
             Color.lumenBG.ignoresSafeArea()
             if let msg {

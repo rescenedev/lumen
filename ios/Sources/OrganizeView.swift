@@ -9,8 +9,11 @@ private enum Flash {
     case keep, trash, favorite, unfavorite, undo
     var text: String {
         switch self {
-        case .keep: "보관"; case .trash: "삭제"; case .favorite: "즐겨찾기"
-        case .unfavorite: "즐겨찾기 해제"; case .undo: "되돌림"
+        case .keep: String(localized: "보관")
+        case .trash: String(localized: "삭제")
+        case .favorite: String(localized: "즐겨찾기")
+        case .unfavorite: String(localized: "즐겨찾기 해제")
+        case .undo: String(localized: "되돌림")
         }
     }
     var icon: String {
@@ -296,7 +299,7 @@ struct OrganizeView: View {
                     .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6)
                     .background(.ultraThinMaterial, in: Capsule())
                 if let d = session.decision(at: index) {
-                    Text(d == .keep ? "보관됨" : "삭제 예정").font(.caption.weight(.medium))
+                    Text(d == .keep ? String(localized: "보관됨") : String(localized: "삭제 예정")).font(.caption.weight(.medium))
                         .foregroundStyle(.white.opacity(0.85))
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(.ultraThinMaterial, in: Capsule())
@@ -377,7 +380,7 @@ struct OrganizeView: View {
                 Spacer()
                 LumenGlyph(size: 64)
                 Text("정리 완료").font(.title2.bold()).foregroundStyle(.white).padding(.top, 14)
-                Text(keepCount > 0 ? "보관한 \(keepCount)장은 Lumen 앨범에 모았어요" : "수고하셨어요!")
+                Text(keepCount > 0 ? String(localized: "보관한 \(keepCount)장은 Lumen 앨범에 모았어요") : String(localized: "수고하셨어요!"))
                     .font(.subheadline).foregroundStyle(.white.opacity(0.65))
                     .multilineTextAlignment(.center).padding(.top, 6)
                 Spacer()

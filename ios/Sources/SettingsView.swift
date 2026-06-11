@@ -54,7 +54,7 @@ struct SettingsSheet: View {
         Divider().overlay(.white.opacity(0.07)).padding(.leading, 22)
     }
 
-    private func row(_ icon: String, _ title: String, action: @escaping () -> Void) -> some View {
+    private func row(_ icon: String, _ title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
                 Label { Text(title).font(.body.weight(.medium)).foregroundStyle(.white) }

@@ -72,11 +72,11 @@ struct LibraryView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             LumenGlyph(size: 72)
-            Text(!library.hasAnyPhotos ? "사진이 없어요" : "모두 정리했어요")
+            Text(!library.hasAnyPhotos ? String(localized: "사진이 없어요") : String(localized: "모두 정리했어요"))
                 .font(.title2.bold()).foregroundStyle(.white)
             Text(!library.hasAnyPhotos
-                 ? "기기에 사진이 추가되면 여기에서 정리할 수 있어요."
-                 : "정리할 사진을 모두 둘러봤어요. 보관한 사진은 ‘Lumen’ 앨범에 모여 있어요.")
+                 ? String(localized: "기기에 사진이 추가되면 여기에서 정리할 수 있어요.")
+                 : String(localized: "정리할 사진을 모두 둘러봤어요. 보관한 사진은 ‘Lumen’ 앨범에 모여 있어요."))
                 .font(.subheadline).foregroundStyle(.white.opacity(0.55))
                 .multilineTextAlignment(.center).padding(.horizontal, 44)
         }
@@ -128,7 +128,7 @@ struct LibraryView: View {
                             }
                     }
                 }
-                Text("앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 즐겨찾기, ♥는 ‘Lumen’ 앨범에 보관, ✕는 삭제 후보입니다.")
+                Text("앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 삭제 후보, ♥는 ‘Lumen’ 앨범에 보관, ★는 즐겨찾기입니다.")
                     .font(.footnote).foregroundStyle(.white.opacity(0.4))
                     .padding(.horizontal, 4).padding(.top, 6)
             }
@@ -232,7 +232,7 @@ struct OnboardingView: View {
             Text("사진 정리가 쉬워집니다").font(.headline).foregroundStyle(.white.opacity(0.6)).padding(.top, 4)
 
             VStack(spacing: 18) {
-                feature("hand.draw.fill", "넘기며 둘러보기", "좌우로 넘기고, 위로 올리면 즐겨찾기")
+                feature("hand.draw.fill", "넘기며 둘러보기", "좌우로 넘기고, 위로 올리면 삭제 후보")
                 feature("rectangle.stack.fill", "보관은 Lumen 앨범에", "♥로 고른 사진을 한 곳에 모아 나중에 분류")
                 feature("checkmark.shield.fill", "안전하게", "삭제는 항상 확인 후 진행")
             }
@@ -243,7 +243,8 @@ struct OnboardingView: View {
                 requesting = true
                 Task { onAuthorized(); requesting = false }
             } label: {
-                Text(requesting ? "" : "사진 접근 허용").font(.headline)
+                Text("사진 접근 허용").font(.headline)
+                    .opacity(requesting ? 0 : 1)
                     .frame(maxWidth: .infinity).padding(.vertical, 16)
                     .overlay { if requesting { ProgressView().tint(.white) } }
             }
@@ -258,7 +259,8 @@ struct OnboardingView: View {
         }
     }
 
-    private func feature(_ icon: String, _ title: String, _ subtitle: String) -> some View {
+    // LocalizedStringKey params so the literal call-site strings localize.
+    private func feature(_ icon: String, _ title: LocalizedStringKey, _ subtitle: LocalizedStringKey) -> some View {
         HStack(spacing: 16) {
             Image(systemName: icon).font(.title2).foregroundStyle(.tint).frame(width: 34)
             VStack(alignment: .leading, spacing: 2) {
