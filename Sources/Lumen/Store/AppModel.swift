@@ -423,7 +423,10 @@ final class AppModel {
         let index = photoByID
         for (path, m) in store.items {
             guard m.favorite || m.label != .none else { continue }
-            guard index[URL(fileURLWithPath: path)] != nil else { continue }
+            // URL(filePath:directoryHint:), NEVER URL(fileURLWithPath:) — the
+            // latter stats the path to sniff directories, ~7ms each on a NAS
+            // (a few hundred favorited photos would freeze the main thread).
+            guard index[URL(filePath: path, directoryHint: .notDirectory)] != nil else { continue }
             if m.favorite { favorites += 1 }
             if m.label != .none { labels[m.label, default: 0] += 1 }
         }

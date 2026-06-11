@@ -72,6 +72,17 @@ final class PhotoGridCellView: NSView {
 
     override var wantsUpdateLayer: Bool { false }   // keep draw(_:) for the overlays
 
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        // Moving the window to a display with a different scale must re-render
+        // the layers at the new density or thumbnails/badges turn blurry.
+        let scale = window?.backingScaleFactor ?? 2
+        imageLayer.contentsScale = scale
+        overlayLayer.contentsScale = scale
+        overlayLayer.setNeedsDisplay()
+        needsDisplay = true
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         // Subview layers would sit below the view's drawn content — adding the
