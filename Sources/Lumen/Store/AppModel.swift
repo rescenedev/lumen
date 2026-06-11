@@ -466,11 +466,11 @@ final class AppModel {
     }
 
     var availableFileTypes: [String] {
-        Set(allPhotos.map { $0.fileExtension }).sorted()
+        Perf.time("availableFileTypes") { Set(allPhotos.map { $0.fileExtension }).sorted() }
     }
 
     var availableCameras: [String] {
-        Set(exif.values.compactMap { $0.cameraDisplay }).sorted()
+        Perf.time("availableCameras") { Set(exif.values.compactMap { $0.cameraDisplay }).sorted() }
     }
 
     /// Photos restricted to the current sidebar scope. Preserves the input
@@ -647,11 +647,11 @@ final class AppModel {
         let key = visibleSignature
         if let hit = visibleCacheMap[key] { lastVisible = hit; return hit }
 
-        let gathered = gatherUnsorted()
+        let gathered = Perf.time("visiblePhotos.gather") { gatherUnsorted() }
         let sorter = currentSorter()
 
         if gathered.count <= asyncSortThreshold {
-            let sorted = sorter(gathered)
+            let sorted = Perf.time("visiblePhotos.sortInline n=\(gathered.count)") { sorter(gathered) }
             cacheVisible(key, sorted)
             lastVisible = sorted
             return sorted
@@ -690,6 +690,7 @@ final class AppModel {
 
     var stats: LibraryStats {
         if libraryVersion == statsCacheKey { return statsCache }
+        let _t0 = CACurrentMediaTime(); defer { if Perf.on { NSLog("[LumenPerf] stats.recompute %.2fms", (CACurrentMediaTime() - _t0) * 1000) } }
 
         var s = LibraryStats()
         let cal = Calendar.current
@@ -781,6 +782,7 @@ final class AppModel {
            cached.revision == visibleResultRevision {
             return cached.groups
         }
+        let _t0 = CACurrentMediaTime(); defer { if Perf.on { NSLog("[LumenPerf] monthGroups.recompute n=%d %.2fms", photos.count, (CACurrentMediaTime() - _t0) * 1000) } }
         let cal = Calendar.current
         let grouped = Dictionary(grouping: photos) { photo -> Date in
             let date = photo.creationDate ?? .distantPast
@@ -867,7 +869,7 @@ final class AppModel {
 
     // MARK: - Selection
 
-    var selectedPhotos: [Photo] { allPhotos.filter { selection.contains($0.id) } }
+    var selectedPhotos: [Photo] { Perf.time("selectedPhotos n=\(allPhotos.count)") { allPhotos.filter { selection.contains($0.id) } } }
 
     // O(1) photo lookup by id, rebuilt only when the library or Photos assets
     // change. Includes Apple Photos assets (library + the open album) so the

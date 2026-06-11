@@ -10,7 +10,7 @@ struct SidebarView: View {
     @State private var expandedFolders: Set<URL> = []
 
     var body: some View {
-        List(selection: Binding(
+        Perf.body("SidebarView") { List(selection: Binding(
             get: { model.selectedSidebar },
             set: { if let value = $0 { model.selectedSidebar = value } }
         )) {
@@ -35,6 +35,7 @@ struct SidebarView: View {
             AlbumNameSheet(title: "Rename Album", confirmLabel: "Rename", text: $renameText) {
                 model.renameAlbum(album.id, to: renameText)
             }
+        }
         }
     }
 

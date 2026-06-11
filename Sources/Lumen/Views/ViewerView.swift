@@ -23,7 +23,7 @@ struct ViewerView: View {
     @State private var loadedImageSize: CGSize?   // actual pixel size of the shown image
 
     var body: some View {
-        ZStack {
+        Perf.body("ViewerView") { ZStack {
             Color.black.ignoresSafeArea()
                 .onTapGesture { withAnimation { chromeVisible.toggle() } }
                 .background(GeometryReader { proxy in
@@ -83,6 +83,7 @@ struct ViewerView: View {
                 return .handled
             }
             return .ignored
+        }
         }
     }
 

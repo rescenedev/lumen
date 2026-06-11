@@ -8,7 +8,7 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var model = model
-        return NavigationSplitView {
+        return Perf.body("ContentView") { NavigationSplitView {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
         } detail: {
@@ -70,6 +70,8 @@ struct ContentView: View {
         .overlay(alignment: .bottom) { toastBanner }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.toast)
         .task { model.checkForUpdates() }
+        .task { Perf.startHitchMonitor(); Perf.autodrive(model) }
+        }
     }
 
     @ViewBuilder

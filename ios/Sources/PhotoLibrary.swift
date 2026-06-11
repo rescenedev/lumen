@@ -189,11 +189,23 @@ struct OrganizeScope: Identifiable, Hashable {
         return o
     }
 
+    /// Assets currently warmed at viewer size. Viewer images are ~12MB each
+    /// (full screen px), so photos we've swiped past MUST leave the cache —
+    /// start-only caching grows by hundreds of MB over a long organize session.
+    @ObservationIgnored private var viewerWarm: [String: PHAsset] = [:]
+
     /// Warm full-screen images for the photos around the one being viewed, so a
     /// swipe lands on an already-decoded (and, for iCloud, already-downloaded)
-    /// image instead of a spinner.
+    /// image instead of a spinner. Keeps only the current window warm.
     func prewarmViewer(_ assets: [PHAsset]) {
         guard !assets.isEmpty else { return }
+        let newIDs = Set(assets.map(\.localIdentifier))
+        let stale = viewerWarm.values.filter { !newIDs.contains($0.localIdentifier) }
+        if !stale.isEmpty {
+            manager.stopCachingImages(for: stale, targetSize: Self.viewerTarget,
+                                      contentMode: .aspectFit, options: Self.viewerOptions())
+        }
+        viewerWarm = Dictionary(uniqueKeysWithValues: assets.map { ($0.localIdentifier, $0) })
         manager.startCachingImages(for: assets, targetSize: Self.viewerTarget,
                                    contentMode: .aspectFit, options: Self.viewerOptions())
     }
@@ -289,7 +301,11 @@ struct OrganizeScope: Identifiable, Hashable {
         favoriteOrder.removeAll { $0 == id }
         if added { favoriteOrder.insert(id, at: 0) }     // most-recent favorite first
         saveFavoriteOrder()
-        sourceCache.removeAll()   // 즐겨찾기 source bakes in the old order
+        // Only the 즐겨찾기 source bakes in the order — dropping ALL sources here
+        // made every persistent pane rebuild + re-fetch on each ★ toggle.
+        if let fav = scopes.first(where: { $0.collection?.assetCollectionSubtype == .smartAlbumFavorites }) {
+            sourceCache.removeValue(forKey: fav.id)
+        }
 
         guard let i = scopes.firstIndex(where: { $0.collection?.assetCollectionSubtype == .smartAlbumFavorites })
         else { return }

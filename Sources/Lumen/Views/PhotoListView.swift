@@ -7,7 +7,7 @@ struct PhotoListView: View {
 
     var body: some View {
         @Bindable var model = model
-        return ScrollViewReader { proxy in
+        return Perf.body("PhotoListView") { ScrollViewReader { proxy in
             List(selection: $model.selection) {
                 ForEach(model.visiblePhotos) { photo in
                     PhotoRow(photo: photo)
@@ -31,6 +31,7 @@ struct PhotoListView: View {
                 }
             }
             .browserKeyHandlers()
+        }
         }
     }
 }

@@ -25,7 +25,7 @@ struct InspectorView: View {
     }
 
     var body: some View {
-        Group {
+        Perf.body("InspectorView") { Group {
             if let photo {
                 content(for: photo)
             } else {
@@ -35,6 +35,7 @@ struct InspectorView: View {
             }
         }
         .task(id: photo?.url) { await loadMetadata() }
+        }
     }
 
     private func content(for photo: Photo) -> some View {

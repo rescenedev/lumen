@@ -8,7 +8,7 @@ struct PhotoBrowserView: View {
     @State private var searchDebounce: DispatchWorkItem?
 
     var body: some View {
-        VStack(spacing: 0) {
+        Perf.body("PhotoBrowserView") { VStack(spacing: 0) {
             if let update = model.availableUpdate, !model.updateBannerDismissed {
                 updateBanner(update)
                 Divider()
@@ -31,6 +31,7 @@ struct PhotoBrowserView: View {
         }
         .onAppear { prefetch() }
         .onChange(of: model.visibleToken) { _, _ in prefetch() }
+        }
     }
 
     /// Warm thumbnails for a freshly opened list so the first screens appear
