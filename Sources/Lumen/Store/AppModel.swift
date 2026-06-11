@@ -1889,12 +1889,36 @@ final class AppModel {
         // actor, so even SPAWNING the work sat ~500ms behind the busy launch
         // main thread (measured). The single hop back to main to install the
         // result pays that wait exactly once — and overlaps window construction.
+        // Presentation snapshot for the pipeline: it pre-sorts the default
+        // scope and warms the first screenful of thumbnails, so the grid
+        // appears already filled instead of empty-grid → sort → images pop.
+        let launchSort = sortOrder
+        let launchTier = viewMode == .grid
+            ? ThumbnailCache.tier(forPointSize: thumbnailSize)
+            : ThumbnailCache.tier(forPointSize: 40)   // list rows
+
         Task.detached(priority: .userInitiated) { [weak self] in
-            var loaded: ([Photo], (recentlyAdded: Int, onThisDay: Int), DerivedIndexes)?
+            var loaded: LaunchLoad?
             if let cached = LibraryCache.loadPhotos(), !cached.isEmpty {
                 async let dates = Task.detached(priority: .userInitiated) { Self.computeDateStats(cached) }.value
+                async let sortedTask = Task.detached(priority: .userInitiated) { launchSort.sorted(cached) }.value
                 let indexes = Self.computeDerivedIndexes(cached)
-                loaded = (cached, await dates, indexes)
+                let sorted = await sortedTask
+                // One-time upgrade: a cache that wasn't saved in launch order
+                // (pre-upgrade format, or persisted mid-edit) gets re-saved
+                // sorted, so the NEXT launch's sort is ~free (adaptive sort
+                // over already-ordered input).
+                if !Self.isDateNewestSorted(cached) {
+                    Task.detached(priority: .background) { LibraryCache.savePhotos(sorted) }
+                }
+                // First screenful straight into the memory cache (the disk
+                // cache has them from past sessions) — decodes overlap the
+                // window construction we're waiting on anyway.
+                ThumbnailCache.shared.prefetch(
+                    sorted.prefix(80).map { (url: $0.url, mtime: $0.cacheMtime) },
+                    maxPixel: launchTier, limit: 80)
+                loaded = LaunchLoad(photos: cached, dates: await dates,
+                                    indexes: indexes, sort: launchSort, sorted: sorted)
             }
             guard let self else { return }
             await self.installLoadedLibrary(loaded)
@@ -1907,19 +1931,47 @@ final class AppModel {
         }
     }
 
+    /// True when `photos` is already in `.dateNewest` order (the launch sort) —
+    /// a cheap O(n) scan that decides whether the cache needs re-saving sorted.
+    nonisolated private static func isDateNewestSorted(_ photos: [Photo]) -> Bool {
+        var previous = Date.distantFuture
+        for photo in photos {
+            let date = photo.creationDate ?? .distantPast
+            if date > previous { return false }
+            previous = date
+        }
+        return true
+    }
+
+    /// Everything the launch pipeline computes off-main before the single
+    /// main-actor install hop.
+    private struct LaunchLoad: Sendable {
+        var photos: [Photo]
+        var dates: (recentlyAdded: Int, onThisDay: Int)
+        var indexes: DerivedIndexes
+        var sort: SortOrder
+        var sorted: [Photo]   // photos in `sort` order — the default scope's content
+    }
+
     /// Main-actor landing for the off-main load pipeline: publish the library
     /// with its precomputed stats/indexes so the sidebar's first body, first
     /// folder click, and first search never recompute them on the main thread.
-    private func installLoadedLibrary(
-        _ loaded: ([Photo], (recentlyAdded: Int, onThisDay: Int), DerivedIndexes)?
-    ) {
-        if let (cached, dates, indexes) = loaded {
-            allPhotos = cached
-            installStats(LibraryStats(recentlyAdded: dates.recentlyAdded,
-                                      onThisDay: dates.onThisDay,
-                                      folderCounts: Self.folderCounts(from: indexes.byFolder)))
-            installDerivedIndexes(indexes)
+    private func installLoadedLibrary(_ loaded: LaunchLoad?) {
+        if let loaded {
+            allPhotos = loaded.photos
+            installStats(LibraryStats(recentlyAdded: loaded.dates.recentlyAdded,
+                                      onThisDay: loaded.dates.onThisDay,
+                                      folderCounts: Self.folderCounts(from: loaded.indexes.byFolder)))
+            installDerivedIndexes(loaded.indexes)
             recomputeMetaCounts()
+            // Seed the visible cache with the pre-sorted default scope: without
+            // it the first visiblePhotos access kicks the async 67k sort and
+            // the grid sits empty behind a spinner for another ~300ms.
+            if committedSidebar == .allPhotos, sortOrder == loaded.sort,
+               searchText.isEmpty, !filter.isActive {
+                cacheVisible(visibleSignature, loaded.sorted)
+                lastVisible = loaded.sorted
+            }
         }
         isLoadingLibrary = false   // grid is on screen from here
     }

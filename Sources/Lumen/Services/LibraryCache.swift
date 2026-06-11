@@ -56,7 +56,12 @@ enum LibraryCache {
     }
 
     static func savePhotos(_ photos: [Photo]) {
-        savePhotosBinary(photos)
+        // Persist in the launch sort order (date, newest first): launch always
+        // starts in .dateNewest, and Swift's adaptive sort makes re-sorting an
+        // already-sorted 67k list ~free — so the cached library is grid-ready
+        // the moment it decodes. Saving runs in the background; the extra sort
+        // here costs nothing user-visible.
+        savePhotosBinary(SortOrder.dateNewest.sorted(photos))
         // The legacy plist would go stale next to the binary — a downgade
         // reading it would silently show an old library. Remove it so older
         // builds rescan from disk instead.
