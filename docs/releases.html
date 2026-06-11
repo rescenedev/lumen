@@ -97,9 +97,23 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.3.5">
+    <div class="release-head">
+      <h2>0.3.5</h2><span class="date">2026년 6월 12일</span><span class="tag">최신</span>
+    </div>
+    <h3>성능 — 실행하면 바로 사진이 보입니다</h3>
+    <p class="sub" style="margin:0 0 8px">67,676장 라이브러리 기준, 프레임 단위로 측정하며 시작 경로를 다시 설계했습니다.</p>
+    <ul>
+      <li><b>시작 로딩이 사라졌습니다.</b> 창이 뜨고 1~2 프레임 안에 썸네일까지 채워진 그리드가 바로 보입니다. 이전에는 "Loading your photos…" 스피너가 1.4초가량 떠 있었습니다.</li>
+      <li><b>라이브러리 캐시를 새 바이너리 포맷으로 교체</b>했습니다 — 6.7만 장 디코드가 410ms → 약 100ms. 기존 캐시는 첫 실행에 자동 변환됩니다.</li>
+      <li><b>정렬·통계·인덱스를 모두 백그라운드에서 미리 계산</b>해 창이 만들어지는 시간과 겹칩니다. 첫 화면 썸네일도 창이 뜨기 전에 미리 메모리에 올립니다.</li>
+      <li>로딩 표시는 정말 오래 걸릴 때(첫 스캔, 느린 NAS)만 나타납니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.3.4">
     <div class="release-head">
-      <h2>0.3.4</h2><span class="date">2026년 6월 12일</span><span class="tag">최신</span>
+      <h2>0.3.4</h2><span class="date">2026년 6월 12일</span>
     </div>
     <h3>성능</h3>
     <p class="sub" style="margin:0 0 8px">실제 67,676장 NAS 라이브러리에서 측정하며 수정한 대규모 성능 배치입니다.</p>
