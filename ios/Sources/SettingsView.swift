@@ -1,13 +1,15 @@
 import SwiftUI
 
-/// App settings — kept deliberately tiny: support/policy/contact/version.
-/// Opens as a bottom sheet from the home's gear button (the tab bar is full).
+/// App settings — kept deliberately tiny: support/source/policy/contact/version.
+/// Hidden by design: pull the home screen down to reveal it (a gear hint rides
+/// in with the pull, so it's discoverable without spending a button).
 struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     static let sponsorURL = URL(string: "https://fairy.hada.io/@lumen")!
     static let privacyURL = URL(string: "https://rescenedev.github.io/lumen/lumen-ios/privacy.html")!
     static let contactURL = URL(string: "mailto:zihado@gmail.com?subject=Lumen%20iOS")!
+    static let sourceURL = URL(string: "https://github.com/rescenedev/lumen-ios")!
 
     private var version: String {
         let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
@@ -22,6 +24,8 @@ struct SettingsSheet: View {
                 .padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 6)
 
             row("heart.fill", "개발자 응원하기") { UIApplication.shared.open(Self.sponsorURL) }
+            divider
+            row("chevron.left.forwardslash.chevron.right", "오픈소스 (MIT)") { UIApplication.shared.open(Self.sourceURL) }
             divider
             row("hand.raised.fill", "개인정보처리방침") { UIApplication.shared.open(Self.privacyURL) }
             divider
@@ -44,7 +48,7 @@ struct SettingsSheet: View {
                 .padding(.horizontal, 30).padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(390)])
+        .presentationDetents([.height(446)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.lumenCard)
         .preferredColorScheme(.dark)

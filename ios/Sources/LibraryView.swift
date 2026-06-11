@@ -9,6 +9,8 @@ struct LibraryView: View {
     @State private var scope: OrganizeScope?
     @State private var showSort = false
     @State private var showSettings = false
+    @State private var pull: CGFloat = 0      // current over-pull past the list top
+    @State private var pullArmed = true       // one settings open per pull
     @Environment(\.horizontalSizeClass) private var hSize
 
     // 2 columns on iPhone, ~4-5 on iPad.
@@ -94,24 +96,16 @@ struct LibraryView: View {
         .padding(.bottom, 40)
     }
 
+    /// How far past the top you pull before settings open.
+    private static let settingsPullThreshold: CGFloat = 80
+
     private var scopeList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Lumen").font(.system(size: 30, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.title3).foregroundStyle(.white.opacity(0.85))
-                            .frame(width: 38, height: 38)
-                            .background(.white.opacity(0.08), in: Circle())
-                            .overlay(Circle().strokeBorder(.white.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
-                .id("home-top")
+                Text("Lumen").font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
+                    .id("home-top")
                 HStack {
                     Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     Spacer()
@@ -145,8 +139,42 @@ struct LibraryView: View {
                     .padding(.horizontal, 4).padding(.top, 6)
             }
             .padding(.horizontal, 16).padding(.top, 4)
+            .background(GeometryReader { g in
+                Color.clear.preference(key: HomePullKey.self,
+                                       value: g.frame(in: .named("homeScroll")).minY)
+            })
         }
+        .coordinateSpace(name: "homeScroll")
+        // Hidden settings: pull the list down past the threshold and the sheet
+        // opens (with a haptic). A gear rides in with the pull so the gesture
+        // is discoverable without spending a visible button on it.
+        .overlay(alignment: .top) {
+            let p = min(pull / Self.settingsPullThreshold, 1)
+            if p > 0.02 {
+                Image(systemName: "gearshape.fill")
+                    .font(.title3).foregroundStyle(.white.opacity(0.85))
+                    .rotationEffect(.degrees(Double(pull) * 1.5))
+                    .opacity(Double(p)).scaleEffect(0.5 + 0.5 * p)
+                    .offset(y: pull * 0.45 - 26)
+            }
+        }
+        .onPreferenceChange(HomePullKey.self) { y in
+            pull = max(0, y)
+            if y > Self.settingsPullThreshold, pullArmed, !showSettings {
+                pullArmed = false
+                showSettings = true
+            } else if y < 5 {
+                pullArmed = true     // re-arm once the bounce settles
+            }
+        }
+        .sensoryFeedback(.impact(flexibility: .rigid), trigger: showSettings) { _, new in new }
     }
+}
+
+/// Tracks how far the home list is over-pulled past its top.
+private struct HomePullKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /// Modern bottom sheet for picking the album sort (always on-screen, slate).

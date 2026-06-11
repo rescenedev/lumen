@@ -426,6 +426,11 @@
         }
       }
     },
+    "오픈소스 (MIT)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Source (MIT)" } }
+      }
+    },
     "이름순" : {
       "extractionState" : "stale",
       "localizations" : {
