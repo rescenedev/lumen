@@ -123,8 +123,9 @@ final class AppModel {
 
     // Presentation + multi-selection
     var viewMode: ViewMode = .grid { didSet { persistSettings() } }
-    var selection: Set<Photo.ID> = []
+    var selection: Set<Photo.ID> = [] { didSet { selectionRevision &+= 1 } }
     var selectionAnchor: Photo.ID?
+    @ObservationIgnored private var selectionRevision = 0
 
     // Viewer
     var viewerPhotos: [Photo] = []
@@ -413,11 +414,16 @@ final class AppModel {
 
     /// Full recompute of the favorite/label counts — only on library changes
     /// (import, delete, rename), not on individual metadata edits.
+    /// Iterates the metadata mirror (photos that HAVE meta — usually a handful),
+    /// not the whole library: the 67k-photo loop measured ~80ms on main.
+    /// Membership in the library is checked so stale rows don't inflate counts.
     private func recomputeMetaCounts() {
         var favorites = 0
         var labels: [ColorLabel: Int] = [:]
-        for photo in allPhotos {
-            let m = store.meta(for: photo.url.path)
+        let index = photoByID
+        for (path, m) in store.items {
+            guard m.favorite || m.label != .none else { continue }
+            guard index[URL(fileURLWithPath: path)] != nil else { continue }
             if m.favorite { favorites += 1 }
             if m.label != .none { labels[m.label, default: 0] += 1 }
         }
@@ -460,17 +466,37 @@ final class AppModel {
 
     // MARK: - Derived collections
 
+    // Cached: the sidebar body re-sorts this on every evaluation otherwise,
+    // and localizedStandardCompare over hundreds of folders isn't free.
+    @ObservationIgnored private var photoFoldersCache: [URL] = []
+    @ObservationIgnored private var photoFoldersCacheKey = -1
     var photoFolders: [URL] {
-        stats.folderCounts.keys
+        if libraryVersion == photoFoldersCacheKey { return photoFoldersCache }
+        photoFoldersCache = stats.folderCounts.keys
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+        photoFoldersCacheKey = libraryVersion
+        return photoFoldersCache
     }
 
+    // Cached: FilterMenu's body reads these (twice each), and rebuilding the
+    // camera set from 60k+ EXIF entries cost ~53ms per read — a measured
+    // 106-112ms toolbar body eval on every filter interaction.
+    @ObservationIgnored private var fileTypesCache: [String] = []
+    @ObservationIgnored private var fileTypesCacheKey = -1
     var availableFileTypes: [String] {
-        Perf.time("availableFileTypes") { Set(allPhotos.map { $0.fileExtension }).sorted() }
+        if libraryVersion == fileTypesCacheKey { return fileTypesCache }
+        fileTypesCache = Set(allPhotos.map { $0.fileExtension }).sorted()
+        fileTypesCacheKey = libraryVersion
+        return fileTypesCache
     }
 
+    @ObservationIgnored private var camerasCache: [String] = []
+    @ObservationIgnored private var camerasCacheKey = -1
     var availableCameras: [String] {
-        Perf.time("availableCameras") { Set(exif.values.compactMap { $0.cameraDisplay }).sorted() }
+        if indexVersion == camerasCacheKey { return camerasCache }
+        camerasCache = Set(exif.values.compactMap { $0.cameraDisplay }).sorted()
+        camerasCacheKey = indexVersion
+        return camerasCache
     }
 
     /// Photos restricted to the current sidebar scope. Preserves the input
@@ -586,33 +612,67 @@ final class AppModel {
     @ObservationIgnored private let asyncSortThreshold = 4000
 
     /// Scope + filter + search WITHOUT sorting (cheap; safe on the main thread).
-    /// Filter and search run as a single pass over the scoped list.
+    /// Used by callers that need the unsorted set (e.g. thumbnail warming) —
+    /// `visiblePhotos` runs the same pass off-main for large scopes.
     private func gatherUnsorted() -> [Photo] {
         let base = scoped(sourcePhotos)
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        let f = filter
+        guard filter.isActive || !query.isEmpty else { return base }
+        return Self.filterAndSearch(base, filter: filter, query: query,
+                                    names: query.isEmpty ? [:] : lowerNames,
+                                    cams: query.isEmpty ? [:] : lowerCameras,
+                                    tags: lowercasedTags(query: query),
+                                    metaByPath: store.items, exif: exif)
+    }
+
+    private func lowercasedTags(query: String) -> [String: [String]] {
+        guard !query.isEmpty else { return [:] }
+        return store.items.compactMapValues { $0.tags.isEmpty ? nil : $0.tags.map { $0.lowercased() } }
+    }
+
+    /// Filter + search as a pure function over value snapshots, so large scopes
+    /// can run it OFF the main thread — one search over 67k photos measured
+    /// 380-430ms, which froze the UI when run inside a body evaluation.
+    /// Lookups (lowercased names/cameras/tags) are prepared once by the caller:
+    /// lowercasing the camera string per photo was most of that cost.
+    nonisolated private static func filterAndSearch(
+        _ base: [Photo], filter f: FilterState, query: String,
+        names: [URL: String], cams: [String: String], tags: [String: [String]],
+        metaByPath: [String: PhotoMeta], exif: [String: ExifInfo]
+    ) -> [Photo] {
         let filterActive = f.isActive
         guard filterActive || !query.isEmpty else { return base }
-        let names = query.isEmpty ? [:] : lowerNames
         return base.filter { photo in
+            let path = photo.url.path   // computed once — URL.path allocates
             if filterActive {
                 if let type = f.fileType, photo.fileExtension != type { return false }
-                let m = meta(photo)
+                let m = metaByPath[path] ?? PhotoMeta()
                 if f.minRating > 0, m.rating < f.minRating { return false }
                 if let label = f.label, m.label != label { return false }
                 if f.favoritesOnly, !m.favorite { return false }
                 if f.hideRejected, m.rejected { return false }
-                if f.gpsOnly, !(exif[photo.url.path]?.hasGPS ?? false) { return false }
-                if let camera = f.camera, exif[photo.url.path]?.cameraDisplay != camera { return false }
+                if f.gpsOnly, !(exif[path]?.hasGPS ?? false) { return false }
+                if let camera = f.camera, exif[path]?.cameraDisplay != camera { return false }
             }
             if !query.isEmpty {
                 let matches = (names[photo.url]?.contains(query) ?? false)
-                    || meta(photo).tags.contains { $0.lowercased().contains(query) }
-                    || (exif[photo.url.path]?.cameraDisplay?.lowercased().contains(query) ?? false)
+                    || (tags[path]?.contains { $0.contains(query) } ?? false)
+                    || (cams[path]?.contains(query) ?? false)
                 if !matches { return false }
             }
             return true
         }
+    }
+
+    // Pre-lowercased camera names for search, rebuilt only when the EXIF index
+    // changes — never per keystroke, never per photo.
+    @ObservationIgnored private var lowerCameraCache: [String: String] = [:]
+    @ObservationIgnored private var lowerCameraKey = -1
+    @ObservationIgnored private var lowerCameras: [String: String] {
+        if indexVersion == lowerCameraKey { return lowerCameraCache }
+        lowerCameraCache = exif.compactMapValues { $0.cameraDisplay?.lowercased() }
+        lowerCameraKey = indexVersion
+        return lowerCameraCache
     }
 
     /// The active sort as a Sendable closure, so large scopes — including
@@ -641,30 +701,82 @@ final class AppModel {
         }
     }
 
-    /// Final ordered list shown in the detail area. Small scopes sort inline;
-    /// large ones sort off the main thread to keep navigation snappy.
+    /// Final ordered list shown in the detail area. Small scopes filter + sort
+    /// inline; large ones run BOTH off the main thread (filtering 67k photos
+    /// for a search measured 380-430ms — as costly as the sort it preceded).
     var visiblePhotos: [Photo] {
         let key = visibleSignature
         if let hit = visibleCacheMap[key] { lastVisible = hit; return hit }
 
-        let gathered = Perf.time("visiblePhotos.gather") { gatherUnsorted() }
+        let base = scoped(sourcePhotos)
         let sorter = currentSorter()
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let f = filter
+        let needsPass = f.isActive || !query.isEmpty
+        // Value snapshots for the (possibly off-main) pass — all COW, no copying.
+        let names = query.isEmpty ? [:] : lowerNames
+        let tags = lowercasedTags(query: query)
+        let metaByPath = needsPass ? store.items : [:]
+        let exifSnapshot = needsPass ? exif : [:]
 
-        if gathered.count <= asyncSortThreshold {
-            let sorted = Perf.time("visiblePhotos.sortInline n=\(gathered.count)") { sorter(gathered) }
+        if base.count <= asyncSortThreshold {
+            // Small scope: camera-name lookups built per-base (O(base), ~ms) —
+            // NOT from the full 67k EXIF index, which costs ~200ms.
+            var cams: [String: String] = [:]
+            if !query.isEmpty {
+                if lowerCameraKey == indexVersion {
+                    cams = lowerCameraCache
+                } else {
+                    for p in base {
+                        let path = p.url.path
+                        if let c = exif[path]?.cameraDisplay { cams[path] = c.lowercased() }
+                    }
+                }
+            }
+            let gathered = needsPass
+                ? Self.filterAndSearch(base, filter: f, query: query, names: names,
+                                       cams: cams, tags: tags, metaByPath: metaByPath, exif: exifSnapshot)
+                : base
+            let sorted = sorter(gathered)
             cacheVisible(key, sorted)
             lastVisible = sorted
             return sorted
         }
 
-        // Large: sort off-main; show the previous list + spinner until ready.
+        // Large: filter + sort off-main; show the previous list + spinner until
+        // ready. The lowercased-camera lookup is built inside the detached task
+        // too (lowercasing 67k EXIF entries measured ~200ms on the main thread),
+        // then installed back into the cache for subsequent keystrokes.
         if sortInFlightKey != key {
             sortInFlightKey = key
             sortTask?.cancel()
+            let camsCached = (!query.isEmpty && lowerCameraKey == indexVersion) ? lowerCameraCache : nil
+            let indexVersionSnapshot = indexVersion
+            let wantsCams = !query.isEmpty
             sortTask = Task { [weak self] in
                 await MainActor.run { self?.isSortingVisible = true }
-                let sorted = await Task.detached(priority: .userInitiated) { sorter(gathered) }.value
+                let (sorted, builtCams) = await Task.detached(priority: .userInitiated) {
+                    () -> ([Photo], [String: String]?) in
+                    var cams: [String: String] = [:]
+                    var built: [String: String]?
+                    if wantsCams {
+                        if let camsCached { cams = camsCached }
+                        else {
+                            cams = exifSnapshot.compactMapValues { $0.cameraDisplay?.lowercased() }
+                            built = cams
+                        }
+                    }
+                    let gathered = needsPass
+                        ? AppModel.filterAndSearch(base, filter: f, query: query, names: names,
+                                                   cams: cams, tags: tags, metaByPath: metaByPath, exif: exifSnapshot)
+                        : base
+                    return (sorter(gathered), built)
+                }.value
                 guard let self else { return }
+                if let builtCams, self.indexVersion == indexVersionSnapshot {
+                    self.lowerCameraCache = builtCams
+                    self.lowerCameraKey = indexVersionSnapshot
+                }
                 if self.visibleSignature == key {
                     self.cacheVisible(key, sorted)
                     self.lastVisible = sorted
@@ -690,13 +802,20 @@ final class AppModel {
 
     var stats: LibraryStats {
         if libraryVersion == statsCacheKey { return statsCache }
-        let _t0 = CACurrentMediaTime(); defer { if Perf.on { NSLog("[LumenPerf] stats.recompute %.2fms", (CACurrentMediaTime() - _t0) * 1000) } }
+        statsCache = Self.computeStats(allPhotos)
+        statsCacheKey = libraryVersion
+        return statsCache
+    }
 
+    /// Pure stats pass — Calendar.dateComponents per photo costs ~100ms at 67k,
+    /// so the library-load and reconcile paths run this off-main and install
+    /// the result, keeping the first post-load sidebar body cheap.
+    nonisolated private static func computeStats(_ photos: [Photo]) -> LibraryStats {
         var s = LibraryStats()
         let cal = Calendar.current
         let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
         let today = cal.dateComponents([.month, .day], from: Date())
-        for photo in allPhotos {
+        for photo in photos {
             s.folderCounts[photo.folderURL, default: 0] += 1
             if let date = photo.creationDate {
                 if date >= cutoff { s.recentlyAdded += 1 }
@@ -704,9 +823,13 @@ final class AppModel {
                 if c.month == today.month && c.day == today.day { s.onThisDay += 1 }
             }
         }
+        return s
+    }
+
+    /// Adopt stats that were computed off-main for the CURRENT library content.
+    private func installStats(_ s: LibraryStats) {
         statsCache = s
         statsCacheKey = libraryVersion
-        return s
     }
 
     // MARK: - Folder tree
@@ -744,11 +867,13 @@ final class AppModel {
             }
         }
 
-        // Build a parent → children map once (O(folders)).
+        // Build a parent → children map once (O(folders) — a linear
+        // contains(where:) here made this O(folders²), ~100ms at 600 folders).
+        let nodePaths = Set(nodeURLs.map(\.path))
         var childrenMap: [String: [URL]] = [:]
         for url in nodeURLs {
             let parent = url.deletingLastPathComponent().path
-            if nodeURLs.contains(where: { $0.path == parent }) {
+            if nodePaths.contains(parent) {
                 childrenMap[parent, default: []].append(url)
             }
         }
@@ -782,7 +907,6 @@ final class AppModel {
            cached.revision == visibleResultRevision {
             return cached.groups
         }
-        let _t0 = CACurrentMediaTime(); defer { if Perf.on { NSLog("[LumenPerf] monthGroups.recompute n=%d %.2fms", photos.count, (CACurrentMediaTime() - _t0) * 1000) } }
         let cal = Calendar.current
         let grouped = Dictionary(grouping: photos) { photo -> Date in
             let date = photo.creationDate ?? .distantPast
@@ -869,7 +993,41 @@ final class AppModel {
 
     // MARK: - Selection
 
-    var selectedPhotos: [Photo] { Perf.time("selectedPhotos n=\(allPhotos.count)") { allPhotos.filter { selection.contains($0.id) } } }
+    /// O(selection) via the id index — scanning all 60k+ photos per access made
+    /// every selection change cost ~20ms × several body evals (measured 40-67ms
+    /// per InspectorView body). Sorted by path so batch actions (rename, export)
+    /// keep a stable, file-system-like order. Paths are extracted once before
+    /// sorting: URL.path allocates per call, and localizedStandardCompare inside
+    /// the sort measured 33ms for a 500-photo selection.
+    /// Cached per (selection, library) — InspectorView reads this twice per body
+    /// eval, and a select-all of 67k measured 170ms per uncached access.
+    @ObservationIgnored private var selectedPhotosCache: [Photo] = []
+    @ObservationIgnored private var selectedPhotosCacheKey = (-1, -1, -1)
+    var selectedPhotos: [Photo] {
+        let key = (selectionRevision, libraryVersion, assetsVersion)
+        if selectedPhotosCacheKey == key { return selectedPhotosCache }
+        let result = computeSelectedPhotos()
+        selectedPhotosCache = result
+        selectedPhotosCacheKey = key
+        return result
+    }
+
+    private func computeSelectedPhotos() -> [Photo] {
+        // Big selection (e.g. ⌘A on a 67k scope): one pass over the visible
+        // list keeps display order and skips the per-item sort.
+        if selection.count > 5000 {
+            let result = visiblePhotos.filter { selection.contains($0.id) }
+            if result.count == selection.count { return result }
+            // Selected ids outside the current scope — fall through.
+        }
+        let index = photoByID
+        return selection.compactMap { id -> (String, Photo)? in
+            guard let p = index[id] else { return nil }
+            return (p.url.path, p)
+        }
+        .sorted { $0.0 < $1.0 }
+        .map { $0.1 }
+    }
 
     // O(1) photo lookup by id, rebuilt only when the library or Photos assets
     // change. Includes Apple Photos assets (library + the open album) so the
@@ -888,6 +1046,39 @@ final class AppModel {
     }
 
     func photo(for id: Photo.ID) -> Photo? { photoByID[id] }
+
+    /// Per-library derived indexes, precomputed off-main on load/reconcile so
+    /// their first on-main access doesn't stall: id lookup (~25ms), folder
+    /// index (~150ms on first folder click), lowercased names for search
+    /// (~100ms on first keystroke) — all measured at 67k photos.
+    private struct DerivedIndexes: Sendable {
+        var byID: [URL: Photo] = [:]
+        var byFolder: [String: [Photo]] = [:]
+        var lowerNames: [URL: String] = [:]
+    }
+
+    nonisolated private static func computeDerivedIndexes(_ photos: [Photo]) -> DerivedIndexes {
+        var d = DerivedIndexes()
+        d.byID = Dictionary(photos.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
+        d.byFolder = Dictionary(grouping: photos) { $0.folderURL.path }
+        d.lowerNames = Dictionary(photos.map { ($0.url, $0.filename.lowercased()) },
+                                  uniquingKeysWith: { a, _ in a })
+        return d
+    }
+
+    private func installDerivedIndexes(_ d: DerivedIndexes) {
+        // photoByID also merges Photos-library assets — only install the
+        // file-photo base when no assets are loaded; otherwise let the getter
+        // rebuild lazily (assets keep their own version key).
+        if assetPhotos.isEmpty, assetAlbumPhotos.isEmpty {
+            idIndexCache = d.byID
+            idIndexKey = (libraryVersion, assetsVersion)
+        }
+        folderIndexCache = d.byFolder
+        folderIndexKey = libraryVersion
+        lowerNameCache = d.lowerNames
+        lowerNameKey = libraryVersion
+    }
 
     // Photos grouped by their immediate folder, so folder scope is O(result)
     // instead of an O(library) prefix scan on every folder click.
@@ -995,27 +1186,27 @@ final class AppModel {
         return root.path.hasPrefix("/Volumes/")
     }
 
-    private func reconcile(roots: [URL]) async {
-        guard !roots.isEmpty else { return }
+    /// Everything reconcile needs to apply, computed off the main thread —
+    /// diffing 67k photos (URL sets, path-prefix scans) measured 2.4-3s when it
+    /// ran on the main actor, freezing the app ~40s after launch.
+    private struct ReconcileDiff: Sendable {
+        var scanned: [Photo] = []
+        var added: [Photo] = []
+        var removedPaths: [String] = []   // removed + prunedLocal, for exif/duplicates cleanup
+        var offline: [Photo] = []
+        var hasChanges = false
+        var stats = LibraryStats()        // for the post-apply library, precomputed off-main
+        var indexes = DerivedIndexes()    // ditto
+    }
 
-        // Incremental: reuse cached photos for folders whose mtime is unchanged.
-        let cachedByFolder = Dictionary(grouping: allPhotos) { $0.folderURL.path }
-        let knownMtimes = LibraryCache.loadFolderMtimes()
-        let result = await Task.detached(priority: .utility) {
-            IncrementalScanner.scan(roots: roots, knownMtimes: knownMtimes, cachedByFolder: cachedByFolder)
-        }.value
-        let scanned = result.photos
-        Task.detached(priority: .background) { LibraryCache.saveFolderMtimes(result.folderMtimes) }
-
+    nonisolated private static func computeReconcileDiff(
+        current: [Photo], scanned: [Photo], roots: [URL], rootFolders: [URL]
+    ) -> ReconcileDiff {
         let prefixes = roots.map { $0.path.hasSuffix("/") ? $0.path : $0.path + "/" }
-        func underScannedRoot(_ photo: Photo) -> Bool {
-            prefixes.contains { photo.url.path.hasPrefix($0) }
-        }
 
-        let knownURLs = Set(allPhotos.map { $0.url })
+        let knownURLs = Set(current.map { $0.url })
         let added = scanned.filter { !knownURLs.contains($0.url) }
         let scannedURLs = Set(scanned.map { $0.url })
-        let removed = allPhotos.filter { underScannedRoot($0) && !scannedURLs.contains($0.url) }
 
         // Photos not under any *currently scanned* root split into two groups:
         //   • genuinely offline — their root is an unreachable network/NAS volume
@@ -1026,23 +1217,75 @@ final class AppModel {
         //     Prune them (the new paths come back in as `added`).
         let missingRoots = rootFolders.filter { !roots.contains($0) }
         let preservableRoots = missingRoots.filter(Self.isOfflineNetworkRoot)
-        func isPreservableOffline(_ photo: Photo) -> Bool {
-            preservableRoots.contains { photo.url.path.hasPrefix($0.path + "/") }
+
+        var diff = ReconcileDiff(scanned: scanned, added: added)
+        var offline: [Photo] = []
+        var removedPaths: [String] = []
+        for photo in current {
+            let path = photo.url.path   // computed once per photo
+            if prefixes.contains(where: { path.hasPrefix($0) }) {
+                if !scannedURLs.contains(photo.url) { removedPaths.append(path) }
+            } else if preservableRoots.contains(where: { path.hasPrefix($0.path + "/") }) {
+                offline.append(photo)
+            } else {
+                removedPaths.append(path)   // orphaned local root — prune
+            }
         }
-        let offline = allPhotos.filter { !underScannedRoot($0) && isPreservableOffline($0) }
-        let prunedLocal = allPhotos.filter { !underScannedRoot($0) && !isPreservableOffline($0) }
+        diff.offline = offline
+        diff.removedPaths = removedPaths
+        diff.hasChanges = !added.isEmpty || !removedPaths.isEmpty
+        if diff.hasChanges {
+            let next = offline + scanned
+            diff.stats = computeStats(next)
+            diff.indexes = computeDerivedIndexes(next)
+        }
+        return diff
+    }
+
+    private func reconcile(roots: [URL]) async {
+        guard !roots.isEmpty else { return }
+
+        // Incremental: reuse cached photos for folders whose mtime is unchanged.
+        // The folder index is the same grouping, precomputed off-main at load —
+        // grouping 67k photos here measured ~145ms on the main thread.
+        let cachedByFolder = directPhotosByFolder
+        let result = await Task.detached(priority: .utility) {
+            let knownMtimes = LibraryCache.loadFolderMtimes()
+            let r = IncrementalScanner.scan(roots: roots, knownMtimes: knownMtimes, cachedByFolder: cachedByFolder)
+            LibraryCache.saveFolderMtimes(r.folderMtimes)
+            return r
+        }.value
+        let scanned = result.photos
+
+        // Diff off-main against a snapshot; retry if the library was edited
+        // while the diff was being computed (rare — the diff takes <1s).
+        var diff = ReconcileDiff()
+        for _ in 0..<3 {
+            let snapshotVersion = libraryVersion
+            let current = allPhotos
+            let currentRoots = rootFolders
+            diff = await Task.detached(priority: .userInitiated) {
+                Self.computeReconcileDiff(current: current, scanned: scanned,
+                                          roots: roots, rootFolders: currentRoots)
+            }.value
+            if libraryVersion == snapshotVersion { break }
+        }
+
+        let missingRoots = rootFolders.filter { !roots.contains($0) }
 
         // Only mutate the library when something actually changed — otherwise a
         // no-op launch reconcile would bump the version and force the grid to
         // reload (throwing away in-flight thumbnail decodes).
-        if !added.isEmpty || !removed.isEmpty || !prunedLocal.isEmpty {
-            let dropped = removed + prunedLocal
-            for photo in dropped { exif.removeValue(forKey: photo.url.path) }
-            duplicatePaths.subtract(dropped.map { $0.url.path })
-            allPhotos = offline + scanned
+        if diff.hasChanges {
+            for path in diff.removedPaths { exif.removeValue(forKey: path) }
+            duplicatePaths.subtract(diff.removedPaths)
+            allPhotos = diff.offline + diff.scanned
+            installStats(diff.stats)
+            installDerivedIndexes(diff.indexes)
             recomputeMetaCounts()
             persistLibraryCache()
         }
+        let added = diff.added
 
         // Forget vanished *local* roots so they stop being re-watched/persisted
         // and disappear from the sidebar. Network roots stay — they may remount.
@@ -1077,20 +1320,30 @@ final class AppModel {
     /// progressively rather than appearing all at once after a long stall.
     func ensureExifIndex() {
         guard !isIndexingExif else { return }
-        let missing = allPhotos.filter { exif[$0.url.path] == nil }
-        guard !missing.isEmpty else { return }
-        isIndexingExif = true
+        isIndexingExif = true   // claimed before the off-main prep so re-entry no-ops
+        let photos = allPhotos
+        let snapshot = exif
+        Task {
+            // Finding un-indexed photos scans the whole library (a path string +
+            // dictionary lookup per photo — ~90ms at 67k), so it runs off-main.
+            // Fast local disk before the (slow) NAS, so results appear quickly
+            // and the user never waits on the network for nearby photos. The
+            // boundary also drives the "Local disk / NAS" status label.
+            let (urls, localCount) = await Task.detached(priority: .utility) { () -> ([URL], Int) in
+                let missing = photos.filter { snapshot[$0.url.path] == nil }
+                guard !missing.isEmpty else { return ([], 0) }
+                let networkPrefixes = AppModel.networkVolumePrefixes()
+                let isNetwork = { (url: URL) in networkPrefixes.contains { url.path.hasPrefix($0) } }
+                let localURLs = missing.map { $0.url }.filter { !isNetwork($0) }
+                let networkURLs = missing.map { $0.url }.filter { isNetwork($0) }
+                return (localURLs + networkURLs, localURLs.count)
+            }.value
+            guard !urls.isEmpty else { isIndexingExif = false; return }
+            startExifIndexing(urls: urls, localCount: localCount)
+        }
+    }
 
-        // Fast local disk before the (slow) NAS, so results appear quickly and
-        // the user never waits on the network for nearby photos. The boundary
-        // also drives the "Local disk / NAS" status label.
-        let networkPrefixes = Self.networkVolumePrefixes()
-        let isNetwork = { (url: URL) in networkPrefixes.contains { url.path.hasPrefix($0) } }
-        let localURLs = missing.map { $0.url }.filter { !isNetwork($0) }
-        let networkURLs = missing.map { $0.url }.filter { isNetwork($0) }
-        let urls = localURLs + networkURLs
-        let localCount = localURLs.count
-
+    private func startExifIndexing(urls: [URL], localCount: Int) {
         // Report progress against the WHOLE library, not just this session's
         // remaining work — so the counter resumes from what's already cached
         // (e.g. local photos done on a prior launch) instead of restarting at 0.
@@ -1593,7 +1846,15 @@ final class AppModel {
             let cached = await Task.detached(priority: .userInitiated) { LibraryCache.loadPhotos() }.value
             let cachedExif = await Task.detached(priority: .userInitiated) { LibraryCache.loadExif() }.value
             if let cached, !cached.isEmpty {
+                // Stats + derived indexes precomputed off-main so the sidebar's
+                // first body, first folder click, and first search after the
+                // library lands don't pay their one-time recomputes on main.
+                let (stats, indexes) = await Task.detached(priority: .userInitiated) {
+                    (Self.computeStats(cached), Self.computeDerivedIndexes(cached))
+                }.value
                 allPhotos = cached
+                installStats(stats)
+                installDerivedIndexes(indexes)
                 if let cachedExif { exif = cachedExif }
                 recomputeMetaCounts()
             }

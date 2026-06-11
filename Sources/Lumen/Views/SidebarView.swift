@@ -10,7 +10,7 @@ struct SidebarView: View {
     @State private var expandedFolders: Set<URL> = []
 
     var body: some View {
-        Perf.body("SidebarView") { List(selection: Binding(
+        List(selection: Binding(
             get: { model.selectedSidebar },
             set: { if let value = $0 { model.selectedSidebar = value } }
         )) {
@@ -35,7 +35,6 @@ struct SidebarView: View {
             AlbumNameSheet(title: "Rename Album", confirmLabel: "Rename", text: $renameText) {
                 model.renameAlbum(album.id, to: renameText)
             }
-        }
         }
     }
 
@@ -173,10 +172,9 @@ struct SidebarView: View {
                         FolderTreeNode(node: node, expanded: $expandedFolders)
                     }
                 } else {
-                    let folders = folderCounts.keys.sorted {
-                        $0.path.localizedStandardCompare($1.path) == .orderedAscending
-                    }
-                    ForEach(folders, id: \.self) { url in
+                    // Pre-sorted + cached in the model — re-sorting here ran on
+                    // every sidebar body evaluation.
+                    ForEach(model.photoFolders, id: \.self) { url in
                         row(.folder(url), url.lastPathComponent, .secondary, count: folderCounts[url] ?? 0)
                             .contextMenu { FolderContextMenu(url: url) }
                     }

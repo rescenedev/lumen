@@ -219,41 +219,53 @@ final class ThumbnailCache {
     /// file's known mtime so we don't stat the NAS just to check the cache key.
     /// `progress(remaining, currentFolder)` is reported on the main thread,
     /// time-throttled (~3×/sec) so the count is seen moving.
+    // Generation guard: a newer warmDiskCache call invalidates the off-thread
+    // todo-filter of an older one, so stale entries are never enqueued.
+    private let warmGeneration = Counter(0)
+
     func warmDiskCache(_ entries: [(url: URL, mtime: TimeInterval)],
                        maxPixel: Int = gridMaxPixel,
                        progress: @escaping (Int, String?) -> Void) {
         warmQueue.cancelAllOperations()
+        let generation = warmGeneration.bump()
 
-        // Skip files already on disk (cheap local stat, no NAS read).
-        let todo = entries.filter { !FileManager.default.fileExists(atPath: diskURL($0.url, maxPixel, mtime: $0.mtime).path) }
-        let total = todo.count
-        guard total > 0 else { DispatchQueue.main.async { progress(0, nil) }; return }
+        // Filtering already-cached files means a SHA256 + stat per photo —
+        // ~3s for 67k entries, measured as a main-thread freeze when this ran
+        // on the caller. Do it off-thread, then enqueue the decode operations.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            let todo = entries.filter { !FileManager.default.fileExists(atPath: self.diskURL($0.url, maxPixel, mtime: $0.mtime).path) }
+            guard self.warmGeneration.value == generation else { return }   // superseded
+            let total = todo.count
+            guard total > 0 else { DispatchQueue.main.async { progress(0, nil) }; return }
 
-        let counter = Counter(total)
-        DispatchQueue.main.async { progress(total, todo.first?.url.deletingLastPathComponent().lastPathComponent) }
+            let counter = Counter(total)
+            DispatchQueue.main.async { progress(total, todo.first?.url.deletingLastPathComponent().lastPathComponent) }
 
-        for entry in todo {
-            let disk = diskURL(entry.url, maxPixel, mtime: entry.mtime)
-            let op = BlockOperation()
-            op.queuePriority = .low
-            op.addExecutionBlock { [weak self, weak op] in
-                guard let self, op?.isCancelled == false else { return }
-                if self.trickleMode {   // window closed — idle pace, sleep is 0% CPU
-                    Thread.sleep(forTimeInterval: self.trickleDelay)
-                    guard op?.isCancelled == false else { return }
+            for entry in todo {
+                let disk = self.diskURL(entry.url, maxPixel, mtime: entry.mtime)
+                let op = BlockOperation()
+                op.queuePriority = .low
+                op.addExecutionBlock { [weak self, weak op] in
+                    guard let self, op?.isCancelled == false else { return }
+                    if self.trickleMode {   // window closed — idle pace, sleep is 0% CPU
+                        Thread.sleep(forTimeInterval: self.trickleDelay)
+                        guard op?.isCancelled == false else { return }
+                    }
+                    if !FileManager.default.fileExists(atPath: disk.path) {
+                        var image = Self.downsample(url: entry.url, maxPixel: maxPixel)
+                        if image == nil { image = QuickLookThumbnailer.thumbnail(for: entry.url, maxPixel: maxPixel) }
+                        if let image { self.writeDisk(image, to: disk) }   // disk only — don't evict memory
+                    }
+                    let (left, push) = counter.tick()
+                    if push || left == 0 {
+                        let folder = entry.url.deletingLastPathComponent().lastPathComponent
+                        DispatchQueue.main.async { progress(left, left == 0 ? nil : folder) }
+                    }
                 }
-                if !FileManager.default.fileExists(atPath: disk.path) {
-                    var image = Self.downsample(url: entry.url, maxPixel: maxPixel)
-                    if image == nil { image = QuickLookThumbnailer.thumbnail(for: entry.url, maxPixel: maxPixel) }
-                    if let image { self.writeDisk(image, to: disk) }   // disk only — don't evict memory
-                }
-                let (left, push) = counter.tick()
-                if push || left == 0 {
-                    let folder = entry.url.deletingLastPathComponent().lastPathComponent
-                    DispatchQueue.main.async { progress(left, left == 0 ? nil : folder) }
-                }
+                guard self.warmGeneration.value == generation else { return }   // superseded mid-enqueue
+                self.warmQueue.addOperation(op)
             }
-            warmQueue.addOperation(op)
         }
     }
 
@@ -271,17 +283,20 @@ final class ThumbnailCache {
     }
 
     /// Thread-safe countdown with a time-throttled "should I publish?" flag.
+    /// Also doubles as a plain atomic counter (`bump`/`value`) for generations.
     private final class Counter: @unchecked Sendable {
-        private var value: Int
+        private var count: Int
         private var lastPush: CFAbsoluteTime = 0
         private let lock = NSLock()
-        init(_ value: Int) { self.value = value }
+        init(_ value: Int) { self.count = value }
+        var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+        func bump() -> Int { lock.lock(); defer { lock.unlock() }; count += 1; return count }
         func tick() -> (remaining: Int, push: Bool) {
             lock.lock(); defer { lock.unlock() }
-            value -= 1
+            count -= 1
             let now = CFAbsoluteTimeGetCurrent()
-            if now - lastPush > 0.3 { lastPush = now; return (value, true) }
-            return (value, false)
+            if now - lastPush > 0.3 { lastPush = now; return (count, true) }
+            return (count, false)
         }
     }
 
