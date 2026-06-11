@@ -505,6 +505,16 @@ struct OrganizeScope: Identifiable, Hashable {
         await addAssets([asset], to: c)
     }
 
+    /// Undo helper: pull a photo back out of the Lumen album. Never creates the
+    /// album — if it doesn't exist, there's nothing to remove from.
+    func removeFromLumen(_ asset: PHAsset) async {
+        if lumenCollection == nil { lumenCollection = albums.first(where: { $0.localizedTitle == "Lumen" }) }
+        guard let c = lumenCollection else { return }
+        try? await PHPhotoLibrary.shared().performChanges {
+            PHAssetCollectionChangeRequest(for: c)?.removeAssets([asset] as NSArray)
+        }
+    }
+
     /// Square thumbnail for the grid. `.highQualityFormat` → exactly one callback
     /// (safe to bridge to a continuation).
     func thumbnail(_ asset: PHAsset, points: CGFloat) async -> UIImage? {

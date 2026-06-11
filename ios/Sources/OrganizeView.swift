@@ -1,16 +1,22 @@
 import SwiftUI
 import Photos
 
-private enum Decision { case keep, trash }
+private typealias Decision = OrganizeSession.Decision
 
 /// What the brief centered confirmation shows after an action.
 private enum Flash {
-    case keep, trash, favorite, unfavorite
+    case keep, trash, favorite, unfavorite, undo
     var text: String {
-        switch self { case .keep: "보관"; case .trash: "삭제"; case .favorite: "즐겨찾기"; case .unfavorite: "즐겨찾기 해제" }
+        switch self {
+        case .keep: "보관"; case .trash: "삭제"; case .favorite: "즐겨찾기"
+        case .unfavorite: "즐겨찾기 해제"; case .undo: "되돌림"
+        }
     }
     var icon: String {
-        switch self { case .keep: "rectangle.stack.fill"; case .trash: "trash.fill"; case .favorite: "star.fill"; case .unfavorite: "star.slash.fill" }
+        switch self {
+        case .keep: "rectangle.stack.fill"; case .trash: "trash.fill"; case .favorite: "star.fill"
+        case .unfavorite: "star.slash.fill"; case .undo: "arrow.uturn.backward"
+        }
     }
 }
 
@@ -35,7 +41,7 @@ struct OrganizeView: View {
         _index = State(initialValue: min(max(startIndex, 0), max(s.count - 1, 0)))
     }
     @State private var offset: CGSize = .zero
-    @State private var decisions: [Int: Decision] = [:]   // index → keep/trash
+    @State private var session = OrganizeSession()         // decisions + undo history
     @State private var finished = false
     @State private var flash: Flash?                      // brief action confirmation
     @State private var currentIsFav = false               // live favorite state of the shown photo
@@ -58,8 +64,8 @@ struct OrganizeView: View {
     private var isZoomed: Bool { zoom > 1.01 }
 
     private var count: Int { source.count }
-    private var keepCount: Int { decisions.values.filter { $0 == .keep }.count }
-    private var trashAssets: [PHAsset] { decisions.compactMap { $0.value == .trash ? source.asset($0.key) : nil } }
+    private var keepCount: Int { session.keepCount }
+    private var trashAssets: [PHAsset] { session.trashIndices.map { source.asset($0) } }
 
     var body: some View {
         ZStack {
@@ -246,7 +252,7 @@ struct OrganizeView: View {
                 Text("\(index + 1) / \(count)").font(.subheadline.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 6)
                     .background(.ultraThinMaterial, in: Capsule())
-                if let d = decisions[index] {
+                if let d = session.decision(at: index) {
                     Text(d == .keep ? "보관됨" : "삭제 예정").font(.caption.weight(.medium))
                         .foregroundStyle(.white.opacity(0.85))
                         .padding(.horizontal, 10).padding(.vertical, 4)
@@ -259,6 +265,13 @@ struct OrganizeView: View {
                         .frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
                 }
                 Spacer()
+                if session.canUndo {
+                    Button { undoLast() } label: {
+                        Image(systemName: "arrow.uturn.backward").font(.headline.bold()).foregroundStyle(.white)
+                            .frame(width: 38, height: 38).background(.ultraThinMaterial, in: Circle())
+                    }
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8)
@@ -377,7 +390,7 @@ struct OrganizeView: View {
     private func decide(_ d: Decision) {
         guard index < count else { return }
         let a = source.asset(index)
-        decisions[index] = d
+        session.decide(d, at: index)
         if d == .keep { Task { await library.addToLumen(a) } }   // file into Lumen, live
         tick += 1
         showFlash(d == .keep ? .keep : .trash)
@@ -387,7 +400,7 @@ struct OrganizeView: View {
     /// Up-swipe: mark the photo for deletion and fly it up.
     private func trashFromSwipe() {
         guard index < count else { return }
-        decisions[index] = .trash
+        session.decide(.trash, at: index)
         tick += 1
         showFlash(.trash)
         flyAndAdvance(CGSize(width: 0, height: -1200))
@@ -397,6 +410,7 @@ struct OrganizeView: View {
     private func favorite() {
         guard index < count else { return }
         let a = source.asset(index)
+        session.recordFavorite(at: index, assetID: a.localIdentifier, wasFavorite: currentIsFav)
         let newValue = !currentIsFav
         favOverrides[a.localIdentifier] = newValue
         library.bumpFavorite(a, added: newValue)   // instant home update
@@ -405,6 +419,29 @@ struct OrganizeView: View {
         tick += 1
         showFlash(newValue ? .favorite : .unfavorite)
         flyAndAdvance(CGSize(width: 0, height: -1200))
+    }
+
+    /// Undo the most recent action: restore the decision table, revert the side
+    /// effect (Lumen filing / favorite toggle), and jump back to that photo.
+    private func undoLast() {
+        commitPendingStep()
+        guard let action = session.undo() else { return }
+        switch action {
+        case .decide(let i, let d, let previous):
+            // Only pull the photo back out of Lumen if THIS action put it there.
+            if d == .keep, previous != .keep {
+                let a = source.asset(i)
+                Task { await library.removeFromLumen(a) }
+            }
+        case .favorite(let i, let id, let wasFavorite):
+            favOverrides[id] = wasFavorite
+            let a = source.asset(i)
+            library.bumpFavorite(a, added: wasFavorite)
+            Task { try? await PHPhotoLibrary.shared().performChanges { PHAssetChangeRequest(for: a).isFavorite = wasFavorite } }
+        }
+        withAnimation(.spring(response: 0.3)) { index = action.index; offset = .zero }
+        tick += 1
+        showFlash(.undo)
     }
 
     /// Fly the current card out, then step to the next photo (or finish at the end).
