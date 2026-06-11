@@ -20,5 +20,6 @@ photoAssetTests()
 imageEditorTests()
 incrementalScannerTests()
 thumbnailCacheTests()
+libraryCacheTests()
 
 exit(Harness.finish())

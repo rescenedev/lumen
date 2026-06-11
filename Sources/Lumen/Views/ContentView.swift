@@ -72,6 +72,27 @@ struct ContentView: View {
         .task { model.checkForUpdates() }
     }
 
+    /// Blank while the cached library loads (sub-second on a warm cache) — the
+    /// spinner only appears when loading genuinely drags (first scan, cold
+    /// NAS), so a routine launch never flashes a loading state.
+    private struct LibraryLoadingPlaceholder: View {
+        @State private var showSpinner = false
+
+        var body: some View {
+            ZStack {
+                if showSpinner {
+                    ProgressView("Loading your photos…")
+                        .transition(.opacity)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .task {
+                try? await Task.sleep(for: .milliseconds(900))
+                withAnimation(.easeIn(duration: 0.2)) { showSpinner = true }
+            }
+        }
+    }
+
     @ViewBuilder
     private var toastBanner: some View {
         if let toast = model.toast {
@@ -93,8 +114,7 @@ struct ContentView: View {
             photosLibraryContent
         } else if model.totalCount == 0 {
             if model.isLoadingLibrary {
-                ProgressView("Loading your photos…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                LibraryLoadingPlaceholder()
             } else {
                 EmptyStateView()
             }

@@ -832,6 +832,33 @@ final class AppModel {
         statsCacheKey = libraryVersion
     }
 
+    /// The date-derived half of LibraryStats (the Calendar.dateComponents loop,
+    /// ~110ms at 67k) — split out so the launch path can run it CONCURRENTLY
+    /// with the index build; folderCounts comes free from the folder index.
+    nonisolated private static func computeDateStats(_ photos: [Photo]) -> (recentlyAdded: Int, onThisDay: Int) {
+        let cal = Calendar.current
+        let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
+        let today = cal.dateComponents([.month, .day], from: Date())
+        var recent = 0, otd = 0
+        for photo in photos {
+            guard let date = photo.creationDate else { continue }
+            if date >= cutoff { recent += 1 }
+            let c = cal.dateComponents([.month, .day], from: date)
+            if c.month == today.month && c.day == today.day { otd += 1 }
+        }
+        return (recent, otd)
+    }
+
+    /// folderCounts derived from the (already grouped) folder index — one URL
+    /// per folder via a member photo's folderURL, so keys normalize exactly
+    /// like every other folderURL use. (Never URL(fileURLWithPath:) — it stats
+    /// the path, ~7ms each on a NAS.)
+    nonisolated private static func folderCounts(from byFolder: [String: [Photo]]) -> [URL: Int] {
+        Dictionary(uniqueKeysWithValues: byFolder.compactMap { _, photos in
+            photos.first.map { ($0.folderURL, photos.count) }
+        })
+    }
+
     // MARK: - Folder tree
 
     @ObservationIgnored private var folderTreeCache: [FolderNode] = []
@@ -1060,7 +1087,17 @@ final class AppModel {
     nonisolated private static func computeDerivedIndexes(_ photos: [Photo]) -> DerivedIndexes {
         var d = DerivedIndexes()
         d.byID = Dictionary(photos.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
-        d.byFolder = Dictionary(grouping: photos) { $0.folderURL.path }
+        // Parent path by string slicing — equivalent to folderURL.path for the
+        // absolute file URLs we store, and ~4x faster than going through
+        // URL.deletingLastPathComponent (179ms → ~40ms at 67k, measured;
+        // this build gates the launch spinner).
+        d.byFolder = Dictionary(grouping: photos) { photo in
+            let path = photo.url.path
+            if let slash = path.lastIndex(of: "/"), slash != path.startIndex {
+                return String(path[..<slash])
+            }
+            return photo.folderURL.path
+        }
         d.lowerNames = Dictionary(photos.map { ($0.url, $0.filename.lowercased()) },
                                   uniquingKeysWith: { a, _ in a })
         return d
@@ -1841,37 +1878,67 @@ final class AppModel {
         rootFolders = urls
         isLoadingLibrary = true
 
-        // Window appears immediately; load the cached library off the main thread.
-        Task {
-            let cached = await Task.detached(priority: .userInitiated) { LibraryCache.loadPhotos() }.value
-            let cachedExif = await Task.detached(priority: .userInitiated) { LibraryCache.loadExif() }.value
-            if let cached, !cached.isEmpty {
-                // Stats + derived indexes precomputed off-main so the sidebar's
-                // first body, first folder click, and first search after the
-                // library lands don't pay their one-time recomputes on main.
-                let (stats, indexes) = await Task.detached(priority: .userInitiated) {
-                    (Self.computeStats(cached), Self.computeDerivedIndexes(cached))
-                }.value
-                allPhotos = cached
-                installStats(stats)
-                installDerivedIndexes(indexes)
-                if let cachedExif { exif = cachedExif }
-                recomputeMetaCounts()
+        // Window appears immediately; load the cached library off the main
+        // thread. Everything below is ordered so the grid shows as soon as the
+        // photo list itself is ready (~0.25s of work at 67k) — the launch
+        // spinner used to wait on photos + EXIF + stats SEQUENTIALLY (~1.4s
+        // measured): the EXIF cache (680ms decode) isn't needed to draw the
+        // grid, so it loads after; stats and indexes compute concurrently.
+        // The ENTIRE load pipeline (decode → date stats ∥ indexes) runs detached
+        // from the first instruction: a plain `Task {}` here inherits the main
+        // actor, so even SPAWNING the work sat ~500ms behind the busy launch
+        // main thread (measured). The single hop back to main to install the
+        // result pays that wait exactly once — and overlaps window construction.
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var loaded: ([Photo], (recentlyAdded: Int, onThisDay: Int), DerivedIndexes)?
+            if let cached = LibraryCache.loadPhotos(), !cached.isEmpty {
+                async let dates = Task.detached(priority: .userInitiated) { Self.computeDateStats(cached) }.value
+                let indexes = Self.computeDerivedIndexes(cached)
+                loaded = (cached, await dates, indexes)
             }
-            isLoadingLibrary = false
-
-            // Build the photo-metadata (EXIF) index up front so search, the map,
-            // and camera filters are ready without the user having to trigger it.
-            // Kick off on the cached list immediately — don't wait for the (slow,
-            // NAS) reconcile. Runs at utility priority behind thumbnail warming;
-            // cached so later launches only index newly-added photos.
-            ensureExifIndex()
-
-            let available = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
-            if !available.isEmpty { await reconcile(roots: available) }
-
-            ensureExifIndex()   // catch any photos reconcile newly added
+            guard let self else { return }
+            await self.installLoadedLibrary(loaded)
+            // EXIF (a 680ms decode of its own) loads only after the grid is up —
+            // decoding both caches concurrently slowed the grid-gating decode
+            // ~2x (CPU/allocator contention, measured), and the grid doesn't
+            // need it. Still off-main; installed in the same finish hop.
+            let cachedExif = loaded != nil ? LibraryCache.loadExif() : nil
+            await self.finishLibraryStartup(cachedExif: cachedExif, urls: urls)
         }
+    }
+
+    /// Main-actor landing for the off-main load pipeline: publish the library
+    /// with its precomputed stats/indexes so the sidebar's first body, first
+    /// folder click, and first search never recompute them on the main thread.
+    private func installLoadedLibrary(
+        _ loaded: ([Photo], (recentlyAdded: Int, onThisDay: Int), DerivedIndexes)?
+    ) {
+        if let (cached, dates, indexes) = loaded {
+            allPhotos = cached
+            installStats(LibraryStats(recentlyAdded: dates.recentlyAdded,
+                                      onThisDay: dates.onThisDay,
+                                      folderCounts: Self.folderCounts(from: indexes.byFolder)))
+            installDerivedIndexes(indexes)
+            recomputeMetaCounts()
+        }
+        isLoadingLibrary = false   // grid is on screen from here
+    }
+
+    private func finishLibraryStartup(cachedExif: [String: ExifInfo]?, urls: [URL]) async {
+        if let cachedExif { exif = cachedExif }
+
+        // Build the photo-metadata (EXIF) index up front so search, the map,
+        // and camera filters are ready without the user having to trigger it.
+        // Kick off on the cached list immediately — don't wait for the (slow,
+        // NAS) reconcile. Runs at utility priority behind thumbnail warming;
+        // cached so later launches only index newly-added photos.
+        // (Must run AFTER the cached exif install or it would re-index everything.)
+        ensureExifIndex()
+
+        let available = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        if !available.isEmpty { await reconcile(roots: available) }
+
+        ensureExifIndex()   // catch any photos reconcile newly added
     }
 
     private func loadSettings() {
