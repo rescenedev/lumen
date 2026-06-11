@@ -9,6 +9,7 @@ struct SidebarView: View {
     @State private var photoAlbumsExpanded = false
     @State private var expandedFolders: Set<URL> = []
     @State private var keyMonitor: Any?
+    @State private var hostWindow: NSWindow?
 
     var body: some View {
         List(selection: Binding(
@@ -48,6 +49,10 @@ struct SidebarView: View {
             if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
             keyMonitor = nil
         }
+        // The monitor is app-global; capture the hosting window so events from
+        // other windows (Settings — whose Form is also NSTableView-backed) are
+        // never treated as sidebar input.
+        .background(WindowReader { hostWindow = $0 })
         .sheet(item: $renamingAlbum) { album in
             AlbumNameSheet(title: "Rename Album", confirmLabel: "Rename", text: $renameText) {
                 model.renameAlbum(album.id, to: renameText)
@@ -66,6 +71,8 @@ struct SidebarView: View {
     private func handleSidebarKeyDown(_ event: NSEvent) -> NSEvent? {
         guard event.keyCode == 123 || event.keyCode == 124,   // ← / →
               event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+              model.folderTreeView,
+              let hostWindow, event.window === hostWindow, hostWindow.isKeyWindow,
               case .folder(let url) = model.selectedSidebar,
               model.viewerIndex == nil,
               model.selection.isEmpty
@@ -95,7 +102,8 @@ struct SidebarView: View {
     /// changed when the deferred block runs.
     private func handleSidebarMouseDown(_ event: NSEvent) -> NSEvent? {
         guard model.folderTreeView,
-              let window = event.window,
+              event.clickCount == 1,   // double-clicks would expand-then-collapse
+              let window = event.window, window === hostWindow,
               let root = window.contentView,
               let hit = root.hitTest(root.convert(event.locationInWindow, from: nil))
         else { return event }
@@ -356,5 +364,21 @@ private struct FolderTreeNode: View {
         }
         .tag(SidebarItem.folder(node.url))
         .contextMenu { FolderContextMenu(url: node.url) }
+    }
+}
+
+/// Hands the hosting NSWindow to SwiftUI — used to scope the sidebar's
+/// app-global NSEvent monitor to its own window.
+private struct WindowReader: NSViewRepresentable {
+    let onWindow: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in onWindow(view?.window) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { [weak view] in onWindow(view?.window) }
     }
 }

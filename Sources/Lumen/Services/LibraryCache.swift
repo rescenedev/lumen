@@ -26,7 +26,8 @@ enum LibraryCache {
         guard let photos = loadPhotosLegacyPlist() else { return nil }
         // One-time migration: write the fast format now — waiting for the next
         // library change could leave every launch on the slow plist path.
-        DispatchQueue.global(qos: .utility).async { savePhotos(photos) }
+        // (savePhotos is itself async on the serial save queue.)
+        savePhotos(photos)
         return photos
     }
 
@@ -55,17 +56,26 @@ enum LibraryCache {
         return try? PropertyListDecoder().decode([Photo].self, from: data)
     }
 
+    /// All photo-cache writes funnel through one serial queue so a slow save
+    /// scheduled earlier (e.g. the one-time plist→binary migration) can never
+    /// land after — and silently revert — a newer library state.
+    private static let saveQueue = DispatchQueue(label: "lumen.librarycache.save", qos: .utility)
+
     static func savePhotos(_ photos: [Photo]) {
         // Persist in the launch sort order (date, newest first): launch always
         // starts in .dateNewest, and Swift's adaptive sort makes re-sorting an
         // already-sorted 67k list ~free — so the cached library is grid-ready
         // the moment it decodes. Saving runs in the background; the extra sort
         // here costs nothing user-visible.
-        savePhotosBinary(SortOrder.dateNewest.sorted(photos))
-        // The legacy plist would go stale next to the binary — a downgade
-        // reading it would silently show an old library. Remove it so older
-        // builds rescan from disk instead.
-        try? FileManager.default.removeItem(at: photosURL)
+        saveQueue.async {
+            let wrote = savePhotosBinary(SortOrder.dateNewest.sorted(photos))
+            // The legacy plist would go stale next to the binary — a downgrade
+            // reading it would silently show an old library. Remove it so older
+            // builds rescan from disk instead. ONLY once the binary verifiably
+            // landed: deleting both after a failed write (disk full) would cost
+            // the user their whole cached library.
+            if wrote { try? FileManager.default.removeItem(at: photosURL) }
+        }
     }
 
     // MARK: Binary photo cache ("LMC1")
@@ -78,8 +88,9 @@ enum LibraryCache {
 
     private static let photosBinMagic: UInt32 = 0x4C4D_4331   // "LMC1"
 
-    private static func savePhotosBinary(_ photos: [Photo]) {
-        try? encodePhotosBinary(photos).write(to: photosBinURL, options: .atomic)
+    @discardableResult
+    private static func savePhotosBinary(_ photos: [Photo]) -> Bool {
+        (try? encodePhotosBinary(photos).write(to: photosBinURL, options: .atomic)) != nil
     }
 
     private static func loadPhotosBinary() -> [Photo]? {
@@ -113,7 +124,13 @@ enum LibraryCache {
                 defer { offset += MemoryLayout<T>.size }
                 return buf.loadUnaligned(fromByteOffset: offset, as: type)
             }
-            guard read(UInt32.self) == photosBinMagic, let count = read(UInt64.self) else { return nil }
+            guard read(UInt32.self) == photosBinMagic, let count = read(UInt64.self),
+                  // A corrupted count field must not trap Int() or attempt a
+                  // multi-GB reserve INSIDE the launch decode (that would crash
+                  // every launch until the cache is hand-deleted). 24 bytes is
+                  // the minimum record size, so any real count fits this bound.
+                  count <= UInt64(max(0, buf.count - 12) / 24)
+            else { return nil }
             var out: [Photo] = []
             out.reserveCapacity(Int(count))
             for _ in 0..<count {

@@ -247,7 +247,9 @@ final class ThumbnailCache {
                 let op = BlockOperation()
                 op.queuePriority = .low
                 op.addExecutionBlock { [weak self, weak op] in
-                    guard let self, op?.isCancelled == false else { return }
+                    guard let self, op?.isCancelled == false,
+                          self.warmGeneration.value == generation   // a newer warm pass owns the queue now
+                    else { return }
                     if self.trickleMode {   // window closed — idle pace, sleep is 0% CPU
                         Thread.sleep(forTimeInterval: self.trickleDelay)
                         guard op?.isCancelled == false else { return }

@@ -116,8 +116,15 @@ struct PhotoTableView: NSViewRepresentable {
         init(model: AppModel) { self.model = model }
 
         func reload(_ table: NSTableView) {
+            // Guarded: when the new list is shorter, reloadData clamps the
+            // selection and posts selectionDidChange — without the guard that
+            // callback would map the OLD row indexes onto the NEW photos array
+            // and write phantom ids into model.selection (which feeds deletion
+            // targets). applySelection below re-establishes the real selection.
+            syncingSelection = true
             photos = model.visiblePhotos
             table.reloadData()
+            syncingSelection = false
             applySelection(table, model.selection)
         }
 

@@ -784,8 +784,13 @@ final class AppModel {
                     self.cacheVisible(key, sorted)
                     self.lastVisible = sorted
                 }
-                self.sortInFlightKey = -1
-                self.isSortingVisible = false
+                // Only the task that still OWNS the in-flight slot may clear it
+                // — a superseded sort finishing late would otherwise hide the
+                // spinner of (and force a duplicate of) the newer sort.
+                if self.sortInFlightKey == key {
+                    self.sortInFlightKey = -1
+                    self.isSortingVisible = false
+                }
             }
         }
         return lastVisible
@@ -1032,9 +1037,12 @@ final class AppModel {
     /// Cached per (selection, library) — InspectorView reads this twice per body
     /// eval, and a select-all of 67k measured 170ms per uncached access.
     @ObservationIgnored private var selectedPhotosCache: [Photo] = []
-    @ObservationIgnored private var selectedPhotosCacheKey = (-1, -1, -1)
+    @ObservationIgnored private var selectedPhotosCacheKey = (-1, -1, -1, -1)
     var selectedPhotos: [Photo] {
-        let key = (selectionRevision, libraryVersion, assetsVersion)
+        // visibleSignature is part of the key because huge selections take
+        // their ORDER from visiblePhotos — a sort/filter change after ⌘A must
+        // not serve a stale ordering to order-sensitive batch actions (rename).
+        let key = (selectionRevision, libraryVersion, assetsVersion, visibleSignature)
         if selectedPhotosCacheKey == key { return selectedPhotosCache }
         let result = computeSelectedPhotos()
         selectedPhotosCache = result
@@ -1300,6 +1308,7 @@ final class AppModel {
         // Diff off-main against a snapshot; retry if the library was edited
         // while the diff was being computed (rare — the diff takes <1s).
         var diff = ReconcileDiff()
+        var diffIsCurrent = false
         for _ in 0..<3 {
             let snapshotVersion = libraryVersion
             let current = allPhotos
@@ -1308,8 +1317,11 @@ final class AppModel {
                 Self.computeReconcileDiff(current: current, scanned: scanned,
                                           roots: roots, rootFolders: currentRoots)
             }.value
-            if libraryVersion == snapshotVersion { break }
+            if libraryVersion == snapshotVersion { diffIsCurrent = true; break }
         }
+        // Never apply a diff computed against an outdated library — it would
+        // silently revert whatever the user just deleted/imported/renamed.
+        guard diffIsCurrent else { return }
 
         let missingRoots = rootFolders.filter { !roots.contains($0) }
 
