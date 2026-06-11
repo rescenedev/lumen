@@ -1,6 +1,7 @@
 import Photos
 import UIKit
 import SwiftUI
+import AVFoundation
 
 /// Lazy access to a scope's photos. Backed by a PHFetchResult (no array built up
 /// front, so opening 전체 사진 is instant), or by a pre-ordered array for 즐겨찾기.
@@ -331,15 +332,18 @@ struct OrganizeScope: Identifiable, Hashable {
         var hasAnyPhotos: Bool
     }
 
-    /// Images only, newest first, optionally excluding already-kept (Lumen) photos
-    /// via a predicate so PhotoKit computes count/firstObject without us enumerating.
+    /// Photos AND videos, newest first, optionally excluding already-kept (Lumen)
+    /// items via a predicate so PhotoKit computes count/firstObject without us
+    /// enumerating.
     nonisolated private static func imageOptions(excluding kept: Set<String> = []) -> PHFetchOptions {
         let o = PHFetchOptions()
+        let media = "(mediaType == %d OR mediaType == %d)"
         if kept.isEmpty {
-            o.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+            o.predicate = NSPredicate(format: media,
+                                      PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
         } else {
-            o.predicate = NSPredicate(format: "mediaType == %d AND NOT (localIdentifier IN %@)",
-                                      PHAssetMediaType.image.rawValue, Array(kept))
+            o.predicate = NSPredicate(format: media + " AND NOT (localIdentifier IN %@)",
+                                      PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue, Array(kept))
         }
         o.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         return o
@@ -393,6 +397,7 @@ struct OrganizeScope: Identifiable, Hashable {
         smart(.smartAlbumFavorites, "즐겨찾기", "heart", order: favoriteOrder)
         smart(.smartAlbumRecentlyAdded, "최근 추가", "clock")
         smart(.smartAlbumScreenshots, "스크린샷", "camera.viewfinder")
+        smart(.smartAlbumVideos, "동영상", "video")
 
         // User albums (Lumen already shown above), in the chosen order.
         var entries = albums.filter { $0.localizedTitle != "Lumen" }
@@ -503,6 +508,18 @@ struct OrganizeScope: Identifiable, Hashable {
         if lumenCollection == nil { lumenCollection = await lumenAlbum() }
         guard let c = lumenCollection else { return }
         await addAssets([asset], to: c)
+    }
+
+    /// AVPlayerItem for a video asset, downloading from iCloud if needed.
+    func playerItem(for asset: PHAsset) async -> AVPlayerItem? {
+        await withCheckedContinuation { c in
+            let o = PHVideoRequestOptions()
+            o.isNetworkAccessAllowed = true
+            o.deliveryMode = .automatic
+            manager.requestPlayerItem(forVideo: asset, options: o) { item, _ in
+                c.resume(returning: item)
+            }
+        }
     }
 
     /// Undo helper: pull a photo back out of the Lumen album. Never creates the

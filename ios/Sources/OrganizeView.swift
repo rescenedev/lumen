@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import AVFoundation
 
 private typealias Decision = OrganizeSession.Decision
 
@@ -60,8 +61,13 @@ struct OrganizeView: View {
     @State private var advanceTask: Task<Void, Never>?
     @State private var pendingTarget: Int?
 
+    // Video playback (current item only) — tap plays/pauses, swiping away stops.
+    @State private var player: AVPlayer?
+    @State private var playing = false
+
     private let threshold: CGFloat = 80
     private var isZoomed: Bool { zoom > 1.01 }
+    private var currentIsVideo: Bool { index < count && source.asset(index).mediaType == .video }
 
     private var count: Int { source.count }
     private var keepCount: Int { session.keepCount }
@@ -81,6 +87,12 @@ struct OrganizeView: View {
         }
         .preferredColorScheme(.dark)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: tick)
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            // Our video finished → rewind and show the play badge again.
+            guard let item = note.object as? AVPlayerItem, item === player?.currentItem else { return }
+            player?.seek(to: .zero)
+            playing = false
+        }
     }
 
     // MARK: - Photo (full-screen, swipe = navigate)
@@ -98,7 +110,9 @@ struct OrganizeView: View {
             // neighbor that's already centered becomes the current view with no
             // re-creation — the handoff is seamless (no flash, no pop).
             ForEach(visibleIndices, id: \.self) { i in
-                OrganizeCard(asset: source.asset(i), library: library)
+                OrganizeCard(asset: source.asset(i), library: library,
+                             player: i == index ? player : nil,
+                             isPlaying: i == index && playing)
                     .overlay(alignment: .top) { if i == index { trashHint } }
                     .scaleEffect(cardScale(i))
                     .offset(x: CGFloat(i - index) * pageW + offset.width + (i == index ? pan.width : 0),
@@ -115,8 +129,15 @@ struct OrganizeView: View {
                 Color.clear.contentShape(Rectangle())
                     .frame(width: 64)
                     .onTapGesture { if !isZoomed { swipeTo(next: false) } }
-                Color.clear.contentShape(Rectangle())
-                    .onTapGesture(count: 2) { toggleZoom() }
+                // Center zone: videos play/pause on a single tap (no double-tap
+                // recognizer, so no 0.3s wait); photos keep double-tap zoom.
+                if currentIsVideo {
+                    Color.clear.contentShape(Rectangle())
+                        .onTapGesture { togglePlayback() }
+                } else {
+                    Color.clear.contentShape(Rectangle())
+                        .onTapGesture(count: 2) { toggleZoom() }
+                }
                 Color.clear.contentShape(Rectangle())
                     .frame(width: 64)
                     .onTapGesture { if !isZoomed { swipeTo(next: true) } }
@@ -127,6 +148,7 @@ struct OrganizeView: View {
             .task(id: index) {
                 guard index < source.count else { return }
                 zoom = 1; zoomBase = 1; pan = .zero; panBase = .zero   // new photo starts unzoomed
+                player?.pause(); player = nil; playing = false         // leaving a video stops it
                 // Favorite state: session toggles are tracked locally — no per-swipe
                 // PhotoKit fetch on the main thread.
                 let a = source.asset(index)
@@ -216,6 +238,27 @@ struct OrganizeView: View {
         }
         zoomBase = zoom
         panBase = pan
+    }
+
+    /// Tap on a video: load (first tap) then play/pause. The player belongs to the
+    /// current index only — stepping or swiping away tears it down.
+    private func togglePlayback() {
+        guard currentIsVideo else { return }
+        if let p = player {
+            if p.timeControlStatus == .playing { p.pause(); playing = false }
+            else { p.play(); playing = true }
+            return
+        }
+        let a = source.asset(index)
+        Task {
+            guard let item = await library.playerItem(for: a) else { return }
+            // Still on the same video? (the user may have swiped on during the load)
+            guard index < count, source.asset(index).localIdentifier == a.localIdentifier else { return }
+            let p = AVPlayer(playerItem: item)
+            player = p
+            p.play()
+            playing = true
+        }
     }
 
     /// Trash icon that grows as you drag up — hint that releasing deletes the photo.
@@ -477,6 +520,28 @@ struct OrganizeView: View {
     }
 }
 
+/// AVPlayerLayer host — a bare video surface (no system controls), so our own
+/// gestures (swipe to organize, tap to pause) keep working on top of it.
+private struct PlayerLayerView: UIViewRepresentable {
+    let player: AVPlayer
+
+    final class LayerView: UIView {
+        override static var layerClass: AnyClass { AVPlayerLayer.self }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    }
+
+    func makeUIView(context: Context) -> LayerView {
+        let v = LayerView()
+        v.playerLayer.videoGravity = .resizeAspect
+        v.playerLayer.player = player
+        return v
+    }
+
+    func updateUIView(_ v: LayerView, context: Context) {
+        if v.playerLayer.player !== player { v.playerLayer.player = player }
+    }
+}
+
 /// Blurred mosaic of trash-marked photos shown behind the summary screen.
 /// Grid columns grow with photo count: 1→1, 2→2, 3-4→2, 5-9→3, 10-16→4, 17+→5
 private struct TrashMosaicBackground: View {
@@ -539,18 +604,35 @@ private struct MosaicCell: View {
     }
 }
 
-/// Full-screen photo (fits the screen; black fills the rest).
+/// Full-screen photo (fits the screen; black fills the rest). Videos show their
+/// poster frame with a play badge; once a player is handed in, it renders live.
 struct OrganizeCard: View {
     let asset: PHAsset
     let library: PhotoLibrary
+    var player: AVPlayer? = nil
+    var isPlaying: Bool = false
     @State private var image: UIImage?
     @State private var showSpinner = false
 
     var body: some View {
         ZStack {
             Color.lumenBG
-            if let image { Image(uiImage: image).resizable().scaledToFit() }
-            else if showSpinner { ProgressView().tint(.white) }
+            if let player {
+                PlayerLayerView(player: player)
+            } else if let image {
+                Image(uiImage: image).resizable().scaledToFit()
+            } else if showSpinner {
+                ProgressView().tint(.white)
+            }
+            if asset.mediaType == .video, !isPlaying {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 26, weight: .bold)).foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 72, height: 72)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().strokeBorder(.white.opacity(0.15)))
+                    .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+                    .allowsHitTesting(false)   // taps go to the center zone, which plays
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: asset.localIdentifier) {
