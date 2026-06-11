@@ -7,6 +7,7 @@ struct LibraryView: View {
     let library: PhotoLibrary
     @State private var scope: OrganizeScope?
     @State private var showSort = false
+    @State private var showSettings = false
     @Environment(\.horizontalSizeClass) private var hSize
 
     // 2 columns on iPhone, ~4-5 on iPad.
@@ -55,6 +56,9 @@ struct LibraryView: View {
         .sheet(isPresented: $showSort) {
             SortSheet(current: library.albumSort) { library.albumSort = $0 }
         }
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet()
+        }
         .onChange(of: library.loaded) { _, loaded in
             guard loaded, scope == nil else { return }
             if ProcessInfo.processInfo.arguments.contains("-autoOrganize"), let s = library.scopes.first {
@@ -82,8 +86,20 @@ struct LibraryView: View {
     private var scopeList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Lumen").font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white).padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
+                HStack {
+                    Text("Lumen").font(.system(size: 30, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title3).foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 38, height: 38)
+                            .background(.white.opacity(0.08), in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.08)))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
                 HStack {
                     Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     Spacer()
