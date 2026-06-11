@@ -47,9 +47,15 @@ struct AlbumGalleryView: View {
                 open = StartAt(index: 0)
             }
         }
+        // Persistent tab panes are never re-init'd, so pick up library changes
+        // (deletes, new photos — scope equality covers count+cover) here instead.
+        .onChange(of: scope) { _, s in
+            source = library.gridSource(for: s); ver += 1
+        }
         .fullScreenCover(item: $open, onDismiss: {
-            // Refresh after the viewer — e.g. un-favorited photos leave the 즐겨찾기 grid.
-            source = library.gridSource(for: scope); ver += 1
+            // Refresh after the viewer — e.g. un-favorited photos leave the 즐겨찾기 grid
+            // right away, without waiting for PhotoKit's change notification.
+            source = library.freshGridSource(for: scope); ver += 1
         }) { start in
             OrganizeView(scope: scope, library: library, startIndex: start.index)
         }

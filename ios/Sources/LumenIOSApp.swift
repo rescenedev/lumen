@@ -19,9 +19,18 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            tabContent
-                .id(selectedTab)
-                .transition(.opacity.animation(.easeOut(duration: 0.10)))
+            // All five tabs stay alive in a ZStack (opacity-toggled) instead of being
+            // rebuilt per switch: the collection views, their cells, and the decoded
+            // thumbnails persist, so entering 전체 사진 (or any tab) does ZERO work —
+            // no re-fetch, no re-layout, no thumbnail re-requests. Hidden panes also
+            // pre-build at launch, so even the FIRST entry is instant.
+            ZStack {
+                pane(.home)      { LibraryView(library: lib) }
+                pane(.allPhotos) { allPhotosTab }
+                pane(.organize)  { OrganizePickerView(library: lib) }
+                pane(.favorites) { favoritesTab }
+                pane(.vault)     { vaultTab }
+            }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     Color.clear.frame(height: lib.authorized ? 72 : 0)
                 }
@@ -42,32 +51,38 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder private var tabContent: some View {
-        switch selectedTab {
-        case .home:
-            LibraryView(library: lib)
-        case .allPhotos:
-            if let scope = lib.scopes.first(where: { $0.id == "all" }) {
-                AlbumGalleryView(scope: scope, library: lib, onClose: nil)
-            } else {
-                emptyTab("photo.stack", lib.loaded ? "사진이 없어요" : nil)
-            }
-        case .organize:
-            OrganizePickerView(library: lib)
-        case .favorites:
-            if let scope = lib.scopes.first(where: { $0.title == "즐겨찾기" }) {
-                AlbumGalleryView(scope: scope, library: lib, onClose: nil)
-            } else {
-                emptyTab("star", lib.loaded ? "즐겨찾기한 사진이 없어요" : nil,
-                         sub: "위로 올리면 즐겨찾기에 추가돼요")
-            }
-        case .vault:
-            if let scope = lib.scopes.first(where: { $0.collection?.localizedTitle == "Lumen" }) {
-                AlbumGalleryView(scope: scope, library: lib, onClose: nil)
-            } else {
-                emptyTab("tray", lib.loaded ? "보관한 사진이 없어요" : nil,
-                         sub: "♥로 보관한 사진이 여기 모여요")
-            }
+    /// One persistent tab pane: hidden panes keep their state/cells but are
+    /// untouchable. The 100ms fade matches the old tab-switch feel exactly.
+    private func pane<Content: View>(_ tab: LumenTab, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .opacity(selectedTab == tab ? 1 : 0)
+            .allowsHitTesting(selectedTab == tab)
+            .animation(.easeOut(duration: 0.10), value: selectedTab)
+    }
+
+    @ViewBuilder private var allPhotosTab: some View {
+        if let scope = lib.scopes.first(where: { $0.id == "all" }) {
+            AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+        } else {
+            emptyTab("photo.stack", lib.loaded ? "사진이 없어요" : nil)
+        }
+    }
+
+    @ViewBuilder private var favoritesTab: some View {
+        if let scope = lib.scopes.first(where: { $0.title == "즐겨찾기" }) {
+            AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+        } else {
+            emptyTab("star", lib.loaded ? "즐겨찾기한 사진이 없어요" : nil,
+                     sub: "위로 올리면 즐겨찾기에 추가돼요")
+        }
+    }
+
+    @ViewBuilder private var vaultTab: some View {
+        if let scope = lib.scopes.first(where: { $0.collection?.localizedTitle == "Lumen" }) {
+            AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+        } else {
+            emptyTab("tray", lib.loaded ? "보관한 사진이 없어요" : nil,
+                     sub: "♥로 보관한 사진이 여기 모여요")
         }
     }
 

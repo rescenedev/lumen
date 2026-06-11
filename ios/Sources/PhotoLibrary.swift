@@ -272,6 +272,7 @@ struct OrganizeScope: Identifiable, Hashable {
         favoriteOrder.removeAll { $0 == id }
         if added { favoriteOrder.insert(id, at: 0) }     // most-recent favorite first
         saveFavoriteOrder()
+        sourceCache.removeAll()   // 즐겨찾기 source bakes in the old order
 
         guard let i = scopes.firstIndex(where: { $0.collection?.assetCollectionSubtype == .smartAlbumFavorites })
         else { return }
@@ -314,6 +315,7 @@ struct OrganizeScope: Identifiable, Hashable {
         keptIDs = snap.keptIDs
         scopes = snap.scopes
         hasAnyPhotos = snap.hasAnyPhotos
+        sourceCache.removeAll()   // sources captured the old keptIDs/order — rebuild lazily
         // Keep the next few 즐겨찾기 covers warm so un-favoriting swaps instantly.
         favoriteOrder.prefix(3)
             .compactMap { PHAsset.fetchAssets(withLocalIdentifiers: [$0], options: nil).firstObject }
@@ -408,12 +410,33 @@ struct OrganizeScope: Identifiable, Hashable {
         return Snapshot(albums: albums, keptIDs: keptIDs, scopes: out, hasAnyPhotos: hasAny)
     }
 
+    /// Memoized per-scope sources: the persistent tab panes (and re-opened albums)
+    /// re-ask for the same scope's source on every body evaluation — handing back
+    /// the already-resolved fetch makes that free, instead of re-resolving a 60k
+    /// fetch each time. Cleared whenever the library snapshot changes.
+    @ObservationIgnored private var sourceCache: [String: GridSource] = [:]
+
     /// The asset list for a scope, already-kept photos removed. Fetched off-main so
     /// tapping a scope opens without freezing.
+    func gridSource(for scope: OrganizeScope) -> GridSource {
+        if let s = sourceCache[scope.id], s.count == scope.count { return s }
+        let s = makeGridSource(for: scope)
+        sourceCache[scope.id] = s
+        return s
+    }
+
+    /// A guaranteed-fresh source (drops the memoized one) — used right after an
+    /// organize session so the grid reflects deletions/un-favorites immediately,
+    /// without waiting for PhotoKit's change notification.
+    func freshGridSource(for scope: OrganizeScope) -> GridSource {
+        sourceCache[scope.id] = nil
+        return gridSource(for: scope)
+    }
+
     /// A lazy source for a scope. Non-favorites use the PHFetchResult directly
     /// (instant — no enumeration), so opening a big album doesn't show a loader.
     /// 즐겨찾기 needs custom order, so it materializes its (small) list.
-    func gridSource(for scope: OrganizeScope) -> GridSource {
+    private func makeGridSource(for scope: OrganizeScope) -> GridSource {
         // The Lumen album IS the kept photos, so don't exclude them there.
         let isLumen = scope.collection?.localizedTitle == "Lumen"
         let kept = keptIDs
