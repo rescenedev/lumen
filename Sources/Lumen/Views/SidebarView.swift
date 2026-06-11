@@ -126,7 +126,11 @@ struct SidebarView: View {
         guard table.row(at: point) >= 0 else { return event }
 
         let before = expandedFolders
-        DispatchQueue.main.async {   // after the List applies the click's selection
+        // Small delay, not a bare async hop: the List pushes the click's
+        // selection through its own deferred binding update, and racing it
+        // made the first cross-selection click's toggle land before the
+        // selection (observed). 50ms is imperceptible and safely after it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             guard case .folder(let url) = model.selectedSidebar,
                   expandedFolders == before   // chevron clicks toggle natively — don't double-toggle
             else { return }
