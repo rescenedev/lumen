@@ -352,7 +352,7 @@ struct PhotoCollectionView: NSViewRepresentable {
         /// Number of fully/partly visible rows in the current viewport — the
         /// page size for Page Up / Page Down.
         private func visibleRows(_ cv: NSCollectionView) -> Int {
-            guard let layout = cv.collectionViewLayout as? NSCollectionViewFlowLayout else { return 1 }
+            guard let layout = cv.collectionViewLayout as? AdaptiveFlowLayout else { return 1 }
             let rowHeight = layout.itemSize.height + layout.minimumLineSpacing
             guard rowHeight > 0 else { return 1 }
             let viewport = cv.enclosingScrollView?.documentVisibleRect.height ?? cv.bounds.height
@@ -429,25 +429,67 @@ struct PhotoCollectionView: NSViewRepresentable {
 /// Flow layout that grows items to fill the row width (like SwiftUI's adaptive
 /// grid) instead of leaving big distributed gaps. `targetItemWidth` is the
 /// minimum desired width; actual width expands to fill the columns that fit.
-final class AdaptiveFlowLayout: NSCollectionViewFlowLayout {
+/// Uniform grid with O(1) per-item frame math. This replaced an
+/// NSCollectionViewFlowLayout subclass: FlowLayout recomputes attributes for
+/// every item on each invalidation, which measured ~330ms of main-thread stall
+/// at 67k photos whenever the thumbnail slider moved or the window resized.
+/// All cells share one size, so frames are pure arithmetic on the index.
+final class AdaptiveFlowLayout: NSCollectionViewLayout {
     var targetItemWidth: CGFloat = 170
     var captionHeight: CGFloat = 36
+    var minimumInteritemSpacing: CGFloat = 6
+    var minimumLineSpacing: CGFloat = 4
+    var sectionInset = NSEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
+
+    /// Computed in prepare(); `itemSize` stays public — keyboard paging reads it.
+    private(set) var itemSize = NSSize(width: 170, height: 206)
+    private var cols = 1
+    private var count = 0
 
     override func prepare() {
-        if let cv = collectionView {
-            let insets = sectionInset.left + sectionInset.right
-            let available = max(0, cv.bounds.width - insets)
-            let g = minimumInteritemSpacing
-            let cols = max(1, Int((available + g) / (targetItemWidth + g)))
-            let w = max(40, floor((available - CGFloat(cols - 1) * g) / CGFloat(cols)))
-            itemSize = NSSize(width: w, height: w + captionHeight)
-        }
-        super.prepare()
+        guard let cv = collectionView else { return }
+        let available = max(0, cv.bounds.width - sectionInset.left - sectionInset.right)
+        let g = minimumInteritemSpacing
+        cols = max(1, Int((available + g) / (targetItemWidth + g)))
+        let w = max(40, floor((available - CGFloat(cols - 1) * g) / CGFloat(cols)))
+        itemSize = NSSize(width: w, height: w + captionHeight)
+        count = cv.numberOfItems(inSection: 0)   // single-section grid
+    }
+
+    override var collectionViewContentSize: NSSize {
+        let rows = (count + cols - 1) / max(cols, 1)
+        let height = sectionInset.top + sectionInset.bottom
+            + CGFloat(rows) * itemSize.height + CGFloat(max(0, rows - 1)) * minimumLineSpacing
+        return NSSize(width: collectionView?.bounds.width ?? 0, height: height)
+    }
+
+    private func frame(at index: Int) -> NSRect {
+        let row = index / cols, col = index % cols
+        return NSRect(x: sectionInset.left + CGFloat(col) * (itemSize.width + minimumInteritemSpacing),
+                      y: sectionInset.top + CGFloat(row) * (itemSize.height + minimumLineSpacing),
+                      width: itemSize.width, height: itemSize.height)
+    }
+
+    override func layoutAttributesForElements(in rect: NSRect) -> [NSCollectionViewLayoutAttributes] {
+        guard count > 0, cols > 0 else { return [] }
+        let rowHeight = itemSize.height + minimumLineSpacing
+        let firstRow = max(0, Int((rect.minY - sectionInset.top) / rowHeight))
+        let lastRow = max(firstRow, Int((rect.maxY - sectionInset.top) / rowHeight))
+        let start = min(count, firstRow * cols)
+        let end = min(count, (lastRow + 1) * cols)
+        guard start < end else { return [] }
+        return (start..<end).compactMap { layoutAttributesForItem(at: IndexPath(item: $0, section: 0)) }
+    }
+
+    override func layoutAttributesForItem(at indexPath: IndexPath) -> NSCollectionViewLayoutAttributes? {
+        guard indexPath.item < count || count == 0 else { return nil }
+        let attributes = NSCollectionViewLayoutAttributes(forItemWith: indexPath)
+        attributes.frame = frame(at: indexPath.item)
+        return attributes
     }
 
     override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
         collectionView?.bounds.width != newBounds.width
-            || super.shouldInvalidateLayout(forBoundsChange: newBounds)
     }
 }
 

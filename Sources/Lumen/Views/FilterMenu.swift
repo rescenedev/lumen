@@ -6,7 +6,7 @@ struct FilterMenu: View {
 
     var body: some View {
         @Bindable var model = model
-        return Perf.body("FilterMenu") { Menu {
+        return Menu {
             Toggle("Favorites Only", isOn: $model.filter.favoritesOnly)
                 .onAppear { model.ensureExifIndex() }   // populate camera/GPS data on open
             Toggle("Hide Rejected", isOn: $model.filter.hideRejected)
@@ -54,6 +54,5 @@ struct FilterMenu: View {
                   : "line.3.horizontal.decrease.circle")
         }
         .help(model.filter.isActive ? "Filters active: \(model.filter.chips.joined(separator: ", "))" : "Filter photos")
-        }
     }
 }

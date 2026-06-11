@@ -13,7 +13,7 @@ struct PhotoGridView: View {
     }
 
     var body: some View {
-        Perf.body("PhotoGridView") { ScrollViewReader { proxy in
+        ScrollViewReader { proxy in
             ScrollView {
                 if model.groupByMonth {
                     LazyVStack(alignment: .leading, spacing: 24, pinnedViews: [.sectionHeaders]) {
@@ -72,7 +72,6 @@ struct PhotoGridView: View {
         .onKeyPress(keys: [.upArrow]) { move(-columnCount, $0) }
         .onKeyPress(keys: [.downArrow]) { move(columnCount, $0) }
         .browserKeyHandlers()
-        }
     }
 
     /// Number of columns currently shown, for up/down navigation. Mirrors the

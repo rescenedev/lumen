@@ -25,10 +25,24 @@ private enum Badge {
     }
 }
 
-/// Custom-drawn cell content: square thumbnail (aspect-fill, rounded) with a
-/// selection ring, favorite badge, color-label dot, filename, and rating stars.
+/// Cell content: square thumbnail (aspect-fill, rounded) with a selection
+/// ring, favorite badge, color-label dot, filename, and rating stars.
+///
+/// The thumbnail lives in a CALayer (`imageLayer.contents`) so resizing is a
+/// GPU rescale: drawing the bitmap in draw(_:) meant a CPU re-interpolation of
+/// every visible cell on each size change — a measured ~350ms main-thread
+/// stall per thumbnail-slider tick / window resize at 67k photos. The view's
+/// own draw(_:) now only paints cheap vectors and text (accent frame,
+/// placeholder, badges, caption) — image pixels never pass through it.
 final class PhotoGridCellView: NSView {
-    var image: NSImage?
+    var image: NSImage? {
+        didSet {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            imageLayer.contents = image
+            CATransaction.commit()
+        }
+    }
     var filename = ""
     var favorite = false
     var rating = 0
@@ -39,86 +53,148 @@ final class PhotoGridCellView: NSView {
     var failed = false            // file couldn't be decoded (corrupt/unreadable)
     var thumbSize: CGFloat = 170
 
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        needsDisplay = true
+    private let imageLayer = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        imageLayer.contentsGravity = .resizeAspectFill
+        imageLayer.masksToBounds = true
+        imageLayer.borderWidth = 1
+        imageLayer.borderColor = NSColor.black.withAlphaComponent(0.10).cgColor
+        // Without this, a resize stretches the overlay's OLD contents (giant
+        // ghost badges/captions) instead of redrawing them at the new size.
+        overlayLayer.needsDisplayOnBoundsChange = true
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    convenience init() { self.init(frame: .zero) }
+
+    override var wantsUpdateLayer: Bool { false }   // keep draw(_:) for the overlays
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Subview layers would sit below the view's drawn content — adding the
+        // image layer as a sublayer keeps it above the accent frame (drawn) and
+        // below the badges (also drawn, in a higher overlay pass? no — see
+        // draw(_:): badges paint into the view's layer, which renders BELOW
+        // sublayers, so badges get their own layer on top).
+        if imageLayer.superlayer == nil {
+            layer?.addSublayer(imageLayer)
+            layer?.addSublayer(overlayLayer)
+            overlayLayer.delegate = overlayPainter
+            overlayPainter.cell = self
+        }
+        let scale = window?.backingScaleFactor ?? 2
+        imageLayer.contentsScale = scale
+        overlayLayer.contentsScale = scale
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        // Bottom-left origin (default, non-flipped) so NSImage draws right-side up.
-        // Drive sizing off the actual cell width so thumbnails fill the cell.
-        let s = bounds.width
-        let capH = bounds.height - s          // caption band height
-        let radius: CGFloat = 8
-        // Thumbnail occupies the top square; caption band is below it.
-        let thumbRect = NSRect(x: 1, y: capH + 1, width: s - 2, height: s - 2)
-        let clip = NSBezierPath(roundedRect: thumbRect, xRadius: radius, yRadius: radius)
+    /// Badges/dim/caption render above the image in their own layer; its draw
+    /// is cheap vectors + one line of text (no image interpolation).
+    private let overlayLayer = CALayer()
+    private let overlayPainter = OverlayPainter()
 
-        // When selected, the photo shrinks a little to reveal an accent frame
-        // (Apple Photos style); a checkmark makes it unmistakable.
+    private final class OverlayPainter: NSObject, CALayerDelegate {
+        weak var cell: PhotoGridCellView?
+        func draw(_ layer: CALayer, in ctx: CGContext) {
+            guard let cell else { return }
+            let g = NSGraphicsContext(cgContext: ctx, flipped: false)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = g
+            cell.drawOverlays()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+    }
+
+    /// The photo square (origin bottom-left, caption band below).
+    private var photoRect: NSRect {
+        let s = bounds.width
+        let capH = bounds.height - s
+        let thumbRect = NSRect(x: 1, y: capH + 1, width: s - 2, height: s - 2)
         let inset: CGFloat = selected ? 6 : 0
-        let photoRect = thumbRect.insetBy(dx: inset, dy: inset)
-        let photoRadius: CGFloat = max(3, radius - inset * 0.5)
-        let photoClip = NSBezierPath(roundedRect: photoRect, xRadius: photoRadius, yRadius: photoRadius)
+        return thumbRect.insetBy(dx: inset, dy: inset)
+    }
+    private var photoRadius: CGFloat { selected ? 5 : 8 }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        layoutCellLayers()
+        needsDisplay = true
+        overlayLayer.setNeedsDisplay()
+    }
+
+    func refresh() {
+        layoutCellLayers()
+        needsDisplay = true
+        overlayLayer.setNeedsDisplay()
+    }
+
+    private func layoutCellLayers() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        imageLayer.frame = photoRect
+        imageLayer.cornerRadius = photoRadius
+        imageLayer.borderWidth = selected ? 0 : 1
+        overlayLayer.frame = bounds
+        CATransaction.commit()
+    }
+
+    /// Base content (renders BELOW the image layer): accent frame + placeholder.
+    override func draw(_ dirtyRect: NSRect) {
+        let s = bounds.width
+        let capH = bounds.height - s
+        let thumbRect = NSRect(x: 1, y: capH + 1, width: s - 2, height: s - 2)
 
         if selected {
+            // Accent frame revealed around the inset photo (Apple Photos style).
             NSColor.controlAccentColor.setFill()
-            clip.fill()                       // accent frame behind the inset photo
+            NSBezierPath(roundedRect: thumbRect, xRadius: 8, yRadius: 8).fill()
         }
 
         // Loading placeholder — or a broken-file mark when decode failed
         // (corrupt/zero-filled files), so they don't masquerade as loading.
         if image == nil {
+            let rect = photoRect
             NSColor.white.withAlphaComponent(0.045).setFill()
-            photoClip.fill()
-            let g = failed ? Badge.broken : Badge.placeholder
+            NSBezierPath(roundedRect: rect, xRadius: photoRadius, yRadius: photoRadius).fill()
+            let glyph = failed ? Badge.broken : Badge.placeholder
             let gs = min(s * 0.30, 56)
-            g.draw(in: NSRect(x: photoRect.midX - gs / 2, y: photoRect.midY - gs / 2, width: gs, height: gs))
+            glyph.draw(in: NSRect(x: rect.midX - gs / 2, y: rect.midY - gs / 2, width: gs, height: gs))
         }
+    }
 
-        if let image {
-            NSGraphicsContext.saveGraphicsState()
-            photoClip.addClip()
-            let isz = image.size
-            if isz.width > 0, isz.height > 0 {
-                let scale = max(photoRect.width / isz.width, photoRect.height / isz.height)
-                let dw = isz.width * scale, dh = isz.height * scale
-                let r = NSRect(x: photoRect.midX - dw / 2, y: photoRect.midY - dh / 2, width: dw, height: dh)
-                image.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1)
-            }
-            NSGraphicsContext.restoreGraphicsState()
-        }
+    /// Overlay content (renders ABOVE the image layer): dim, badges, caption.
+    fileprivate func drawOverlays() {
+        let s = bounds.width
+        let capH = bounds.height - s
+        let rect = photoRect
+        let clip = NSBezierPath(roundedRect: rect, xRadius: photoRadius, yRadius: photoRadius)
 
         // Dim the non-selected photos while a selection is active.
         if selectionActive && !selected {
             NSColor.black.withAlphaComponent(0.5).setFill()
-            photoClip.fill()
+            clip.fill()
         }
 
-        if selected {
-            // Checkmark badge (top-left) — only while multi-selecting, so a single
-            // "view this one" selection stays clean (just the accent frame).
-            if selectionActive {
-                let bs: CGFloat = 22
-                let br = NSRect(x: photoRect.minX + 6, y: photoRect.maxY - bs - 6, width: bs, height: bs)
-                NSColor.white.setFill()
-                NSBezierPath(ovalIn: br.insetBy(dx: -1.5, dy: -1.5)).fill()
-                NSColor.controlAccentColor.setFill()
-                NSBezierPath(ovalIn: br).fill()
-                let c = Badge.check
-                c.draw(in: NSRect(x: br.midX - c.size.width / 2, y: br.midY - c.size.height / 2,
-                                  width: c.size.width, height: c.size.height))
-            }
-        } else {
-            NSColor.black.withAlphaComponent(0.10).setStroke()
-            photoClip.lineWidth = 1
-            photoClip.stroke()
+        // Checkmark badge (top-left) — only while multi-selecting, so a single
+        // "view this one" selection stays clean (just the accent frame).
+        if selected && selectionActive {
+            let bs: CGFloat = 22
+            let br = NSRect(x: rect.minX + 6, y: rect.maxY - bs - 6, width: bs, height: bs)
+            NSColor.white.setFill()
+            NSBezierPath(ovalIn: br.insetBy(dx: -1.5, dy: -1.5)).fill()
+            NSColor.controlAccentColor.setFill()
+            NSBezierPath(ovalIn: br).fill()
+            let c = Badge.check
+            c.draw(in: NSRect(x: br.midX - c.size.width / 2, y: br.midY - c.size.height / 2,
+                              width: c.size.width, height: c.size.height))
         }
 
         // Favorite badge — top-right of the photo.
         if favorite {
             let bs: CGFloat = 24
-            let br = NSRect(x: photoRect.maxX - bs - 5, y: photoRect.maxY - bs - 5, width: bs, height: bs)
+            let br = NSRect(x: rect.maxX - bs - 5, y: rect.maxY - bs - 5, width: bs, height: bs)
             NSColor.systemPink.setFill()
             NSBezierPath(ovalIn: br).fill()
             let h = Badge.heart
@@ -129,9 +205,9 @@ final class PhotoGridCellView: NSView {
         // Rejected — dim the photo and mark it with a red ✕ (bottom-right).
         if rejected {
             NSColor.black.withAlphaComponent(0.45).setFill()
-            photoClip.fill()
+            clip.fill()
             let bs: CGFloat = 22
-            let br = NSRect(x: photoRect.maxX - bs - 5, y: photoRect.minY + 5, width: bs, height: bs)
+            let br = NSRect(x: rect.maxX - bs - 5, y: rect.minY + 5, width: bs, height: bs)
             NSColor.white.withAlphaComponent(0.9).setFill()
             NSBezierPath(ovalIn: br.insetBy(dx: -1.5, dy: -1.5)).fill()
             NSColor.systemRed.setFill()
@@ -144,7 +220,7 @@ final class PhotoGridCellView: NSView {
         // Color label — dot in the photo's bottom-left corner.
         if let labelColor {
             let d: CGFloat = 11
-            let dr = NSRect(x: photoRect.minX + 6, y: photoRect.minY + 6, width: d, height: d)
+            let dr = NSRect(x: rect.minX + 6, y: rect.minY + 6, width: d, height: d)
             NSColor.white.withAlphaComponent(0.85).setFill()
             NSBezierPath(ovalIn: dr.insetBy(dx: -1.5, dy: -1.5)).fill()
             labelColor.setFill()
@@ -156,8 +232,8 @@ final class PhotoGridCellView: NSView {
             let star = Badge.star
             let sw = star.size.width + 1
             let totalW = CGFloat(rating) * sw
-            let startX = photoRect.midX - totalW / 2
-            let y = photoRect.minY + 7
+            let startX = rect.midX - totalW / 2
+            let y = rect.minY + 7
             let pill = NSRect(x: startX - 5, y: y - 3, width: totalW + 9, height: star.size.height + 6)
             NSColor.black.withAlphaComponent(0.45).setFill()
             NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
@@ -224,22 +300,22 @@ final class PhotoCollectionItem: NSCollectionViewItem {
                 } else if self.cell.image == nil {
                     self.cell.failed = true   // decode failed — mark as broken
                 }
-                self.cell.needsDisplay = true
+                self.cell.refresh()
             }
         }
-        cell.needsDisplay = true
+        cell.refresh()
     }
 
     func updateSize(_ size: CGFloat) {
         cell.thumbSize = size
-        cell.needsDisplay = true
+        cell.refresh()
     }
 
     /// Update the "a selection exists" dim state without reloading the image.
     func setSelectionActive(_ active: Bool) {
         guard cell.selectionActive != active else { return }
         cell.selectionActive = active
-        cell.needsDisplay = true
+        cell.refresh()
     }
 
     /// Update favorite/rating/label/reject badges without reloading the image.
@@ -250,7 +326,7 @@ final class PhotoCollectionItem: NSCollectionViewItem {
         cell.rating = rating
         cell.labelColor = label.nsColor
         cell.rejected = rejected
-        cell.needsDisplay = true
+        cell.refresh()
     }
 
     override func prepareForReuse() {
@@ -260,6 +336,6 @@ final class PhotoCollectionItem: NSCollectionViewItem {
     }
 
     override var isSelected: Bool {
-        didSet { cell.selected = isSelected; cell.needsDisplay = true }
+        didSet { cell.selected = isSelected; cell.refresh() }
     }
 }
