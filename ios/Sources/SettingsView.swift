@@ -40,15 +40,13 @@ struct SettingsSheet: View {
             }
             .padding(.horizontal, 22).padding(.vertical, 16)
 
-            Spacer(minLength: 0)
-
             Text("Lumen은 무료입니다. 모든 사진 처리는 기기 안에서만 이루어집니다.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.3))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 30).padding(.bottom, 20)
+                .padding(.horizontal, 30).padding(.top, 10).padding(.bottom, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(446)])
+        .presentationDetents([.height(400)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.lumenCard)
         .preferredColorScheme(.dark)

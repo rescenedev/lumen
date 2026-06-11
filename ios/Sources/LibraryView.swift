@@ -139,15 +139,14 @@ struct LibraryView: View {
                     .padding(.horizontal, 4).padding(.top, 6)
             }
             .padding(.horizontal, 16).padding(.top, 4)
-            .background(GeometryReader { g in
-                Color.clear.preference(key: HomePullKey.self,
-                                       value: g.frame(in: .named("homeScroll")).minY)
-            })
         }
         // Short album lists fit the screen and would never rubber-band — force
         // bouncing so the pull-down gesture works regardless of content height.
         .scrollBounceBehavior(.always, axes: .vertical)
-        .coordinateSpace(name: "homeScroll")
+        // NOTE: the classic GeometryReader+preference offset trick does NOT update
+        // during interactive scrolling on the iOS 18+/26 scroll engine — overscroll
+        // must be read via onScrollGeometryChange.
+        .modifier(PullToReveal(pull: $pull) { handlePull($0) })
         // Hidden settings: pull the list down past the threshold and the sheet
         // opens (with a haptic). A gear rides in with the pull so the gesture
         // is discoverable without spending a visible button on it.
@@ -161,23 +160,37 @@ struct LibraryView: View {
                     .offset(y: pull * 0.45 - 26)
             }
         }
-        .onPreferenceChange(HomePullKey.self) { y in
-            pull = max(0, y)
-            if y > Self.settingsPullThreshold, pullArmed, !showSettings {
-                pullArmed = false
-                showSettings = true
-            } else if y < 5 {
-                pullArmed = true     // re-arm once the bounce settles
-            }
-        }
         .sensoryFeedback(.impact(flexibility: .rigid), trigger: showSettings) { _, new in new }
+    }
+
+    private func handlePull(_ y: CGFloat) {
+        if y > Self.settingsPullThreshold, pullArmed, !showSettings {
+            pullArmed = false
+            showSettings = true
+        } else if y < 5 {
+            pullArmed = true     // re-arm once the bounce settles
+        }
     }
 }
 
-/// Tracks how far the home list is over-pulled past its top.
-private struct HomePullKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+/// Streams how far a scroll view is over-pulled past its top (0 when not).
+/// iOS 18+ only — on 17 the gesture is simply unavailable.
+private struct PullToReveal: ViewModifier {
+    @Binding var pull: CGFloat
+    let onChange: (CGFloat) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { geo in
+                max(0, -(geo.contentOffset.y + geo.contentInsets.top))
+            } action: { _, overpull in
+                pull = overpull
+                onChange(overpull)
+            }
+        } else {
+            content
+        }
+    }
 }
 
 /// Modern bottom sheet for picking the album sort (always on-screen, slate).
