@@ -13,6 +13,7 @@ struct PhotoGridView: UIViewRepresentable {
     var onTap: (Int) -> Void
     var onBack: () -> Void
     var bottomInset: CGFloat = 28
+    var scrollTopKey: Int = 0   // bumped externally (tab re-tap) → animate to top
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -45,16 +46,23 @@ struct PhotoGridView: UIViewRepresentable {
             context.coordinator.reloadKey = reloadKey
             cv.reloadData()
         }
+        if context.coordinator.scrollTopKey != scrollTopKey {
+            context.coordinator.scrollTopKey = scrollTopKey
+            cv.setContentOffset(CGPoint(x: 0, y: -cv.adjustedContentInset.top), animated: true)
+        }
     }
 
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate,
                              UICollectionViewDataSourcePrefetching {
         var parent: PhotoGridView
         var reloadKey = -1
+        var scrollTopKey: Int
         weak var collectionView: UICollectionView?
         private var pinchStartCols: CGFloat = 4
 
-        init(_ parent: PhotoGridView) { self.parent = parent }
+        // Seed scrollTopKey from the parent so a pane created AFTER some re-taps
+        // doesn't jump to top on its first update.
+        init(_ parent: PhotoGridView) { self.parent = parent; self.scrollTopKey = parent.scrollTopKey }
 
         /// One target for cells AND prefetching — snapped to the shared prewarm size
         /// at the default zoom so all three hit the same cache entries.

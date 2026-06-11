@@ -17,6 +17,10 @@ struct RootView: View {
     @State private var lib = PhotoLibrary()
     @State private var selectedTab: LumenTab = .home
     @State private var showSplash = true
+    // Bumped when the CURRENT tab's icon is re-tapped — panes react by popping
+    // their overlay / scrolling to top (standard iOS tab behavior). Switching
+    // tabs never touches scroll positions.
+    @State private var topTicks: [LumenTab: Int] = [:]
 
     var body: some View {
         ZStack {
@@ -26,9 +30,9 @@ struct RootView: View {
             // no re-fetch, no re-layout, no thumbnail re-requests. Hidden panes also
             // pre-build at launch, so even the FIRST entry is instant.
             ZStack {
-                pane(.home)      { LibraryView(library: lib) }
+                pane(.home)      { LibraryView(library: lib, scrollTopKey: topTicks[.home] ?? 0) }
                 pane(.allPhotos) { allPhotosTab }
-                pane(.organize)  { OrganizePickerView(library: lib) }
+                pane(.organize)  { OrganizePickerView(library: lib, scrollTopKey: topTicks[.organize] ?? 0) }
                 pane(.favorites) { favoritesTab }
                 pane(.vault)     { vaultTab }
             }
@@ -38,7 +42,9 @@ struct RootView: View {
             if lib.authorized {
                 VStack(spacing: 0) {
                     Spacer()
-                    FloatingTabBar(selected: $selectedTab)
+                    FloatingTabBar(selected: $selectedTab) { tab in
+                        topTicks[tab, default: 0] += 1
+                    }
                 }
                 .ignoresSafeArea(edges: .bottom)
             }
@@ -63,7 +69,8 @@ struct RootView: View {
 
     @ViewBuilder private var allPhotosTab: some View {
         if let scope = lib.scopes.first(where: { $0.id == "all" }) {
-            AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+            AlbumGalleryView(scope: scope, library: lib, onClose: nil,
+                             scrollTopKey: topTicks[.allPhotos] ?? 0)
         } else {
             emptyTab("photo.stack", lib.loaded ? "사진이 없어요" : nil)
         }
@@ -72,7 +79,8 @@ struct RootView: View {
     @ViewBuilder private var favoritesTab: some View {
         // Match by subtype, not title — titles are localized.
         if let scope = lib.scopes.first(where: { $0.collection?.assetCollectionSubtype == .smartAlbumFavorites }) {
-            AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+            AlbumGalleryView(scope: scope, library: lib, onClose: nil,
+                             scrollTopKey: topTicks[.favorites] ?? 0)
         } else {
             emptyTab("star", lib.loaded ? "즐겨찾기한 사진이 없어요" : nil,
                      sub: "정리 화면에서 ★를 누르면 여기에 모여요")
@@ -81,7 +89,8 @@ struct RootView: View {
 
     @ViewBuilder private var vaultTab: some View {
         if let scope = lib.scopes.first(where: { $0.collection?.localizedTitle == "Lumen" }) {
-            AlbumGalleryView(scope: scope, library: lib, onClose: nil)
+            AlbumGalleryView(scope: scope, library: lib, onClose: nil,
+                             scrollTopKey: topTicks[.vault] ?? 0)
         } else {
             emptyTab("tray", lib.loaded ? "보관한 사진이 없어요" : nil,
                      sub: "♥로 보관한 사진이 여기 모여요")
@@ -112,6 +121,7 @@ struct RootView: View {
 
 struct FloatingTabBar: View {
     @Binding var selected: LumenTab
+    var onReselect: (LumenTab) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -133,7 +143,8 @@ struct FloatingTabBar: View {
 
     private func tabBtn(_ tab: LumenTab, _ icon: String) -> some View {
         Button {
-            withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) { selected = tab }
+            if selected == tab { onReselect(tab) }   // re-tap = pop/scroll-to-top
+            else { withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) { selected = tab } }
         } label: {
             ZStack {
                 if selected == tab {

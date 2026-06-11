@@ -7,6 +7,7 @@ struct AlbumGalleryView: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
     let onClose: (() -> Void)?      // nil = shown as a tab (no close button, no back-swipe)
+    let scrollTopKey: Int           // bumped by a tab re-tap → grid scrolls to top
 
     @AppStorage("lumen.lastOrganizedScopeId") private var lastOrganizedScopeId = "all"
 
@@ -14,10 +15,11 @@ struct AlbumGalleryView: View {
     @State private var ver = 0
     @State private var open: StartAt?
 
-    init(scope: OrganizeScope, library: PhotoLibrary, onClose: (() -> Void)?) {
+    init(scope: OrganizeScope, library: PhotoLibrary, onClose: (() -> Void)?, scrollTopKey: Int = 0) {
         self.scope = scope
         self.library = library
         self.onClose = onClose
+        self.scrollTopKey = scrollTopKey
         // Build the grid eagerly so it slides in as one unit with the header — but
         // the source is now lazy (resolves its fetch on first cell draw), so this
         // touches no PhotoKit and never blocks the open, even on a 60k album.
@@ -35,7 +37,8 @@ struct AlbumGalleryView: View {
                 PhotoGridView(source: source, manager: library.manager, reloadKey: ver,
                               onTap: { lastOrganizedScopeId = scope.id; open = StartAt(index: $0) },
                               onBack: onClose ?? {},
-                              bottomInset: onClose == nil ? 88 : 28)
+                              bottomInset: onClose == nil ? 88 : 28,
+                              scrollTopKey: scrollTopKey)
                     .ignoresSafeArea(edges: .bottom)
             }
             header

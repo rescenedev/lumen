@@ -5,6 +5,7 @@ import Photos
 /// then swipe just that bundle. Slate dark theme to match the organize screen.
 struct LibraryView: View {
     let library: PhotoLibrary
+    var scrollTopKey: Int = 0   // tab re-tap: pop the open album, else scroll to top
     @State private var scope: OrganizeScope?
     @State private var showSort = false
     @State private var showSettings = false
@@ -16,6 +17,7 @@ struct LibraryView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ZStack {
             ZStack {
                 Color.lumenBG.ignoresSafeArea()
@@ -66,6 +68,15 @@ struct LibraryView: View {
                 scope = s
             }
         }
+        // Tab re-tap: an open album pops back to the list; the list scrolls to top.
+        .onChange(of: scrollTopKey) {
+            if scope != nil {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = nil }
+            } else {
+                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("home-top", anchor: .top) }
+            }
+        }
+        }
     }
 
     /// Branded empty state — distinguishes "no photos yet" from "all organized".
@@ -100,6 +111,7 @@ struct LibraryView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
+                .id("home-top")
                 HStack {
                     Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     Spacer()
@@ -274,9 +286,11 @@ struct OnboardingView: View {
 
 struct OrganizePickerView: View {
     let library: PhotoLibrary
+    var scrollTopKey: Int = 0   // tab re-tap: pop the open album, else scroll to top
     @State private var scope: OrganizeScope?
 
     var body: some View {
+        ScrollViewReader { proxy in
         ZStack {
             ZStack {
                 Color.lumenBG.ignoresSafeArea()
@@ -308,6 +322,15 @@ struct OrganizePickerView: View {
         }
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
+        // Tab re-tap: an open album pops back to the picker; the picker scrolls to top.
+        .onChange(of: scrollTopKey) {
+            if scope != nil {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { scope = nil }
+            } else {
+                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("organize-top", anchor: .top) }
+            }
+        }
+        }
     }
 
     private var pickerList: some View {
@@ -324,6 +347,7 @@ struct OrganizePickerView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 48).padding(.bottom, 32)
+                .id("organize-top")
 
                 // 리스트
                 VStack(spacing: 0) {
