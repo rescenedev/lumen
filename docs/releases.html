@@ -97,9 +97,25 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.3.6">
+    <div class="release-head">
+      <h2>0.3.6</h2><span class="date">2026년 6월 12일</span><span class="tag">최신</span>
+    </div>
+    <h3>사이드바 폴더 트리, Finder처럼</h3>
+    <ul>
+      <li><b>폴더를 클릭하면 항상 선택 + 펼침/접힘 토글.</b> 다른 앨범을 보다가 펼쳐진 폴더를 클릭해도 바로 접힙니다 — 두 번 클릭할 필요도, 가끔 무시되던 클릭도 없습니다 (AppKit 이벤트 레벨에서 처리하도록 재작성).</li>
+      <li><b>키보드 탐색이 얌전해졌습니다.</b> ↑/↓는 이동만 하고(지나가는 폴더가 더는 자동으로 펼쳐지지 않음), →로 펼치고 ←로 접습니다.</li>
+    </ul>
+    <h3>고침</h3>
+    <ul>
+      <li>즐겨찾기/라벨 개수 집계가 NAS에 사진별 왕복을 보내던 문제 — 즐겨찾기가 많아도 메인 스레드가 멈추지 않습니다.</li>
+      <li>해상도가 다른 디스플레이로 창을 옮기면 썸네일·배지가 흐려지던 문제.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.3.5">
     <div class="release-head">
-      <h2>0.3.5</h2><span class="date">2026년 6월 12일</span><span class="tag">최신</span>
+      <h2>0.3.5</h2><span class="date">2026년 6월 12일</span>
     </div>
     <h3>성능 — 실행하면 바로 사진이 보입니다</h3>
     <p class="sub" style="margin:0 0 8px">67,676장 라이브러리 기준, 프레임 단위로 측정하며 시작 경로를 다시 설계했습니다.</p>
