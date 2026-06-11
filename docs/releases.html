@@ -97,9 +97,25 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.3.4">
+    <div class="release-head">
+      <h2>0.3.4</h2><span class="date">2026년 6월 12일</span><span class="tag">최신</span>
+    </div>
+    <h3>성능</h3>
+    <p class="sub" style="margin:0 0 8px">실제 67,676장 NAS 라이브러리에서 측정하며 수정한 대규모 성능 배치입니다.</p>
+    <ul>
+      <li><b>사진 선택이 즉각 반응합니다.</b> 클릭당 인스펙터 갱신 ~70ms → ~3ms, 전체 선택(⌘A, 6.7만 장)은 0.8초 멈춤 → 0.2초.</li>
+      <li><b>검색이 더 이상 화면을 멈추지 않습니다.</b> 큰 라이브러리에서 검색 1회당 ~0.4초씩 메인 스레드를 막던 필터링이 정렬과 함께 백그라운드에서 돕니다.</li>
+      <li><b>실행 후 ~40초쯤 발생하던 3~4초 프리즈를 제거했습니다.</b> 라이브러리 동기화(reconcile)와 썸네일 캐시 워밍 스캔이 메인 스레드를 막고 있었습니다.</li>
+      <li><b>썸네일 크기 슬라이더·창 크기 조절이 부드러워졌습니다.</b> 그리드 썸네일이 GPU로 스케일되어 틱당 ~350ms 걸리던 재드로우가 사라졌습니다.</li>
+      <li><b>리스트 보기를 네이티브 테이블로 교체</b>했습니다 — 수만 행에서도 즉시 열리고, 대량 선택이 약 5배 빨라졌습니다.</li>
+      <li>실행 직후 첫 폴더 클릭 156ms → 4ms, 첫 검색·실행 직후의 잔 끊김도 인덱스 사전 계산으로 줄였습니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.3.3">
     <div class="release-head">
-      <h2>0.3.3</h2><span class="date">2026년 6월 10일</span><span class="tag">최신</span>
+      <h2>0.3.3</h2><span class="date">2026년 6월 10일</span>
     </div>
     <h3>고침</h3>
     <ul>
