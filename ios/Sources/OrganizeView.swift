@@ -430,19 +430,12 @@ struct OrganizeView: View {
                     .buttonStyle(.plain)
                     .padding(.horizontal, 28)
                 }
-                // The "정리 완료" moment is when Lumen just earned its keep — the one
-                // low-key place we ask for support. (Lumen is free; this is it.)
-                Button {
-                    UIApplication.shared.open(SettingsSheet.sponsorURL)
-                } label: {
-                    Label("개발자 응원하기", systemImage: "heart.fill")
-                        .font(.footnote.weight(.medium)).foregroundStyle(.white.opacity(0.5))
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 14)
+                // No support/sponsor ask here — a screen confirming deletion must
+                // stay free of unrelated CTAs (it reads as a dark pattern).
+                // Sponsoring lives in settings only.
                 Button("닫기") { dismiss() }
                     .font(.subheadline).foregroundStyle(.white.opacity(0.5))
-                    .padding(.top, 12).padding(.bottom, 24)
+                    .padding(.top, 14).padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
