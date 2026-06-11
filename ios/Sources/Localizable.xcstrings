@@ -319,6 +319,11 @@
         }
       }
     },
+    "삭제 없이 나가기" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Leave Without Deleting" } }
+      }
+    },
     "삭제 예정" : {
       "extractionState" : "stale",
       "localizations" : {

@@ -432,8 +432,9 @@ struct OrganizeView: View {
                 }
                 // No support/sponsor ask here — a screen confirming deletion must
                 // stay free of unrelated CTAs (it reads as a dark pattern).
-                // Sponsoring lives in settings only.
-                Button("닫기") { dismiss() }
+                // Sponsoring lives in settings only. The escape route says exactly
+                // what it does, so leaving never feels railroaded into deleting.
+                Button("삭제 없이 나가기") { dismiss() }
                     .font(.subheadline).foregroundStyle(.white.opacity(0.5))
                     .padding(.top, 14).padding(.bottom, 24)
             }
