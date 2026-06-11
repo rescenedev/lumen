@@ -139,7 +139,7 @@ struct OrganizeView: View {
                         .onTapGesture { togglePlayback() }
                 } else {
                     Color.clear.contentShape(Rectangle())
-                        .onTapGesture(count: 2) { toggleZoom() }
+                        .onTapGesture(count: 2, coordinateSpace: .global) { p in toggleZoom(at: p) }
                 }
                 Color.clear.contentShape(Rectangle())
                     .frame(width: 64)
@@ -176,20 +176,47 @@ struct OrganizeView: View {
     }
 
     private var pinchGesture: some Gesture {
-        MagnificationGesture()
+        MagnifyGesture()
             .onChanged { v in
                 isPinching = true
-                zoom = min(max(zoomBase * v, 0.7), 5)   // rubber-band below 1, cap at 5 mid-pinch
+                let b = UIScreen.main.bounds.size
+                // Zoom about the pinch centroid (like Photos), not the screen
+                // center: shift pan so the content point under the fingers stays
+                // under the fingers while the scale changes.
+                let c = CGPoint(x: v.startLocation.x - b.width / 2,
+                                y: v.startLocation.y - b.height / 2)
+                let z = rubberZoom(zoomBase * v.magnification)
+                pan = CGSize(width: c.x - (c.x - panBase.width) * (z / zoomBase),
+                             height: c.y - (c.y - panBase.height) * (z / zoomBase))
+                zoom = z
             }
             .onEnded { _ in
                 isPinching = false
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                     zoom = min(max(zoom, 1), 4)
                     if zoom <= 1.01 { zoom = 1; pan = .zero }
+                    else { pan = clampedPan(pan, zoom: zoom) }
                 }
                 zoomBase = zoom
                 panBase = pan
             }
+    }
+
+    /// Soft scale limits: past fit (1x) or max (4x) the pinch keeps responding
+    /// with diminishing effect — a progressive rubber band instead of the old
+    /// hard stop at 0.7x/5x, which read as the gesture "sticking".
+    private func rubberZoom(_ raw: CGFloat) -> CGFloat {
+        if raw < 1 { return pow(raw, 0.5) }
+        if raw > 4 { return 4 * pow(raw / 4, 0.35) }
+        return raw
+    }
+
+    /// Keep the photo's visible area on screen for a given zoom.
+    private func clampedPan(_ p: CGSize, zoom: CGFloat) -> CGSize {
+        let b = UIScreen.main.bounds.size
+        let maxX = (zoom - 1) * b.width / 2, maxY = (zoom - 1) * b.height / 2
+        return CGSize(width: min(max(p.width, -maxX), maxX),
+                      height: min(max(p.height, -maxY), maxY))
     }
 
     private var dragGesture: some Gesture {
@@ -214,11 +241,8 @@ struct OrganizeView: View {
                 guard !isPinching else { return }
                 if isZoomed {
                     // Keep the photo's visible area on screen (clamp, with a spring).
-                    let b = UIScreen.main.bounds.size
-                    let maxX = (zoom - 1) * b.width / 2, maxY = (zoom - 1) * b.height / 2
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        pan = CGSize(width: min(max(pan.width, -maxX), maxX),
-                                     height: min(max(pan.height, -maxY), maxY))
+                        pan = clampedPan(pan, zoom: zoom)
                     }
                     panBase = pan
                     return
@@ -234,10 +258,19 @@ struct OrganizeView: View {
             }
     }
 
-    /// Double-tap: zoom to 2.5x, or back to fit.
-    private func toggleZoom() {
+    /// Double-tap: zoom to 2.5x about the tapped point (Photos-style), or back to fit.
+    private func toggleZoom(at location: CGPoint? = nil) {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
-            if isZoomed { zoom = 1; pan = .zero } else { zoom = 2.5 }
+            if isZoomed {
+                zoom = 1; pan = .zero
+            } else {
+                zoom = 2.5
+                if let location {
+                    let b = UIScreen.main.bounds.size
+                    let c = CGPoint(x: location.x - b.width / 2, y: location.y - b.height / 2)
+                    pan = clampedPan(CGSize(width: c.x * (1 - zoom), height: c.y * (1 - zoom)), zoom: zoom)
+                }
+            }
         }
         zoomBase = zoom
         panBase = pan
