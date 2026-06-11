@@ -23,43 +23,25 @@ struct SidebarView: View {
             foldersSection
         }
         .listStyle(.sidebar)
-        // Keyboard outline navigation, Finder-style: ↑/↓ only move the
-        // selection (no auto-expand — arrowing through a long folder list used
-        // to unfold every folder it passed); → reveals the selected folder's
-        // children, ← folds them. An NSEvent monitor, not onKeyPress: the
-        // sidebar List is NSTableView-backed and its key events never reach
-        // SwiftUI's key-press chain (→ used to shift focus to the detail pane
-        // instead). Click-driven expansion lives on the row gesture below.
+        // Folder-tree input is handled by an NSEvent monitor, NOT SwiftUI
+        // modifiers — the sidebar List is AppKit-backed, so onKeyPress never
+        // sees its key events and row-level gestures lose most clicks
+        // (measured: 1 in 4 delivered). Behavior, Finder-style:
+        //   • click on a folder row: the List selects it natively; the monitor
+        //     then toggles its children — so clicking an expanded folder while
+        //     browsing elsewhere folds it, and re-clicking re-opens it
+        //   • the disclosure chevron keeps its native toggle (excluded here)
+        //   • ↑/↓ only move the selection (no auto-expand); → reveals the
+        //     selected folder's children, ← folds them
         .onAppear {
             guard keyMonitor == nil else { return }
-            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                // ←/→ act on the sidebar tree only while the user is "in" the
-                // sidebar. AppKit focus can't express that (clicking a List row
-                // doesn't reliably move first responder — it was found parked
-                // on the thumbnail slider), so gate on intent instead: a folder
-                // is selected, no photos are selected, and focus isn't in a
-                // photo view / text field / the viewer — there the arrows keep
-                // their navigation meaning.
-                guard event.keyCode == 123 || event.keyCode == 124,   // ← / →
-                      event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
-                      case .folder(let url) = model.selectedSidebar,
-                      model.viewerIndex == nil,
-                      model.selection.isEmpty
-                else { return event }
-                if let responder = NSApp.keyWindow?.firstResponder,
-                   responder is LumenCollectionView || responder is LumenTableView || responder is NSText {
-                    return event
-                }
-                if event.keyCode == 124 {
-                    if !expandedFolders.contains(url) {
-                        withAnimation { _ = expandedFolders.insert(url) }
-                    }
-                } else {
-                    if expandedFolders.contains(url) {
-                        withAnimation { _ = expandedFolders.remove(url) }
-                    }
-                }
-                return nil   // consumed — the focus must stay on the sidebar
+            // leftMouseDOWN, not Up: NSTableView runs a mouse-tracking loop on
+            // mouse-down that pulls the matching mouse-up straight off the event
+            // queue — it never passes through sendEvent, so local monitors (and
+            // SwiftUI row gestures) miss it. The down event always arrives.
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown]) { event in
+                if event.type == .leftMouseDown { return handleSidebarMouseDown(event) }
+                return handleSidebarKeyDown(event)
             }
         }
         .onDisappear {
@@ -71,6 +53,84 @@ struct SidebarView: View {
                 model.renameAlbum(album.id, to: renameText)
             }
         }
+    }
+
+    // MARK: Folder-tree input (NSEvent monitor)
+
+    /// ←/→ act on the sidebar tree only while the user is "in" the sidebar.
+    /// AppKit focus can't express that (clicking a List row doesn't reliably
+    /// move first responder — it was found parked on the thumbnail slider), so
+    /// gate on intent instead: a folder is selected, no photos are selected,
+    /// and focus isn't in a photo view / text field / the viewer — there the
+    /// arrows keep their navigation meaning.
+    private func handleSidebarKeyDown(_ event: NSEvent) -> NSEvent? {
+        guard event.keyCode == 123 || event.keyCode == 124,   // ← / →
+              event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+              case .folder(let url) = model.selectedSidebar,
+              model.viewerIndex == nil,
+              model.selection.isEmpty
+        else { return event }
+        if let responder = NSApp.keyWindow?.firstResponder,
+           responder is LumenCollectionView || responder is LumenTableView || responder is NSText {
+            return event
+        }
+        if event.keyCode == 124 {
+            if !expandedFolders.contains(url) {
+                withAnimation { _ = expandedFolders.insert(url) }
+            }
+        } else {
+            if expandedFolders.contains(url) {
+                withAnimation { _ = expandedFolders.remove(url) }
+            }
+        }
+        return nil   // consumed — the focus must stay on the sidebar
+    }
+
+    /// A click on a sidebar outline row toggles the clicked folder's children.
+    /// The List's native selection runs first (the event is never consumed,
+    /// and the deferred block runs after the table's tracking loop completes);
+    /// once it lands, the selected folder IS the clicked row, so toggling the
+    /// selection is toggling the click target. Chevron clicks are left to the
+    /// outline's own toggle — detected by the expansion state having already
+    /// changed when the deferred block runs.
+    private func handleSidebarMouseDown(_ event: NSEvent) -> NSEvent? {
+        guard model.folderTreeView,
+              let window = event.window,
+              let root = window.contentView,
+              let hit = root.hitTest(root.convert(event.locationInWindow, from: nil))
+        else { return event }
+        // The sidebar list is the only non-photo NSTableView in the window
+        // (SwiftUI backs it with a plain table even with DisclosureGroups).
+        var view: NSView? = hit
+        var table: NSTableView?
+        while let v = view {
+            if v is LumenCollectionView { return event }
+            if let t = v as? NSTableView {
+                if t is LumenTableView { return event }
+                table = t
+                break
+            }
+            view = v.superview
+        }
+        guard let table else { return event }
+
+        let point = table.convert(event.locationInWindow, from: nil)
+        guard table.row(at: point) >= 0 else { return event }
+
+        let before = expandedFolders
+        DispatchQueue.main.async {   // after the List applies the click's selection
+            guard case .folder(let url) = model.selectedSidebar,
+                  expandedFolders == before   // chevron clicks toggle natively — don't double-toggle
+            else { return }
+            withAnimation {
+                if expandedFolders.contains(url) {
+                    expandedFolders.remove(url)
+                } else {
+                    expandedFolders.insert(url)
+                }
+            }
+        }
+        return event
     }
 
     // MARK: Sections
@@ -273,30 +333,11 @@ private struct FolderTreeNode: View {
                     FolderTreeNode(node: child, expanded: $expanded)
                 }
             } label: {
-                // simultaneousGesture, NOT onTapGesture: the List must also see
-                // the click so it does its native selection (which focuses the
-                // list — an exclusive gesture left the highlight gray/inactive).
-                // DragGesture(minimumDistance: 0), NOT TapGesture: a tiny drag
-                // during the click defeats TapGesture (while the List still
-                // selects), which made re-click-to-collapse feel unreliable —
-                // a zero-distance drag always delivers its end event.
-                // Clicking selects + reveals children; re-clicking the already-
-                // selected folder toggles them.
+                // No row-level gesture: SwiftUI gestures on rows of an
+                // AppKit-backed List are unreliable (measured: 1 in 4 clicks
+                // delivered). Click-to-toggle is handled by the sidebar's
+                // NSEvent monitor instead — see SidebarView.body.
                 label
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(DragGesture(minimumDistance: 0).onEnded { value in
-                        guard abs(value.translation.width) < 4,
-                              abs(value.translation.height) < 4 else { return }
-                        let item = SidebarItem.folder(node.url)
-                        if model.selectedSidebar == item {
-                            withAnimation { isExpanded.wrappedValue.toggle() }
-                        } else {
-                            model.selectedSidebar = item
-                            if !isExpanded.wrappedValue {
-                                withAnimation { isExpanded.wrappedValue = true }
-                            }
-                        }
-                    })
             }
         } else {
             label
