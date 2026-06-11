@@ -8,6 +8,7 @@ struct SidebarView: View {
     @State private var renameText = ""
     @State private var photoAlbumsExpanded = false
     @State private var expandedFolders: Set<URL> = []
+    @State private var keyMonitor: Any?
 
     var body: some View {
         List(selection: Binding(
@@ -22,14 +23,48 @@ struct SidebarView: View {
             foldersSection
         }
         .listStyle(.sidebar)
-        // Safety net: whenever a folder gets selected — by click, keyboard, or
-        // code — reveal its children. The row's tap gesture can miss (a tiny
-        // drag during the click defeats TapGesture while the List still
-        // selects), which used to leave the folder selected but collapsed.
-        .onChange(of: model.selectedSidebar) { _, selected in
-            if case .folder(let url) = selected {
-                withAnimation { _ = expandedFolders.insert(url) }
+        // Keyboard outline navigation, Finder-style: ↑/↓ only move the
+        // selection (no auto-expand — arrowing through a long folder list used
+        // to unfold every folder it passed); → reveals the selected folder's
+        // children, ← folds them. An NSEvent monitor, not onKeyPress: the
+        // sidebar List is NSTableView-backed and its key events never reach
+        // SwiftUI's key-press chain (→ used to shift focus to the detail pane
+        // instead). Click-driven expansion lives on the row gesture below.
+        .onAppear {
+            guard keyMonitor == nil else { return }
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                // ←/→ act on the sidebar tree only while the user is "in" the
+                // sidebar. AppKit focus can't express that (clicking a List row
+                // doesn't reliably move first responder — it was found parked
+                // on the thumbnail slider), so gate on intent instead: a folder
+                // is selected, no photos are selected, and focus isn't in a
+                // photo view / text field / the viewer — there the arrows keep
+                // their navigation meaning.
+                guard event.keyCode == 123 || event.keyCode == 124,   // ← / →
+                      event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+                      case .folder(let url) = model.selectedSidebar,
+                      model.viewerIndex == nil,
+                      model.selection.isEmpty
+                else { return event }
+                if let responder = NSApp.keyWindow?.firstResponder,
+                   responder is LumenCollectionView || responder is LumenTableView || responder is NSText {
+                    return event
+                }
+                if event.keyCode == 124 {
+                    if !expandedFolders.contains(url) {
+                        withAnimation { _ = expandedFolders.insert(url) }
+                    }
+                } else {
+                    if expandedFolders.contains(url) {
+                        withAnimation { _ = expandedFolders.remove(url) }
+                    }
+                }
+                return nil   // consumed — the focus must stay on the sidebar
             }
+        }
+        .onDisappear {
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
         }
         .sheet(item: $renamingAlbum) { album in
             AlbumNameSheet(title: "Rename Album", confirmLabel: "Rename", text: $renameText) {
@@ -241,11 +276,17 @@ private struct FolderTreeNode: View {
                 // simultaneousGesture, NOT onTapGesture: the List must also see
                 // the click so it does its native selection (which focuses the
                 // list — an exclusive gesture left the highlight gray/inactive).
-                // Selecting reveals children (List's onChange backs this up);
-                // re-clicking the already-selected folder toggles them.
+                // DragGesture(minimumDistance: 0), NOT TapGesture: a tiny drag
+                // during the click defeats TapGesture (while the List still
+                // selects), which made re-click-to-collapse feel unreliable —
+                // a zero-distance drag always delivers its end event.
+                // Clicking selects + reveals children; re-clicking the already-
+                // selected folder toggles them.
                 label
                     .contentShape(Rectangle())
-                    .simultaneousGesture(TapGesture().onEnded {
+                    .simultaneousGesture(DragGesture(minimumDistance: 0).onEnded { value in
+                        guard abs(value.translation.width) < 4,
+                              abs(value.translation.height) < 4 else { return }
                         let item = SidebarItem.folder(node.url)
                         if model.selectedSidebar == item {
                             withAnimation { isExpanded.wrappedValue.toggle() }
