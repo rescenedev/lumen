@@ -96,8 +96,9 @@ struct LibraryView: View {
         .padding(.bottom, 40)
     }
 
-    /// How far past the top you pull before settings open.
-    private static let settingsPullThreshold: CGFloat = 80
+    /// How far past the top you pull before settings open — deliberately long
+    /// (~2x a refresh pull) so casual bounces never trigger it.
+    private static let settingsPullThreshold: CGFloat = 160
 
     private var scopeList: some View {
         ScrollView {
