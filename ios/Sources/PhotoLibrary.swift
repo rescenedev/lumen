@@ -425,7 +425,7 @@ struct OrganizeScope: Identifiable, Hashable {
         case .count: entries.sort { $0.r.count > $1.r.count }
         }
         for e in entries {
-            out.append(.init(id: e.c.localIdentifier, title: e.c.localizedTitle ?? String(localized: "앨범"), symbol: "rectangle.stack",
+            out.append(.init(id: e.c.localIdentifier, title: e.c.localizedTitle ?? String(localized: "이름 없는 앨범"), symbol: "rectangle.stack",
                              count: e.r.count, collection: e.c, cover: e.r.firstObject))
         }
         return Snapshot(albums: albums, keptIDs: keptIDs, scopes: out, hasAnyPhotos: hasAny)

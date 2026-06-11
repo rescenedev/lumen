@@ -103,7 +103,7 @@ struct LibraryView: View {
     private var scopeList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Lumen").font(.system(size: 30, weight: .heavy, design: .rounded))
+                Text("앨범").font(.system(size: 30, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
                     .id("home-top")

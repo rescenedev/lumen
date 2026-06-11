@@ -396,14 +396,18 @@
       }
     },
     "앨범" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Album"
+            "value" : "Albums"
           }
         }
+      }
+    },
+    "이름 없는 앨범" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Untitled Album" } }
       }
     },
     "앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 삭제 후보, ♥는 ‘Lumen’ 앨범에 보관, ★는 즐겨찾기입니다." : {
