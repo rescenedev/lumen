@@ -27,13 +27,12 @@ struct OrganizeView: View {
     @State private var organizing = false                 // viewer first, then organize
     @State private var index: Int
 
-    init(scope: OrganizeScope, library: PhotoLibrary, startIndex: Int = 0, autoStart: Bool = false) {
+    init(scope: OrganizeScope, library: PhotoLibrary, startIndex: Int = 0) {
         self.scope = scope
         self.library = library
         let s = library.gridSource(for: scope)
         _source = State(initialValue: s)
         _index = State(initialValue: min(max(startIndex, 0), max(s.count - 1, 0)))
-        _organizing = State(initialValue: autoStart)
     }
     @State private var offset: CGSize = .zero
     @State private var decisions: [Int: Decision] = [:]   // index → keep/trash
