@@ -29,6 +29,8 @@ struct OrganizeView: View {
     let scope: OrganizeScope
     let library: PhotoLibrary
     @Environment(\.dismiss) private var dismiss
+    @Environment(StoreManager.self) private var store
+    @State private var showPaywall = false
 
     @State private var source: GridSource                  // photos for this scope (ready at init)
     @State private var organizing = false                 // viewer first, then organize
@@ -87,6 +89,7 @@ struct OrganizeView: View {
         }
         .preferredColorScheme(.dark)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: tick)
+        .sheet(isPresented: $showPaywall) { PaywallView() }
         .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
             // Our video finished → rewind and show the play badge again.
             guard let item = note.object as? AVPlayerItem, item === player?.currentItem else { return }
@@ -432,6 +435,8 @@ struct OrganizeView: View {
     /// photo wraps up into the summary.
     private func decide(_ d: Decision) {
         guard index < count else { return }
+        guard store.canOrganize() else { showPaywall = true; return }
+        store.consumeOrganize()
         let a = source.asset(index)
         session.decide(d, at: index)
         if d == .keep { Task { await library.addToLumen(a) } }   // file into Lumen, live
@@ -443,6 +448,12 @@ struct OrganizeView: View {
     /// Up-swipe: mark the photo for deletion and fly it up.
     private func trashFromSwipe() {
         guard index < count else { return }
+        guard store.canOrganize() else {
+            withAnimation(.spring(response: 0.3)) { offset = .zero }
+            showPaywall = true
+            return
+        }
+        store.consumeOrganize()
         session.decide(.trash, at: index)
         tick += 1
         showFlash(.trash)
@@ -471,6 +482,7 @@ struct OrganizeView: View {
         guard let action = session.undo() else { return }
         switch action {
         case .decide(let i, let d, let previous):
+            store.refundOrganize()   // undo hands the free-tier decision back
             // Only pull the photo back out of Lumen if THIS action put it there.
             if d == .keep, previous != .keep {
                 let a = source.asset(i)

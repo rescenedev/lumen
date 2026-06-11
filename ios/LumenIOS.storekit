@@ -1,0 +1,53 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : "https://rescenedev.github.io/lumen/lumen-ios/privacy.html"
+      }
+    ]
+  },
+  "identifier" : "8F2C1A6E-0000-4000-A000-000000000001",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : true,
+      "internalID" : "8F2C1A6E-0000-4000-A000-000000000002",
+      "localizations" : [
+        {
+          "description" : "무제한 정리 — 한 번만 결제",
+          "displayName" : "Lumen Pro",
+          "locale" : "ko"
+        },
+        {
+          "description" : "Unlimited organizing — one-time purchase",
+          "displayName" : "Lumen Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.prototype.lumen.ios.pro",
+      "referenceName" : "Lumen Pro",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "ko",
+    "_storefront" : "KOR",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

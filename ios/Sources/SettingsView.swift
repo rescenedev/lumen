@@ -4,6 +4,8 @@ import SwiftUI
 /// bottom sheet from the home's gear button (the tab bar is full).
 struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(StoreManager.self) private var store
+    @State private var showPaywall = false
 
     static let privacyURL = URL(string: "https://rescenedev.github.io/lumen/lumen-ios/privacy.html")!
     static let contactURL = URL(string: "mailto:zihado@gmail.com?subject=Lumen%20iOS")!
@@ -20,6 +22,19 @@ struct SettingsSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 6)
 
+            if store.isPro {
+                HStack {
+                    Label { Text("Lumen Pro 사용 중").font(.body.weight(.medium)).foregroundStyle(.white) }
+                    icon: { Image(systemName: "checkmark.seal.fill").foregroundStyle(Color.lumenAccent).frame(width: 28) }
+                    Spacer()
+                }
+                .padding(.horizontal, 22).padding(.vertical, 16)
+            } else {
+                row("sparkles", "Lumen Pro — 무제한 정리") { showPaywall = true }
+                divider
+                row("arrow.clockwise", "구매 복원") { Task { await store.restore() } }
+            }
+            divider
             row("hand.raised.fill", "개인정보처리방침") { UIApplication.shared.open(Self.privacyURL) }
             divider
             row("envelope.fill", "문의하기") { UIApplication.shared.open(Self.contactURL) }
@@ -40,10 +55,11 @@ struct SettingsSheet: View {
                 .padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(330)])
+        .presentationDetents([.height(store.isPro ? 390 : 440)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.lumenCard)
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     private var divider: some View {
