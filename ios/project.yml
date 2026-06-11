@@ -13,10 +13,6 @@ schemes:
       targets:
         LumenIOS: all
         LumenIOSTests: all
-    run:
-      # Local IAP testing without App Store Connect (Xcode runs only;
-      # simctl launches don't load this — the paywall then shows a fallback).
-      storeKitConfiguration: LumenIOS.storekit
     test:
       targets:
         - LumenIOSTests
@@ -59,7 +55,6 @@ targets:
       - path: ../Sources/Lumen/Services/ImageEditor.swift
       # Pure-logic app types under test, compiled straight into the bundle.
       - path: Sources/OrganizeSession.swift
-      - path: Sources/OrganizeQuota.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.prototype.lumen.ios.tests

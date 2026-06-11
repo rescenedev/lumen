@@ -14,7 +14,6 @@ struct LumenIOSApp: App {
 
 struct RootView: View {
     @State private var lib = PhotoLibrary()
-    @State private var store = StoreManager()
     @State private var selectedTab: LumenTab = .home
     @State private var showSplash = true
 
@@ -44,7 +43,6 @@ struct RootView: View {
             }
             if showSplash { SplashView().transition(.opacity) }
         }
-        .environment(store)
         .task {
             async let minWait: Void = Task.sleep(for: .milliseconds(600))
             if !lib.loaded { await lib.load() }

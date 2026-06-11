@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// App settings — kept deliberately tiny: policy/contact/version. Opens as a
-/// bottom sheet from the home's gear button (the tab bar is full).
+/// App settings — kept deliberately tiny: support/policy/contact/version.
+/// Opens as a bottom sheet from the home's gear button (the tab bar is full).
 struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(StoreManager.self) private var store
-    @State private var showPaywall = false
 
+    static let sponsorURL = URL(string: "https://fairy.hada.io/@lumen")!
     static let privacyURL = URL(string: "https://rescenedev.github.io/lumen/lumen-ios/privacy.html")!
     static let contactURL = URL(string: "mailto:zihado@gmail.com?subject=Lumen%20iOS")!
 
@@ -22,18 +21,7 @@ struct SettingsSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 22).padding(.top, 18).padding(.bottom, 6)
 
-            if store.isPro {
-                HStack {
-                    Label { Text("Lumen Pro 사용 중").font(.body.weight(.medium)).foregroundStyle(.white) }
-                    icon: { Image(systemName: "checkmark.seal.fill").foregroundStyle(Color.lumenAccent).frame(width: 28) }
-                    Spacer()
-                }
-                .padding(.horizontal, 22).padding(.vertical, 16)
-            } else {
-                row("sparkles", "Lumen Pro — 무제한 정리") { showPaywall = true }
-                divider
-                row("arrow.clockwise", "구매 복원") { Task { await store.restore() } }
-            }
+            row("heart.fill", "개발자 응원하기") { UIApplication.shared.open(Self.sponsorURL) }
             divider
             row("hand.raised.fill", "개인정보처리방침") { UIApplication.shared.open(Self.privacyURL) }
             divider
@@ -50,16 +38,16 @@ struct SettingsSheet: View {
 
             Spacer(minLength: 0)
 
-            Text("모든 사진 처리는 기기 안에서만 이루어집니다.")
+            Text("Lumen은 무료입니다. 모든 사진 처리는 기기 안에서만 이루어집니다.")
                 .font(.footnote).foregroundStyle(.white.opacity(0.3))
-                .padding(.bottom, 20)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 30).padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.height(store.isPro ? 390 : 440)])
+        .presentationDetents([.height(390)])
         .presentationDragIndicator(.visible)
         .presentationBackground(Color.lumenCard)
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showPaywall) { PaywallView() }
     }
 
     private var divider: some View {
