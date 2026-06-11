@@ -1,269 +1,588 @@
 {
   "sourceLanguage" : "ko",
   "strings" : {
-    "%lld장" : {
+    "%@ / %@" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld" } }
+        "ko" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ / %2$@"
+          }
+        }
+      }
+    },
+    "%@장" : {
+
+    },
+    "%lld장" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        }
       }
     },
     "%lld장 한번에 삭제" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete %lld at once" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete %lld at once"
+          }
+        }
       }
+    },
+    "♥로 고른 사진을 한 곳에 모아 나중에 분류" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "♥ gathers your picks in one place to sort later"
+          }
+        }
+      }
+    },
+    "♥로 보관한 사진이 여기 모여요" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos you keep with ♥ gather here"
+          }
+        }
+      }
+    },
+    "Lumen" : {
+
     },
     "Lumen은 무료입니다. 모든 사진 처리는 기기 안에서만 이루어집니다." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Lumen is free. All photo processing stays on your device." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lumen is free. All photo processing stays on your device."
+          }
+        }
       }
     },
     "개발자 응원하기" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Support the developer" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Support the developer"
+          }
+        }
       }
     },
     "개인정보처리방침" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Privacy Policy" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privacy Policy"
+          }
+        }
       }
     },
     "기기에 사진이 추가되면 여기에서 정리할 수 있어요." : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Photos added to this device will show up here, ready to organize." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos added to this device will show up here, ready to organize."
+          }
+        }
       }
     },
     "기본순" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default"
+          }
+        }
       }
     },
     "나중에" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Later" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Later"
+          }
+        }
       }
     },
     "넘기며 둘러보기" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Swipe through" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swipe through"
+          }
+        }
       }
     },
     "닫기" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
       }
     },
     "동영상" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Videos" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Videos"
+          }
+        }
       }
     },
     "되돌림" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Undone" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undone"
+          }
+        }
       }
     },
     "모두 정리했어요" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "All organized" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All organized"
+          }
+        }
       }
     },
     "문의하기" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Contact" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contact"
+          }
+        }
       }
     },
     "버전" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Version" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version"
+          }
+        }
       }
     },
     "보관" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Kept" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept"
+          }
+        }
       }
     },
     "보관됨" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Kept" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept"
+          }
+        }
       }
     },
     "보관은 Lumen 앨범에" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep into the Lumen album" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep into the Lumen album"
+          }
+        }
       }
     },
     "보관한 %lld장은 Lumen 앨범에 모았어요" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Kept %lld in your Lumen album" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept %lld in your Lumen album"
+          }
+        }
       }
     },
     "보관한 사진이 없어요" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nothing kept yet" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing kept yet"
+          }
+        }
       }
     },
     "사진 많은순" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Most photos" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Most photos"
+          }
+        }
       }
     },
     "사진 접근 허용" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow Photos Access" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Photos Access"
+          }
+        }
       }
     },
     "사진 정리가 쉬워집니다" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Photo cleanup, made easy" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photo cleanup, made easy"
+          }
+        }
       }
     },
     "사진을 불러오고 있어요" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading photos" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading photos"
+          }
+        }
       }
     },
     "사진이 없어요" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No photos" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No photos"
+          }
+        }
       }
     },
     "삭제" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
       }
     },
     "삭제 예정" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Marked for deletion" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marked for deletion"
+          }
+        }
       }
     },
     "삭제는 항상 확인 후 진행" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Deletion always asks first" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deletion always asks first"
+          }
+        }
       }
     },
     "설정" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        }
       }
     },
     "설정에서 변경" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Change in Settings" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change in Settings"
+          }
+        }
       }
     },
     "수고하셨어요!" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nice work!" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nice work!"
+          }
+        }
       }
     },
     "스크린샷" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Screenshots" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screenshots"
+          }
+        }
       }
     },
     "안전하게" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Safe by design" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safe by design"
+          }
+        }
       }
     },
     "앨범" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Album" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Album"
+          }
+        }
       }
     },
     "앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 삭제 후보, ♥는 ‘Lumen’ 앨범에 보관, ★는 즐겨찾기입니다." : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pick an album and swipe through it. Swipe up to mark for deletion, ♥ keeps it in your ‘Lumen’ album, ★ favorites it." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick an album and swipe through it. Swipe up to mark for deletion, ♥ keeps it in your ‘Lumen’ album, ★ favorites it."
+          }
+        }
       }
     },
     "앨범을 골라보세요 · 위로 올리면 삭제 · 정리가 끝나면 한번에 삭제" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pick an album · Swipe up to mark · Everything deletes at once at the end" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick an album · Swipe up to mark · Everything deletes at once at the end"
+          }
+        }
       }
     },
     "이름순" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Name" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        }
       }
     },
     "전체 사진" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "All Photos" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All Photos"
+          }
+        }
       }
     },
     "정렬 기준" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sort by" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort by"
+          }
+        }
       }
     },
     "정리 시작" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start Organizing" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Organizing"
+          }
+        }
       }
     },
     "정리 완료" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "All Done" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All Done"
+          }
+        }
       }
     },
     "정리 화면에서 ★를 누르면 여기에 모여요" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tap ★ while organizing to collect them here" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap ★ while organizing to collect them here"
+          }
+        }
       }
     },
     "정리할 사진을 모두 둘러봤어요. 보관한 사진은 ‘Lumen’ 앨범에 모여 있어요." : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "You've been through everything. Kept photos live in your ‘Lumen’ album." } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You've been through everything. Kept photos live in your ‘Lumen’ album."
+          }
+        }
       }
     },
     "정리할 사진이 없어요" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nothing to organize" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing to organize"
+          }
+        }
       }
     },
     "정리할 앨범" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Albums to organize" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Albums to organize"
+          }
+        }
       }
     },
     "정리해볼까요?" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready to organize?" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready to organize?"
+          }
+        }
       }
     },
     "좌우로 넘기고, 위로 올리면 삭제 후보" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Swipe sideways to browse, up to mark for deletion" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swipe sideways to browse, up to mark for deletion"
+          }
+        }
       }
     },
     "즐겨찾기" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Favorites" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Favorites"
+          }
+        }
       }
     },
     "즐겨찾기 해제" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unfavorited" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unfavorited"
+          }
+        }
       }
     },
     "즐겨찾기한 사진이 없어요" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No favorites yet" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No favorites yet"
+          }
+        }
       }
     },
     "최근 추가" : {
+      "extractionState" : "stale",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recently Added" } }
-      }
-    },
-    "♥로 고른 사진을 한 곳에 모아 나중에 분류" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "♥ gathers your picks in one place to sort later" } }
-      }
-    },
-    "♥로 보관한 사진이 여기 모여요" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Photos you keep with ♥ gather here" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recently Added"
+          }
+        }
       }
     }
   },

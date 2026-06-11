@@ -70,7 +70,9 @@ struct OrganizeView: View {
 
     private let threshold: CGFloat = 80
     private var isZoomed: Bool { zoom > 1.01 }
-    private var currentIsVideo: Bool { index < count && source.asset(index).mediaType == .video }
+    // Cached per index (in .task(id:)) — the body re-evaluates every frame during
+    // a drag, and hitting PHFetchResult.object(at:) per frame is avoidable work.
+    @State private var currentIsVideo = false
 
     private var count: Int { source.count }
     private var keepCount: Int { session.keepCount }
@@ -156,6 +158,7 @@ struct OrganizeView: View {
                 // PhotoKit fetch on the main thread.
                 let a = source.asset(index)
                 currentIsFav = favOverrides[a.localIdentifier] ?? a.isFavorite
+                currentIsVideo = a.mediaType == .video
                 // Warm the photos around this one at full-screen size, so the next
                 // swipe shows an already-decoded/downloaded image instead of a spinner.
                 let neighbors = [index + 1, index + 2, index - 1]

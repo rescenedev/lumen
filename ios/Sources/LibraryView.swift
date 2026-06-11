@@ -225,7 +225,7 @@ struct ScopeCard: View {
         .contentShape(Rectangle())
         .task(id: scope.cover?.localIdentifier) {
             if let a = scope.cover {
-                for await img in library.imageStream(a, points: 300, mode: .aspectFill) { cover = img }
+                for await img in library.imageStream(a, points: PhotoLibrary.coverPoints, mode: .aspectFill) { cover = img }
             }
         }
     }

@@ -8,13 +8,19 @@ import AVFoundation
 struct GridSource {
     let count: Int
     private let provider: (Int) -> PHAsset
+    private let warmed = WarmFlag()   // sources are memoized — warm exactly once
     init(count: Int, _ provider: @escaping (Int) -> PHAsset) { self.count = count; self.provider = provider }
     func asset(_ i: Int) -> PHAsset { provider(i) }
 
+    private final class WarmFlag { var done = false }
+
     /// Resolve the backing fetch off the main thread so the first cell draw doesn't
-    /// pay for it mid-slide. Safe to call before the grid renders.
+    /// pay for it mid-slide. Safe to call before the grid renders. Idempotent:
+    /// persistent tab panes re-init on every parent body eval and call this each
+    /// time — only the first call spawns work.
     func warm() {
-        guard count > 0 else { return }
+        guard count > 0, !warmed.done else { return }
+        warmed.done = true
         Task.detached(priority: .userInitiated) { _ = self.asset(0) }
     }
 
@@ -135,11 +141,17 @@ struct OrganizeScope: Identifiable, Hashable {
 
     private func saveFavoriteOrder() { UserDefaults.standard.set(favoriteOrder, forKey: "lumen.favoriteOrder") }
 
+    /// Album-cover request size in points. Cards are ~165-250pt wide, so 220pt
+    /// covers them at full sharpness — the old 300pt square decoded ~2x the pixels.
+    static let coverPoints: CGFloat = 220
+
     /// Warm the cover-size thumbnail cache for an asset so it renders immediately.
+    /// MUST mirror ScopeCard's request exactly (same target px AND same options) —
+    /// PHCachingImageManager treats different options as different cache entries.
     private func prewarm(_ asset: PHAsset) {
-        let px = 300 * UIScreen.main.scale
+        let px = Self.coverPoints * UIScreen.main.scale
         manager.startCachingImages(for: [asset], targetSize: CGSize(width: px, height: px),
-                                   contentMode: .aspectFill, options: nil)
+                                   contentMode: .aspectFill, options: Self.viewerOptions())
     }
 
     /// Request options for grid thumbnails. Prewarming and the cells MUST use the

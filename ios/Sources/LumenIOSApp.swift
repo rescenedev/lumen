@@ -51,7 +51,9 @@ struct RootView: View {
             if showSplash { SplashView().transition(.opacity) }
         }
         .task {
-            async let minWait: Void = Task.sleep(for: .milliseconds(600))
+            // Library load lands in ~80ms on-device; a long splash floor is pure
+            // added latency. 350ms + the 0.4s fade still reads as a branded open.
+            async let minWait: Void = Task.sleep(for: .milliseconds(350))
             if !lib.loaded { await lib.load() }
             try? await minWait
             withAnimation(.easeOut(duration: 0.4)) { showSplash = false }
