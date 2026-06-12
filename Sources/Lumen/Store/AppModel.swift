@@ -309,15 +309,40 @@ final class AppModel {
     @ObservationIgnored private var watcher: FolderWatcher?
     @ObservationIgnored private let recentKey = "lumen.recentRoots"
 
+    // Crash report from a previous session awaiting the user's decision.
+    private(set) var pendingCrashReport: URL?
+    var showCrashReportAlert = false
+
     init() {
         albums = store.albums
         loadSettings()
+        if let report = CrashReporter.pendingReports().first {
+            pendingCrashReport = report
+            showCrashReportAlert = true
+        }
         watcher = FolderWatcher { [weak self] in self?.rescanRoots() }
         reopenRecentFolders()
         // Demo/screenshot hook: auto-open a folder on launch (no effect normally).
         if let demo = ProcessInfo.processInfo.environment["LUMEN_OPEN_FOLDER"] {
             importURLs([URL(fileURLWithPath: demo)])
         }
+    }
+
+    // MARK: - Crash reporting (user-initiated only)
+
+    func reportCrashOnGitHub() {
+        guard let report = pendingCrashReport else { return }
+        if let url = CrashReporter.gitHubIssueURL(for: report) {
+            NSWorkspace.shared.open(url)
+        }
+        CrashReporter.markHandled(report)
+        pendingCrashReport = nil
+    }
+
+    func dismissCrashReport() {
+        guard let report = pendingCrashReport else { return }
+        CrashReporter.markHandled(report)
+        pendingCrashReport = nil
     }
 
     // MARK: - Per-photo metadata

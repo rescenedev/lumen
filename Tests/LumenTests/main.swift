@@ -23,5 +23,6 @@ thumbnailCacheTests()
 libraryCacheTests()
 albumScaleTests()
 lumenTrashTests()
+crashReporterTests()
 
 exit(Harness.finish())

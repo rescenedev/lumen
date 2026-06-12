@@ -41,6 +41,14 @@ struct ContentView: View {
         } message: {
             Text(model.deletionMessage)
         }
+        .alert("Lumen Quit Unexpectedly", isPresented: $model.showCrashReportAlert) {
+            Button("Report on GitHub…") { model.reportCrashOnGitHub() }
+            Button("Not Now", role: .cancel) { model.dismissCrashReport() }
+        } message: {
+            Text("A crash report from the last session was saved on your Mac. "
+                 + "It contains only version info and a stack trace — nothing is sent "
+                 + "unless you choose to report it.")
+        }
         .sheet(isPresented: $model.showNewAlbumSheet) {
             AlbumNameSheet(title: "New Album", confirmLabel: "Create",
                            text: $model.newAlbumNameDraft) {

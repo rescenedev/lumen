@@ -5,5 +5,6 @@ import SwiftUI
 /// the app into a library + a 2-line executable is what lets the test runner
 /// link against the code (executable targets aren't linkable).
 public func runLumenApp() {
+    CrashReporter.install()
     LumenApp.main()
 }
