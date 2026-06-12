@@ -190,6 +190,7 @@
       <a href="#why">왜 Lumen</a>
       <a href="#features">기능</a>
       <a href="#perf">성능</a>
+      <a href="#privacy">프라이버시</a>
       <a href="releases.html">릴리즈 노트</a>
       <a href="en/index.html" class="lang-switch">English</a>
       <a class="nav-cta" href="#download">다운로드</a>
@@ -263,6 +264,7 @@
       <div class="card reveal"><div class="badge">🧩</div><h3>합치기 &amp; 워터마크</h3><p>여러 장을 <b>가로/세로/그리드</b>로 한 장에(드래그로 순서·행 지정). 텍스트·로고 <b>워터마크</b>(위치·색·투명도) — 편집·합치기·<b>배치</b> 어디서나.</p></div>
       <div class="card reveal"><div class="badge">🚀</div><h3>배치 처리</h3><p>여러 장을 한 번에 같은 크기·캔버스·워터마크로 리사이즈해 폴더로 내보내기. 원본은 그대로.</p></div>
       <div class="card reveal"><div class="badge">🏷️</div><h3>비파괴 정리</h3><p>앨범 · 태그 · 별점 · 색상 라벨 · 거부 플래그 · 스마트 모음(즐겨찾기·최근·오늘·중복). 원본은 절대 변경하지 않습니다.</p></div>
+      <div class="card reveal"><div class="badge">🗑️</div><h3>안전한 삭제 + 되돌리기</h3><p>휴지통이 없는 <b>NAS 볼륨에서도</b> 영구 삭제 대신 숨김 <code>.LumenTrash</code>로 옮겨 <b>30일</b> 보관. 모든 삭제 직후 <b>10초 되돌리기</b>로 파일·별점·앨범까지 원위치.</p></div>
       <div class="card reveal"><div class="badge">🔍</div><h3>검색 &amp; 필터</h3><p>파일명 · 태그 · 카메라 모델 검색. 별점 · 라벨 · 위치 · 카메라(예: SONY) · 거부 숨김으로 필터.</p></div>
       <div class="card reveal"><div class="badge">📤</div><h3>공유 · 내보내기</h3><p>시스템 공유, 원본/리사이즈/zip 내보내기, 일괄 이름변경, 배경화면 설정.</p></div>
     </div>
@@ -294,18 +296,32 @@
         <tr><td>검색 — 67k장 필터+정렬</td><td>메인 스레드 차단 <b>0</b> (백그라운드 처리)</td></tr>
         <tr><td>앨범에 대량 추가 (2만 장 앨범 + 1만 장)</td><td><b>~0.2 초</b></td></tr>
         <tr><td>앨범에서 대량 제거 (2만 장 중 1만)</td><td><b>17 ms</b></td></tr>
+        <tr><td>즐겨찾기/별점 대량 적용 (2만 장)</td><td><b>~0.4 초</b> (단일 트랜잭션)</td></tr>
         <tr><td>썸네일 크기 조절 · 창 리사이즈</td><td>멈춤 없음 (GPU 스케일)</td></tr>
         <tr><td>앱 크기</td><td>설치 <b>10 MB</b> · 다운로드 3.5 MB</td></tr>
         <tr><td>메모리 (67k 라이브러리 탐색)</td><td><b>~240 MB</b> · 풀사이즈 뷰어 탐색 후 ~380 MB (캐시 상한으로 바운드)</td></tr>
         <tr><td>CPU</td><td>유휴 <b>0.0%</b> · 58k 폴더 연속 스크롤 16–27%</td></tr>
         <tr><td>힙 분석 (leaks/heap)</td><td>앱 코드 메모리 누수 <b>0</b></td></tr>
       </table>
-      <p class="bench-note">측정 방법: 메인 스레드 히치 모니터(120Hz) + 프레임 단위 화면 캡처 + 프로파일러 샘플링, v0.3.7 기준.
+      <p class="bench-note">측정 방법: 메인 스레드 히치 모니터(120Hz) + 프레임 단위 화면 캡처 + 프로파일러 샘플링, v0.4.0 기준.
       과정은 <a href="releases.html">릴리즈 노트</a>에 그대로 적혀 있습니다.</p>
     </div>
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
       메모이즈된 목록 · 폴더 인덱스 · 디바운스 내비게이션 · 백그라운드 썸네일 워밍 · 지연 EXIF 인덱싱 · 점진적 이미지 로딩
     </p>
+  </div>
+</section>
+
+<section id="stability">
+  <div class="wrap">
+    <p class="eyebrow reveal">안정성</p>
+    <h2 class="stitle reveal">사진을 잃지 않도록 설계</h2>
+    <p class="ssub reveal">대형 라이브러리를 매일 다루는 도구의 첫 번째 약속은 "내 사진과 정리 결과가 안전하다"입니다.</p>
+    <div class="why">
+      <div class="card reveal"><div class="badge">🛡️</div><h3>실수해도 되돌릴 수 있게</h3><p>모든 삭제에 <b>10초 되돌리기</b>. NAS처럼 휴지통이 없는 볼륨도 영구 삭제 대신 <code>.LumenTrash</code>로 <b>30일</b> 보관. 원본 파일은 어떤 기능도 변경하지 않습니다.</p></div>
+      <div class="card reveal"><div class="badge">🧱</div><h3>무너지지 않게</h3><p>메모리 누수 <b>0</b> · 캐시 상한으로 OOM 방지. 0바이트·손상 파일, <b>심링크 루프</b>, 유니코드·초장문 파일명까지 안전하게 처리합니다.</p></div>
+      <div class="card reveal"><div class="badge">✅</div><h3>말이 아니라 테스트로</h3><p><b>111개 자동화 테스트</b>로 매 변경을 검증하고, 실제 6.7만 장 NAS 라이브러리에서 매일 씁니다. 메타데이터 저장이 실패하면 조용히 넘어가지 않고 바로 알려줍니다.</p></div>
+    </div>
   </div>
 </section>
 
@@ -318,6 +334,7 @@
     <div class="why">
       <div class="card reveal"><div class="badge">🚫</div><h3>추적 없음</h3><p>분석 도구 · 텔레메트리 · 계정 · 광고 <b>0</b>. 업로드되는 사진도 <b>0</b>. 서버 자체가 없습니다.</p></div>
       <div class="card reveal"><div class="badge">💾</div><h3>내 데이터는 내 Mac에</h3><p>별점 · 태그 · 앨범은 로컬 SQLite 파일 하나에 저장됩니다. 원본 사진 파일은 절대 수정하지 않습니다.</p></div>
+      <div class="card reveal"><div class="badge">🛟</div><h3>크래시 리포트도 로컬</h3><p>혹시 크래시가 나도 버전·스택 정보만 <b>내 Mac에</b> 저장되고, GitHub로 보낼지는 다음 실행 때 <b>직접 선택</b>합니다. 자동 전송 없음 · 파일 경로나 사진 정보는 담기지 않습니다.</p></div>
       <div class="card reveal"><div class="badge">🔍</div><h3>말이 아니라 코드로</h3><p>오픈소스(MIT)라 위 주장 전부를 <a href="https://github.com/rescenedev/lumen" style="color:#aab6ff">코드에서 직접 확인</a>할 수 있습니다.</p></div>
     </div>
   </div>

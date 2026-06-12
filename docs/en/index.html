@@ -190,6 +190,7 @@
       <a href="#why">Why Lumen</a>
       <a href="#features">Features</a>
       <a href="#perf">Performance</a>
+      <a href="#privacy">Privacy</a>
       <a href="releases.html">Release Notes</a>
       <a href="../index.html" class="lang-switch">한국어</a>
       <a class="nav-cta" href="#download">Download</a>
@@ -263,6 +264,7 @@
       <div class="card reveal"><div class="badge">🧩</div><h3>Merge &amp; watermark</h3><p>Combine multiple photos <b>horizontally, vertically, or in a grid</b> (drag to reorder, set rows). Text or logo <b>watermarks</b> (position · color · opacity) — in the editor, merge tool, and <b>batch export</b>.</p></div>
       <div class="card reveal"><div class="badge">🚀</div><h3>Batch processing</h3><p>Resize, apply canvas rules, and stamp watermarks across many photos at once and export to a folder. Originals stay untouched.</p></div>
       <div class="card reveal"><div class="badge">🏷️</div><h3>Non-destructive organization</h3><p>Albums · tags · star ratings · color labels · reject flag · smart collections (favorites, recent, today, duplicates). Originals never modified.</p></div>
+      <div class="card reveal"><div class="badge">🗑️</div><h3>Safe delete + undo</h3><p>Even on a <b>NAS volume with no Trash</b>, deletes move to a hidden <code>.LumenTrash</code> kept for <b>30 days</b> instead of vanishing. Every delete gets a <b>10-second Undo</b> that restores the files, ratings, and album memberships.</p></div>
       <div class="card reveal"><div class="badge">🔍</div><h3>Search &amp; filter</h3><p>Search by filename, tag, or camera model. Filter by star rating, label, location, camera (e.g. SONY), and hide-rejected toggle.</p></div>
       <div class="card reveal"><div class="badge">📤</div><h3>Share &amp; export</h3><p>System share sheet, export original / resized / zip, bulk rename, set as desktop wallpaper.</p></div>
     </div>
@@ -294,18 +296,32 @@
         <tr><td>Search — filter + sort across 67k</td><td><b>0</b> main-thread blocking (runs in background)</td></tr>
         <tr><td>Bulk add to album (10k into a 20k album)</td><td><b>~0.2 s</b></td></tr>
         <tr><td>Bulk remove from album (10k of 20k)</td><td><b>17 ms</b></td></tr>
+        <tr><td>Bulk favorite/rate (20k photos)</td><td><b>~0.4 s</b> (single transaction)</td></tr>
         <tr><td>Thumbnail-size slider · window resize</td><td>no stalls (GPU-scaled)</td></tr>
         <tr><td>App size</td><td><b>10 MB</b> installed · 3.5 MB download</td></tr>
         <tr><td>Memory (browsing the 67k library)</td><td><b>~240 MB</b> · ~380 MB after full-size viewing (bounded by cache limits)</td></tr>
         <tr><td>CPU</td><td><b>0.0%</b> idle · 16–27% while continuously scrolling a 58k folder</td></tr>
         <tr><td>Heap analysis (leaks/heap)</td><td><b>0</b> memory leaks in app code</td></tr>
       </table>
-      <p class="bench-note">Method: 120 Hz main-thread hitch monitor + frame-by-frame screen capture + profiler sampling, as of v0.3.7.
+      <p class="bench-note">Method: 120 Hz main-thread hitch monitor + frame-by-frame screen capture + profiler sampling, as of v0.4.0.
       The whole process is documented in the <a href="releases.html">release notes</a>.</p>
     </div>
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
       Memoized lists · folder index · debounced navigation · background thumbnail warming · lazy EXIF indexing · progressive image loading
     </p>
+  </div>
+</section>
+
+<section id="stability">
+  <div class="wrap">
+    <p class="eyebrow reveal">Reliability</p>
+    <h2 class="stitle reveal">Built so you never lose a photo</h2>
+    <p class="ssub reveal">A tool you run on a huge library every day owes you one promise first: your photos and your organizing work are safe.</p>
+    <div class="why">
+      <div class="card reveal"><div class="badge">🛡️</div><h3>Mistakes are reversible</h3><p>Every delete gets a <b>10-second Undo</b>. On a NAS or any volume with no Trash, files move to <code>.LumenTrash</code> for <b>30 days</b> instead of vanishing. No feature ever modifies your original files.</p></div>
+      <div class="card reveal"><div class="badge">🧱</div><h3>It doesn't fall over</h3><p><b>Zero</b> memory leaks · cache limits prevent OOM. Zero-byte and corrupt files, <b>symlink loops</b>, unicode and very long filenames are all handled safely.</p></div>
+      <div class="card reveal"><div class="badge">✅</div><h3>Tested, not promised</h3><p><b>111 automated tests</b> gate every change, and it runs daily on a real 67k-photo NAS library. If a metadata write fails, it tells you instead of silently dropping it.</p></div>
+    </div>
   </div>
 </section>
 
@@ -318,6 +334,7 @@
     <div class="why">
       <div class="card reveal"><div class="badge">🚫</div><h3>No tracking</h3><p><b>Zero</b> analytics, telemetry, accounts, or ads. <b>Zero</b> photos uploaded. There is no server.</p></div>
       <div class="card reveal"><div class="badge">💾</div><h3>Your data stays on your Mac</h3><p>Ratings, tags, and albums live in a single local SQLite file. Your original photo files are never modified.</p></div>
+      <div class="card reveal"><div class="badge">🛟</div><h3>Crash reports stay local too</h3><p>If it ever crashes, only the version and stack trace are saved <b>to your Mac</b>; whether to send it as a GitHub issue is <b>your choice</b> on the next launch. Nothing is sent automatically — no file paths or photo data are included.</p></div>
       <div class="card reveal"><div class="badge">🔍</div><h3>Verifiable, not promised</h3><p>It's open source (MIT) — every claim above is <a href="https://github.com/rescenedev/lumen" style="color:#aab6ff">checkable in the code</a>.</p></div>
     </div>
   </div>
