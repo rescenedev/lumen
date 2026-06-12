@@ -51,7 +51,6 @@ struct OrganizeView: View {
     @State private var currentIsFav = false               // live favorite state of the shown photo
     @State private var favOverrides: [String: Bool] = [:] // session favorite toggles (avoids per-swipe refetch)
     @State private var tick = 0
-    @State private var doneMsg = ""
 
     // Pinch zoom (current photo only): drag pans while zoomed, double-tap toggles.
     @State private var zoom: CGFloat = 1

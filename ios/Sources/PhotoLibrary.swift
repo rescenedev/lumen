@@ -42,10 +42,16 @@ struct GridSource {
 
     /// Build a source backed by a lazily-resolved fetch. `count` is supplied up front
     /// (already known from the snapshot) so construction touches no PhotoKit at all.
+    /// Indices clamp to the RESOLVED fetch's size, not the snapshot count — the
+    /// library can shrink between snapshot and first draw (the change notification
+    /// is debounced), and object(at:) past the end would crash.
     static func lazy(count: Int, _ build: @escaping () -> PHFetchResult<PHAsset>) -> GridSource {
         let lazy = LazyFetch(build)
-        let n = count
-        return GridSource(count: n) { i in lazy.get().object(at: min(i, max(n - 1, 0))) }
+        return GridSource(count: count) { i in
+            let r = lazy.get()
+            guard r.count > 0 else { return PHAsset() }   // placeholder; cells just stay empty
+            return r.object(at: min(i, r.count - 1))
+        }
     }
 }
 
@@ -491,7 +497,8 @@ struct OrganizeScope: Identifiable, Hashable {
             }
             return GridSource(count: scope.count) { i in
                 let a = box.get()
-                return a[min(i, max(a.count - 1, 0))]
+                guard !a.isEmpty else { return PHAsset() }   // library shrank since snapshot
+                return a[min(i, a.count - 1)]
             }
         }
         // Everything else: lazily-resolved PHFetchResult. Construction touches no

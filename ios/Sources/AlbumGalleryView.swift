@@ -39,7 +39,8 @@ struct AlbumGalleryView: View {
                               onTap: { lastOrganizedScopeId = scope.id; open = StartAt(index: $0) },
                               onBack: onClose ?? {},
                               bottomInset: onClose == nil ? 88 : 28,
-                              scrollTopKey: scrollTopKey)
+                              scrollTopKey: scrollTopKey,
+                              enableEdgeBack: onClose != nil)
                     .ignoresSafeArea(edges: .bottom)
             }
             header

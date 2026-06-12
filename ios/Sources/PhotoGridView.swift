@@ -14,6 +14,7 @@ struct PhotoGridView: UIViewRepresentable {
     var onBack: () -> Void
     var bottomInset: CGFloat = 28
     var scrollTopKey: Int = 0   // bumped externally (tab re-tap) → animate to top
+    var enableEdgeBack = true   // tab panes have no "back" — don't let the edge recognizer eat scrolls
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -31,10 +32,12 @@ struct PhotoGridView: UIViewRepresentable {
 
         let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePinch(_:)))
         cv.addGestureRecognizer(pinch)
-        let edge = UIScreenEdgePanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleEdge(_:)))
-        edge.edges = .left
-        cv.addGestureRecognizer(edge)
-        cv.panGestureRecognizer.require(toFail: edge)
+        if enableEdgeBack {
+            let edge = UIScreenEdgePanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleEdge(_:)))
+            edge.edges = .left
+            cv.addGestureRecognizer(edge)
+            cv.panGestureRecognizer.require(toFail: edge)
+        }
 
         context.coordinator.collectionView = cv
         return cv
