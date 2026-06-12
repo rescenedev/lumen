@@ -427,20 +427,14 @@ struct OrganizeView: View {
                     .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
             }
             .buttonStyle(.plain)
-            // Browsing shouldn't lock favorites behind "정리 시작" — ★ toggles in
-            // place here (no fly-away, that's an organize-mode behavior). Compact
-            // size: it sits next to the small capsule, not the 72pt organize pads.
+            // Browsing shouldn't lock keep/favorite behind "정리 시작" — both work
+            // in place here (no fly-away, that's an organize-mode behavior), and
+            // they mirror organize mode's sides: 🗄 left, ★ right. Compact size:
+            // they sit next to the small capsule, not the 72pt organize pads.
             HStack {
+                smallControl("tray.full.fill") { decide(.keep) }
                 Spacer()
-                Button { favorite() } label: {
-                    Image(systemName: currentIsFav ? "star.fill" : "star")
-                        .font(.system(size: 18, weight: .bold)).foregroundStyle(.white.opacity(0.85))
-                        .frame(width: 46, height: 46)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(Circle().strokeBorder(.white.opacity(0.15)))
-                        .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
-                }
-                .buttonStyle(.plain)
+                smallControl(currentIsFav ? "star.fill" : "star") { favorite() }
             }
             .padding(.horizontal, 28)
         }
@@ -466,6 +460,18 @@ struct OrganizeView: View {
         Button(action: action) {
             Image(systemName: icon).font(.system(size: 28, weight: .bold)).foregroundStyle(.white.opacity(0.85))
                 .frame(width: 72, height: 72)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.15)))
+                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Capsule-height variant for the browsing bar.
+    private func smallControl(_ icon: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 18, weight: .bold)).foregroundStyle(.white.opacity(0.85))
+                .frame(width: 46, height: 46)
                 .background(.ultraThinMaterial, in: Circle())
                 .overlay(Circle().strokeBorder(.white.opacity(0.15)))
                 .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
@@ -551,7 +557,8 @@ struct OrganizeView: View {
         if d == .keep { Task { await library.addToLumen(a) } }   // file into Lumen, live
         tick += 1
         showFlash(d == .keep ? .keep : .trash)
-        flyAndAdvance(CGSize(width: -pageW, height: 0))   // exactly one page → seamless handoff
+        // Organize mode advances; browsing keeps the photo in place (undoable).
+        if organizing { flyAndAdvance(CGSize(width: -pageW, height: 0)) }
     }
 
     /// Up-swipe: mark the photo for deletion and fly it up.
