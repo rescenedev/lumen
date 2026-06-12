@@ -30,6 +30,33 @@ func albumScaleTests() {
         check(ms < 2_000, "addToAlbum at 25k scale took \(Int(ms))ms")
     }
 
+    test("batchedMetaUpdateAtScaleIsFastAndCorrect") {
+        let queue = try AppDatabase.inMemoryQueue()
+        let store = MetadataStore(queue: queue)
+        let all = paths(0..<20_000)
+
+        let t0 = Date()
+        store.update(paths: all) { $0.favorite = true }
+        let ms = -t0.timeIntervalSinceNow * 1000
+
+        checkEqual(store.items.count, 20_000)
+        check(store.meta(for: all[0]).favorite)
+        check(store.meta(for: all[19_999]).favorite)
+        print("      · batched favorite 20k: \(Int(ms))ms")
+        check(ms < 2_000, "batched favorite at 20k took \(Int(ms))ms")
+
+        // No-op transform writes nothing; clearing back to empty deletes rows.
+        store.update(paths: all) { $0.favorite = true }   // unchanged → skipped
+        store.update(paths: all) { $0.favorite = false }  // now empty → deleted
+        checkEqual(store.items.count, 0)
+
+        // Persistence round-trip through the same DB.
+        store.update(paths: Array(all[0..<10])) { $0.rating = 4 }
+        let reloaded = MetadataStore(queue: queue)
+        checkEqual(reloaded.meta(for: all[5]).rating, 4)
+        checkEqual(reloaded.items.count, 10)
+    }
+
     test("removeFromAlbumAtScaleIsFastAndCorrect") {
         let store = try makeStore()
         let album = store.addAlbum(named: "Big")

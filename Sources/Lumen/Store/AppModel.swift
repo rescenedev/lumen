@@ -374,10 +374,9 @@ final class AppModel {
 
     func setFavorite(_ photos: [Photo], _ value: Bool) {
         guard !photos.isEmpty else { return }
-        for photo in photos where isFavorite(photo) != value {
-            store.update(photo.url.path) { $0.favorite = value }
-            favoritesCount += value ? 1 : -1   // incremental — no full rescan
-        }
+        let changing = photos.filter { isFavorite($0) != value }
+        store.update(paths: changing.map { $0.url.path }) { $0.favorite = value }
+        favoritesCount += (value ? 1 : -1) * changing.count   // incremental — no full rescan
         bumpMeta()
     }
 
@@ -395,7 +394,7 @@ final class AppModel {
     }
 
     func setRating(_ value: Int, for photos: [Photo]) {
-        for photo in photos { store.update(photo.url.path) { $0.rating = value } }
+        store.update(paths: photos.map { $0.url.path }) { $0.rating = value }
         bumpMeta()
     }
 
@@ -406,34 +405,32 @@ final class AppModel {
     func toggleRejected(_ photos: [Photo]) {
         guard !photos.isEmpty else { return }
         let shouldReject = photos.contains { !isRejected($0) }
-        for photo in photos where isRejected(photo) != shouldReject {
-            store.update(photo.url.path) { $0.rejected = shouldReject }
-        }
+        store.update(paths: photos.map { $0.url.path }) { $0.rejected = shouldReject }
         bumpMeta()
     }
 
     func setLabel(_ label: ColorLabel, for photos: [Photo]) {
-        for photo in photos {
+        let changing = photos.filter { self.label($0) != label }
+        for photo in changing {
             let old = self.label(photo)
-            guard old != label else { continue }
-            store.update(photo.url.path) { $0.label = label }
             if old != .none { labelCounts[old, default: 0] -= 1 }
             if label != .none { labelCounts[label, default: 0] += 1 }
         }
+        store.update(paths: changing.map { $0.url.path }) { $0.label = label }
         bumpMeta()
     }
 
     func addTag(_ tag: String, to photos: [Photo]) {
         let clean = tag.trimmingCharacters(in: .whitespaces)
         guard !clean.isEmpty else { return }
-        for photo in photos {
-            store.update(photo.url.path) { if !$0.tags.contains(clean) { $0.tags.append(clean) } }
+        store.update(paths: photos.map { $0.url.path }) {
+            if !$0.tags.contains(clean) { $0.tags.append(clean) }
         }
         bumpMeta()
     }
 
     func removeTag(_ tag: String, from photos: [Photo]) {
-        for photo in photos { store.update(photo.url.path) { $0.tags.removeAll { $0 == tag } } }
+        store.update(paths: photos.map { $0.url.path }) { $0.tags.removeAll { $0 == tag } }
         bumpMeta()
     }
 

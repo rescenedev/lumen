@@ -44,7 +44,50 @@ final class MetadataStore {
                     INSERT INTO photo_meta (path, favorite, rating, label, tags, rejected) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET favorite=excluded.favorite, rating=excluded.rating,
                         label=excluded.label, tags=excluded.tags, rejected=excluded.rejected
-                    """, arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags ?? "[]", meta.rejected])
+                    """, arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags, meta.rejected])
+            }
+        }
+    }
+
+    /// Apply one transform to many paths in a SINGLE transaction. The
+    /// per-path `update` commits once per call — favoriting a ⌘A selection
+    /// of 67k photos would mean 67k serial commits on the main thread.
+    /// No-op transforms (meta unchanged) are skipped entirely.
+    func update(paths: [String], _ transform: (inout PhotoMeta) -> Void) {
+        guard !paths.isEmpty else { return }
+        var upserts: [(path: String, meta: PhotoMeta, tags: String)] = []
+        var deletes: [String] = []
+        for path in paths {
+            var meta = itemsCache[path] ?? PhotoMeta()
+            let before = meta
+            transform(&meta)
+            guard meta != before else { continue }
+            if meta.isEmpty {
+                itemsCache.removeValue(forKey: path)
+                deletes.append(path)
+            } else {
+                itemsCache[path] = meta
+                let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8)) ?? "[]"
+                upserts.append((path, meta, tags))
+            }
+        }
+        guard !upserts.isEmpty || !deletes.isEmpty else { return }
+        try? db.write { db in
+            for item in upserts {
+                try db.execute(sql: """
+                    INSERT INTO photo_meta (path, favorite, rating, label, tags, rejected) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET favorite=excluded.favorite, rating=excluded.rating,
+                        label=excluded.label, tags=excluded.tags, rejected=excluded.rejected
+                    """, arguments: [item.path, item.meta.favorite, item.meta.rating,
+                                     item.meta.label.rawValue, item.tags, item.meta.rejected])
+            }
+            var rest = deletes[...]
+            while !rest.isEmpty {
+                let chunk = Array(rest.prefix(500))
+                rest = rest.dropFirst(500)
+                let marks = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                try db.execute(sql: "DELETE FROM photo_meta WHERE path IN (\(marks))",
+                               arguments: StatementArguments(chunk))
             }
         }
     }
