@@ -137,6 +137,22 @@
     -webkit-background-clip:text;background-clip:text;color:transparent}
   .stat .lbl{color:var(--muted);margin-top:6px;font-size:14px}
 
+  /* Measured benchmarks */
+  .bench{margin:46px auto 0;max-width:760px;background:var(--panel);border:1px solid var(--border);
+    border-radius:16px;padding:26px 28px;text-align:left}
+  .bench-env{color:var(--muted);font-size:14.5px;margin-bottom:16px}
+  .bench-env b{color:var(--text)}
+  .bench-table{width:100%;border-collapse:collapse;font-size:14.5px}
+  .bench-table th{color:var(--faint);font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;
+    text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  .bench-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--muted)}
+  .bench-table tr:last-child td{border-bottom:none}
+  .bench-table td b{color:var(--text);font-weight:650}
+  .bench-table td:last-child{white-space:nowrap}
+  .bench-note{color:var(--faint);font-size:12.5px;margin-top:14px}
+  .bench-note a{color:#aab6ff}
+  @media(max-width:680px){.bench{padding:18px 16px}.bench-table td:last-child{white-space:normal}}
+
   /* Download */
   .install{margin:30px auto 0;max-width:600px;background:#0b0e16;border:1px solid var(--border);
     border-radius:14px;padding:18px 20px;text-align:left;position:relative}
@@ -263,6 +279,23 @@
       <div class="stat reveal"><div class="num">2-tier</div><div class="lbl">memory + disk cache (survives relaunch)</div></div>
       <div class="stat reveal"><div class="num">AppKit</div><div class="lbl">cell-reuse grid (60 fps)</div></div>
       <div class="stat reveal"><div class="num">Fast</div><div class="lbl">incremental scan on relaunch</div></div>
+    </div>
+    <div class="bench reveal">
+      <p class="bench-env">Measured on a real library — <b>67,676 photos</b> · <b>638 folders</b> · Synology NAS (SMB) · Apple Silicon.
+      These are not synthetic benchmarks: every number comes from automated runs against this library.</p>
+      <table class="bench-table">
+        <tr><th>Test</th><th>Result</th></tr>
+        <tr><td>Launch → grid fully populated with thumbnails</td><td><b>1–2 frames</b> after the window appears (no loading screen)</td></tr>
+        <tr><td>Library cache decode (67,676 photos)</td><td><b>~100 ms</b></td></tr>
+        <tr><td>Opening folders — all 644 folders &amp; albums in sequence</td><td>mean <b>1 ms</b> · p95 3 ms · max 9 ms</td></tr>
+        <tr><td>First folder click right after launch</td><td><b>~4 ms</b></td></tr>
+        <tr><td>Click a photo → info panel update</td><td><b>~3 ms</b></td></tr>
+        <tr><td>Select All (⌘A, 67,676 photos)</td><td><b>~0.2 s</b></td></tr>
+        <tr><td>Search — filter + sort across 67k</td><td><b>0</b> main-thread blocking (runs in background)</td></tr>
+        <tr><td>Thumbnail-size slider · window resize</td><td>no stalls (GPU-scaled)</td></tr>
+      </table>
+      <p class="bench-note">Method: 120 Hz main-thread hitch monitor + frame-by-frame screen capture + profiler sampling, as of v0.3.6.
+      The whole process is documented in the <a href="releases.html">release notes</a>.</p>
     </div>
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
       Memoized lists · folder index · debounced navigation · background thumbnail warming · lazy EXIF indexing · progressive image loading

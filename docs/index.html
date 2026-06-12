@@ -137,6 +137,22 @@
     -webkit-background-clip:text;background-clip:text;color:transparent}
   .stat .lbl{color:var(--muted);margin-top:6px;font-size:14px}
 
+  /* Measured benchmarks */
+  .bench{margin:46px auto 0;max-width:760px;background:var(--panel);border:1px solid var(--border);
+    border-radius:16px;padding:26px 28px;text-align:left}
+  .bench-env{color:var(--muted);font-size:14.5px;margin-bottom:16px}
+  .bench-env b{color:var(--text)}
+  .bench-table{width:100%;border-collapse:collapse;font-size:14.5px}
+  .bench-table th{color:var(--faint);font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;
+    text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  .bench-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--muted)}
+  .bench-table tr:last-child td{border-bottom:none}
+  .bench-table td b{color:var(--text);font-weight:650}
+  .bench-table td:last-child{white-space:nowrap}
+  .bench-note{color:var(--faint);font-size:12.5px;margin-top:14px}
+  .bench-note a{color:#aab6ff}
+  @media(max-width:680px){.bench{padding:18px 16px}.bench-table td:last-child{white-space:normal}}
+
   /* Download */
   .install{margin:30px auto 0;max-width:600px;background:#0b0e16;border:1px solid var(--border);
     border-radius:14px;padding:18px 20px;text-align:left;position:relative}
@@ -263,6 +279,23 @@
       <div class="stat reveal"><div class="num">2-tier</div><div class="lbl">메모리+디스크 캐시 (재실행 유지)</div></div>
       <div class="stat reveal"><div class="num">AppKit</div><div class="lbl">셀 재사용 그리드 (60fps)</div></div>
       <div class="stat reveal"><div class="num">즉시</div><div class="lbl">증분 스캔으로 빠른 재실행</div></div>
+    </div>
+    <div class="bench reveal">
+      <p class="bench-env">실측 환경 — 사진 <b>67,676장</b> · 폴더 <b>638개</b> · Synology NAS(SMB) · Apple Silicon.
+      합성 벤치마크가 아니라 실제 라이브러리에서 자동화 시나리오로 측정한 값입니다.</p>
+      <table class="bench-table">
+        <tr><th>테스트</th><th>결과</th></tr>
+        <tr><td>앱 시작 → 썸네일까지 채워진 그리드</td><td><b>창 등장 후 1~2프레임</b> (로딩 화면 없음)</td></tr>
+        <tr><td>라이브러리 캐시 디코드 (67,676장)</td><td><b>~100 ms</b></td></tr>
+        <tr><td>폴더 열기 — 폴더·앨범 644개 전부 순회</td><td>평균 <b>1 ms</b> · p95 3 ms · 최대 9 ms</td></tr>
+        <tr><td>실행 직후 첫 폴더 클릭</td><td><b>~4 ms</b></td></tr>
+        <tr><td>사진 클릭 → 정보 패널 갱신</td><td><b>~3 ms</b></td></tr>
+        <tr><td>전체 선택 (⌘A, 67,676장)</td><td><b>~0.2 초</b></td></tr>
+        <tr><td>검색 — 67k장 필터+정렬</td><td>메인 스레드 차단 <b>0</b> (백그라운드 처리)</td></tr>
+        <tr><td>썸네일 크기 조절 · 창 리사이즈</td><td>멈춤 없음 (GPU 스케일)</td></tr>
+      </table>
+      <p class="bench-note">측정 방법: 메인 스레드 히치 모니터(120Hz) + 프레임 단위 화면 캡처 + 프로파일러 샘플링, v0.3.6 기준.
+      과정은 <a href="releases.html">릴리즈 노트</a>에 그대로 적혀 있습니다.</p>
     </div>
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
       메모이즈된 목록 · 폴더 인덱스 · 디바운스 내비게이션 · 백그라운드 썸네일 워밍 · 지연 EXIF 인덱싱 · 점진적 이미지 로딩
