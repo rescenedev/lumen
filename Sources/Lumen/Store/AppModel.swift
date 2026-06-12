@@ -49,8 +49,11 @@ final class AppModel {
     @ObservationIgnored private var sidebarCommitWork: DispatchWorkItem?
 
     private func scheduleSidebarCommit() {
-        guard selectedSidebar != committedSidebar else { return }
+        // Cancel BEFORE the equality guard: clicking A → B → back to A within
+        // the 120ms window must kill the pending B commit, or the grid shows B
+        // while the sidebar highlights A.
         sidebarCommitWork?.cancel()
+        guard selectedSidebar != committedSidebar else { return }
         let target = selectedSidebar
         let work = DispatchWorkItem { [weak self] in self?.committedSidebar = target }
         sidebarCommitWork = work
@@ -115,7 +118,7 @@ final class AppModel {
         }
     }
 
-    var sortOrder: SortOrder = .dateNewest
+    var sortOrder: SortOrder = .dateNewest { didSet { persistSettings() } }
     var searchText = ""
     var thumbnailSize: Double = 320
     var filter = FilterState()
@@ -741,8 +744,11 @@ final class AppModel {
     @ObservationIgnored private var visibleResultRevision = 0
 
     private func cacheVisible(_ key: Int, _ result: [Photo]) {
+        // Re-caching an existing key (an async sort landing twice) must not
+        // append a duplicate to the LRU order — evicting the first occurrence
+        // would delete the live map entry while the key stays queued.
+        if visibleCacheMap[key] == nil { visibleCacheOrder.append(key) }
         visibleCacheMap[key] = result
-        visibleCacheOrder.append(key)
         visibleResultRevision &+= 1
         if visibleCacheOrder.count > visibleCacheCapacity {
             visibleCacheMap.removeValue(forKey: visibleCacheOrder.removeFirst())
@@ -1775,10 +1781,11 @@ final class AppModel {
             path.hasPrefix(oldPrefix) ? newPrefix + path.dropFirst(oldPrefix.count) : path
         }
 
-        // Photos
+        // Photos. URL(filePath:directoryHint:) — fileURLWithPath stats each
+        // path (~7ms on NAS; 60k photos would hang the main thread for minutes).
         allPhotos = allPhotos.map { photo in
             guard photo.url.path.hasPrefix(oldPrefix) else { return photo }
-            return photo.relocated(to: URL(fileURLWithPath: remap(photo.url.path)))
+            return photo.relocated(to: URL(filePath: remap(photo.url.path), directoryHint: .notDirectory))
         }
         // EXIF index + duplicates
         exif = Dictionary(uniqueKeysWithValues: exif.map { (remap($0.key), $0.value) })
@@ -1795,7 +1802,7 @@ final class AppModel {
         if case .folder(let sel) = selectedSidebar {
             if sel == url { selectedSidebar = .folder(dest) }
             else if sel.path.hasPrefix(oldPrefix) {
-                selectedSidebar = .folder(URL(fileURLWithPath: remap(sel.path)))
+                selectedSidebar = .folder(URL(filePath: remap(sel.path), directoryHint: .isDirectory))
             }
         }
 
@@ -1903,49 +1910,74 @@ final class AppModel {
         photosPendingDeletion = []
         guard !photos.isEmpty else { return }
 
+        // Remember where the selection should land via an id-keyed index map —
+        // firstIndex(of:) compares whole Photo structs, so a 10k-photo delete
+        // from a 67k scope was O(deleted × visible) on the main thread.
         let ordered = visiblePhotos
-        let firstIndex = photos.compactMap { ordered.firstIndex(of: $0) }.min()
+        let indexByID = Dictionary(uniqueKeysWithValues: ordered.enumerated().map { ($1.id, $0) })
+        let firstIndex = photos.compactMap { indexByID[$0.id] }.min()
 
-        var batch = DeletionUndoBatch()
-        var trashed = Set<URL>()
-        var failed = 0
+        // The file moves are one (NAS: often two) network round-trips per
+        // photo — run the whole loop detached; the library mutation happens
+        // back on the main actor in finishDeletion.
+        let roots = rootFolders
         let stamp = LumenTrash.stamp()
-        for photo in photos {
-            do {
-                var staged: NSURL?
-                try FileManager.default.trashItem(at: photo.url, resultingItemURL: &staged)
-                trashed.insert(photo.url)
-                if let staged = staged as URL? {
-                    batch.moves.append((staged: staged, original: photo.url))
-                }
-            } catch {
-                // No Trash on this volume (NAS/SMB). Stage into
-                // `<root>/.LumenTrash/<stamp>/` on the same volume instead of
-                // deleting in place — a rename is instant even over SMB, the
-                // delete becomes undoable, and startup purges batches after
-                // 30 days.
-                if let root = LumenTrash.root(for: photo.url, roots: rootFolders) {
-                    do {
-                        let staged = try LumenTrash.stage(photo.url, under: root, stamp: stamp)
-                        trashed.insert(photo.url)
-                        batch.moves.append((staged: staged, original: photo.url))
-                    } catch {
-                        failed += 1
-                        NSLog("Lumen: failed to stage \(photo.url.path): \(error.localizedDescription)")
+        Task.detached(priority: .userInitiated) {
+            var moves: [(staged: URL, original: URL)] = []
+            var trashed = Set<URL>()
+            var failed = 0
+            for photo in photos {
+                do {
+                    var staged: NSURL?
+                    try FileManager.default.trashItem(at: photo.url, resultingItemURL: &staged)
+                    trashed.insert(photo.url)
+                    if let staged = staged as URL? {
+                        moves.append((staged: staged, original: photo.url))
                     }
-                } else {
-                    // Outside every open root (shouldn't happen) — last
-                    // resort: delete in place, like Finder does there. No undo.
-                    do {
-                        try FileManager.default.removeItem(at: photo.url)
-                        trashed.insert(photo.url)
-                    } catch {
-                        failed += 1
-                        NSLog("Lumen: failed to delete \(photo.url.path): \(error.localizedDescription)")
+                } catch {
+                    // No Trash on this volume (NAS/SMB). Stage into
+                    // `<root>/.LumenTrash/<stamp>/` on the same volume instead
+                    // of deleting in place — a rename is instant even over
+                    // SMB, the delete becomes undoable, and startup purges
+                    // batches after 30 days.
+                    if let root = LumenTrash.root(for: photo.url, roots: roots) {
+                        do {
+                            let staged = try LumenTrash.stage(photo.url, under: root, stamp: stamp)
+                            trashed.insert(photo.url)
+                            moves.append((staged: staged, original: photo.url))
+                        } catch {
+                            failed += 1
+                            NSLog("Lumen: failed to stage \(photo.url.path): \(error.localizedDescription)")
+                        }
+                    } else {
+                        // Outside every open root (shouldn't happen) — last
+                        // resort: delete in place, like Finder does there. No undo.
+                        do {
+                            try FileManager.default.removeItem(at: photo.url)
+                            trashed.insert(photo.url)
+                        } catch {
+                            failed += 1
+                            NSLog("Lumen: failed to delete \(photo.url.path): \(error.localizedDescription)")
+                        }
                     }
                 }
             }
+            let movedResult = moves
+            let trashedResult = trashed
+            let failedResult = failed
+            await MainActor.run {
+                self.finishDeletion(photos: photos, moves: movedResult, trashed: trashedResult,
+                                    failed: failedResult, firstIndex: firstIndex)
+            }
         }
+    }
+
+    /// Applies a completed deletion to the library: detach entries, snapshot
+    /// the undo batch, fix viewer/selection, and offer Undo.
+    private func finishDeletion(photos: [Photo], moves: [(staged: URL, original: URL)],
+                                trashed: Set<URL>, failed: Int, firstIndex: Int?) {
+        var batch = DeletionUndoBatch()
+        batch.moves = moves
         if failed > 0 {
             showToast(String(localized: "Couldn’t delete \(failed) items (check permissions/connection).", bundle: .module))
         }
@@ -1964,7 +1996,17 @@ final class AppModel {
         store.forget(paths: trashedPaths)
         albums = store.albums
         allPhotos.removeAll { trashed.contains($0.url) }
-        for url in trashed { exif.removeValue(forKey: url.path); duplicatePaths.remove(url.path) }
+        // Prune the observed dictionaries with ONE assignment each — per-item
+        // removeValue fires the observation machinery per element (20k deletes
+        // = 20k registrar calls on the main thread).
+        var prunedExif = exif
+        var prunedDups = duplicatePaths
+        for url in trashed {
+            prunedExif.removeValue(forKey: url.path)
+            prunedDups.remove(url.path)
+        }
+        exif = prunedExif
+        duplicatePaths = prunedDups
         recomputeMetaCounts()
         bumpMeta()
         persistLibraryCache()   // save the post-delete library so a relaunch can't reload the trashed files
@@ -1994,22 +2036,33 @@ final class AppModel {
 
     /// Reverse a just-confirmed deletion: move staged files back to their
     /// original paths, then re-attach library entries, metadata, EXIF, and
-    /// album memberships.
+    /// album memberships. The per-photo moves (2-3 SMB round-trips each) run
+    /// detached; the library mutation happens back on the main actor.
     func undoDeletion(_ batch: DeletionUndoBatch) {
-        let fm = FileManager.default
-        var restoredPaths = Set<String>()
-        var failed = 0
-        for move in batch.moves {
-            guard fm.fileExists(atPath: move.staged.path),
-                  !fm.fileExists(atPath: move.original.path) else { failed += 1; continue }
-            do {
-                try fm.moveItem(at: move.staged, to: move.original)
-                restoredPaths.insert(move.original.path)
-            } catch {
-                failed += 1
-                NSLog("Lumen: failed to restore \(move.original.path): \(error.localizedDescription)")
+        Task.detached(priority: .userInitiated) {
+            let fm = FileManager.default
+            var restoredPaths = Set<String>()
+            var failed = 0
+            for move in batch.moves {
+                guard fm.fileExists(atPath: move.staged.path),
+                      !fm.fileExists(atPath: move.original.path) else { failed += 1; continue }
+                do {
+                    try fm.moveItem(at: move.staged, to: move.original)
+                    restoredPaths.insert(move.original.path)
+                } catch {
+                    failed += 1
+                    NSLog("Lumen: failed to restore \(move.original.path): \(error.localizedDescription)")
+                }
+            }
+            let restoredResult = restoredPaths
+            let failedResult = failed
+            await MainActor.run {
+                self.finishUndoDeletion(batch: batch, restoredPaths: restoredResult, failed: failedResult)
             }
         }
+    }
+
+    private func finishUndoDeletion(batch: DeletionUndoBatch, restoredPaths: Set<String>, failed: Int) {
         guard !restoredPaths.isEmpty else {
             if failed > 0 {
                 showToast(String(localized: "Couldn’t undo (files moved or permission issue).", bundle: .module))
@@ -2028,9 +2081,11 @@ final class AppModel {
             store.addToAlbum(id, paths: paths.filter { restoredPaths.contains($0) })
         }
         albums = store.albums
+        var mergedExif = exif
         for (path, info) in batch.exifInfos where restoredPaths.contains(path) {
-            exif[path] = info
+            mergedExif[path] = info
         }
+        exif = mergedExif
         recomputeMetaCounts()
         bumpMeta()
         persistLibraryCache()
@@ -2051,7 +2106,7 @@ final class AppModel {
 
         // Keep every saved root, even if its volume (e.g. a NAS) is offline right
         // now — so it's never forgotten and reloads automatically when it's back.
-        let urls = paths.map { URL(fileURLWithPath: $0) }
+        let urls = paths.map { URL(filePath: $0, directoryHint: .isDirectory) }
         rootFolders = urls
         isLoadingLibrary = true
 
@@ -2189,6 +2244,11 @@ final class AppModel {
         if defaults.object(forKey: "lumen.folderTreeView") != nil {
             folderTreeView = defaults.bool(forKey: "lumen.folderTreeView")
         }
+        // Must load before reopenRecentFolders — the launch pipeline snapshots
+        // sortOrder to decide whether the persisted pre-sorted cache applies.
+        if let raw = defaults.string(forKey: "lumen.sortOrder"), let order = SortOrder(rawValue: raw) {
+            sortOrder = order
+        }
     }
 
     private func persistSettings() {
@@ -2197,6 +2257,7 @@ final class AppModel {
         defaults.set(confirmBeforeDelete, forKey: "lumen.confirmDelete")
         defaults.set(slideshowInterval, forKey: "lumen.slideshowInterval")
         defaults.set(folderTreeView, forKey: "lumen.folderTreeView")
+        defaults.set(sortOrder.rawValue, forKey: "lumen.sortOrder")
     }
 
     private static let monthFormatter: DateFormatter = {

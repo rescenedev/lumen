@@ -27,6 +27,18 @@ enum PhotosLibraryService {
     // (e.g. Favorites), returning nil and an empty grid.
     private static let cacheLock = NSLock()
     nonisolated(unsafe) private static var collectionsById: [String: PHAssetCollection] = [:]
+
+    // Synchronous accessors: NSLock.lock/unlock are `noasync`, so the async
+    // fetch closures go through these instead of locking inline.
+    private static func cacheCollections(_ collected: [String: PHAssetCollection]) {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        collectionsById = collected
+    }
+
+    private static func cachedCollection(_ id: String) -> PHAssetCollection? {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        return collectionsById[id]
+    }
     /// Request library access, returning the resulting authorization status.
     static func authorize() async -> PHAuthorizationStatus {
         let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -87,7 +99,7 @@ enum PhotosLibraryService {
                 ($0.localizedTitle ?? "").localizedStandardCompare($1.localizedTitle ?? "") == .orderedAscending
             }) { add(c, isFavorites: false) }
 
-            cacheLock.lock(); collectionsById = collected; cacheLock.unlock()
+            cacheCollections(collected)
             return refs
         }.value
     }
@@ -96,7 +108,7 @@ enum PhotosLibraryService {
     /// `Photo`s, registering their PHAssets with the image loader.
     static func fetchAssets(inAlbumId id: String) async -> [Photo] {
         await Task.detached(priority: .userInitiated) {
-            cacheLock.lock(); let cached = collectionsById[id]; cacheLock.unlock()
+            let cached = cachedCollection(id)
             let collection = cached ?? PHAssetCollection.fetchAssetCollections(
                 withLocalIdentifiers: [id], options: nil).firstObject
             guard let collection else { return [] }

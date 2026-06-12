@@ -75,7 +75,11 @@ enum LumenTrash {
                     catch { NSLog("LumenTrash: cleanup failed for \(batch.path): \(error.localizedDescription)") }
                 }
             }
-            if remaining <= 0 { try? fm.removeItem(at: trashDir) }
+            // rmdir(2), NOT removeItem: cleanup runs detached at startup while
+            // the user can already be deleting — a recursive remove here could
+            // wipe a batch staged between the listing above and this line.
+            // rmdir fails with ENOTEMPTY in that case, which is exactly right.
+            if remaining <= 0 { _ = rmdir(trashDir.path) }
         }
     }
 }

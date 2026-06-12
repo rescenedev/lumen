@@ -12,12 +12,14 @@ struct ViewerView: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
 
-    // Slideshow
+    // Slideshow. A 0.5s tick checks elapsed time against the user's interval
+    // setting — the previous fixed 3.5s Timer.publish ignored the Settings
+    // slider entirely (the preference was dead).
     @State private var isPlaying = false
     @State private var chromeVisible = true
+    @State private var lastAdvance = Date.distantPast
 
-    private let slideshowInterval: TimeInterval = 3.5
-    private let timer = Timer.publish(every: 3.5, on: .main, in: .common).autoconnect()
+    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     @State private var containerSize: CGSize = .zero
     @State private var loadedImageSize: CGSize?   // actual pixel size of the shown image
@@ -77,7 +79,11 @@ struct ViewerView: View {
             prefetchNeighbors()
         }
         .onAppear { prefetchNeighbors() }
-        .onReceive(timer) { _ in if isPlaying { advanceSlideshow() } }
+        .onReceive(timer) { now in
+            guard isPlaying, now.timeIntervalSince(lastAdvance) >= model.slideshowInterval else { return }
+            lastAdvance = now
+            advanceSlideshow()
+        }
         .onKeyPress(.escape) { model.closeViewer(); return .handled }
         .onKeyPress(.leftArrow) { model.viewerStep(-1); return .handled }
         .onKeyPress(.rightArrow) { model.viewerStep(1); return .handled }
@@ -386,7 +392,7 @@ struct ViewerView: View {
 
     private func toggleSlideshow() {
         isPlaying.toggle()
-        if isPlaying { resetZoom() }
+        if isPlaying { resetZoom(); lastAdvance = Date() }
     }
 
     private func advanceSlideshow() {

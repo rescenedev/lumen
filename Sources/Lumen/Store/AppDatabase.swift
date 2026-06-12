@@ -2,7 +2,8 @@ import Foundation
 import GRDB
 
 /// The app's SQLite database (via GRDB). Holds Lumen-owned metadata
-/// (favorites/ratings/labels/tags/albums) and the library/EXIF caches.
+/// (favorites/ratings/labels/tags/albums). The library and EXIF caches live
+/// in separate binary/plist files managed by LibraryCache, NOT here.
 /// `DatabaseQueue` serializes all access, so it's safe from any thread.
 final class AppDatabase {
     static let shared = AppDatabase()
@@ -53,23 +54,6 @@ final class AppDatabase {
                     path TEXT NOT NULL,
                     position INTEGER NOT NULL,
                     PRIMARY KEY (album_id, path)
-                );
-                CREATE TABLE photo (
-                    path TEXT PRIMARY KEY,
-                    filename TEXT NOT NULL,
-                    ext TEXT NOT NULL,
-                    byte_size INTEGER NOT NULL,
-                    creation REAL,
-                    modification REAL
-                );
-                CREATE TABLE exif (
-                    path TEXT PRIMARY KEY,
-                    pw INTEGER, ph INTEGER, make TEXT, model TEXT,
-                    date_taken REAL, lat REAL, lon REAL
-                );
-                CREATE TABLE folder_mtime (
-                    path TEXT PRIMARY KEY,
-                    mtime REAL NOT NULL
                 );
                 """)
         }
