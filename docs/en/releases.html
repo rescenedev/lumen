@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.3.7">
+    <div class="release-head">
+      <h2>0.3.7</h2><span class="date">June 12, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Performance — bulk album operations</h3>
+    <ul>
+      <li><b>Adding/moving photos into a large album is instant now.</b> Adding 10k photos to a 20k-photo album froze the app for 10 seconds; it's ~0.2s now — only the added rows are written instead of rewriting the whole album. Photo order is preserved.</li>
+      <li><b>Bulk removal too.</b> Removing 10k of 20k: 7.6s → <b>17ms</b>.</li>
+      <li><b>⌘C no longer stalls.</b> Image data for a copied NAS original was read on the main thread; it now loads in the background — the file path copies instantly and the image data follows when ready.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.3.6">
     <div class="release-head">
-      <h2>0.3.6</h2><span class="date">June 12, 2026</span><span class="tag">Latest</span>
+      <h2>0.3.6</h2><span class="date">June 12, 2026</span>
     </div>
     <h3>Sidebar folder tree, Finder-style</h3>
     <ul>

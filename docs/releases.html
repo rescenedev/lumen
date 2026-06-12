@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.3.7">
+    <div class="release-head">
+      <h2>0.3.7</h2><span class="date">2026년 6월 12일</span><span class="tag">최신</span>
+    </div>
+    <h3>성능 — 대량 앨범 작업</h3>
+    <ul>
+      <li><b>큰 앨범으로의 사진 추가/이동이 즉시 끝납니다.</b> 2만 장 앨범에 1만 장을 추가하면 10초간 멈췄던 것이 0.2초 수준으로 — 앨범 전체를 다시 쓰는 대신 추가분만 기록합니다. 사진 순서는 그대로 유지됩니다.</li>
+      <li><b>앨범에서 대량 제거도 마찬가지.</b> 2만 장 중 1만 장 제거: 7.6초 → <b>17ms</b>.</li>
+      <li><b>⌘C 복사가 더는 멈추지 않습니다.</b> NAS 원본의 이미지 데이터를 메인 스레드에서 읽던 것을 백그라운드로 — 파일 경로는 즉시 복사되고 이미지 데이터는 준비되는 대로 따라붙습니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.3.6">
     <div class="release-head">
-      <h2>0.3.6</h2><span class="date">2026년 6월 12일</span><span class="tag">최신</span>
+      <h2>0.3.6</h2><span class="date">2026년 6월 12일</span>
     </div>
     <h3>사이드바 폴더 트리, Finder처럼</h3>
     <ul>
