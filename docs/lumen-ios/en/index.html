@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lumen for iOS — 넘기다 보면, 사진이 정리돼요</title>
-<meta name="description" content="사진 정리가 막막한 사람들을 위한 네이티브 iOS 앱. 사진 앱처럼 부드럽게 넘기고, 핀치로 줌하고 — 남길 건 보관함에, 지울 건 위로 쓱, 실수는 ↩ 한 번. 사진도 동영상도, 수십만 장도 즉시. 완전 무료.">
-<meta property="og:title" content="Lumen for iOS — 넘기다 보면, 사진이 정리돼요">
-<meta property="og:description" content="사진 앱처럼 부드러운 사진·동영상 정리. 수십만 장도 즉시 열리는 무료 네이티브 iOS 앱.">
+<title>Lumen for iOS — Keep swiping. Photos get organized.</title>
+<meta name="description" content="A native iOS app for everyone who finds photo cleanup overwhelming. Swipe as smoothly as the Photos app, pinch to zoom — keep what you love in the tray, flick up what you don't, undo any slip with one tap. Photos and videos, hundreds of thousands of them, instantly. Completely free.">
+<meta property="og:title" content="Lumen for iOS — Keep swiping. Photos get organized.">
+<meta property="og:description" content="Photo & video cleanup that feels like the Photos app. A free native iOS app that opens instantly, even on huge libraries.">
 <meta property="og:image" content="https://rescenedev.github.io/lumen/lumen-ios/icon.png">
 <meta property="og:type" content="website">
 <link rel="alternate" hreflang="ko" href="https://rescenedev.github.io/lumen/lumen-ios/index.html">
 <link rel="alternate" hreflang="en" href="https://rescenedev.github.io/lumen/lumen-ios/en/index.html">
-<link rel="icon" type="image/png" href="favicon.png">
+<link rel="icon" type="image/png" href="../favicon.png">
 <style>
   :root{
     --bg:#06080c; --bg2:#0a0d13;
@@ -24,7 +24,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Segoe UI",sans-serif;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     background:var(--bg); color:var(--text); line-height:1.66; -webkit-font-smoothing:antialiased;
     overflow-x:hidden;
   }
@@ -167,14 +167,14 @@
 
 <nav>
   <div class="wrap nav-in">
-    <a class="brand" href="#top"><img src="icon.png" alt="">Lumen <span class="ios">for iOS</span></a>
+    <a class="brand" href="#top"><img src="../icon.png" alt="">Lumen <span class="ios">for iOS</span></a>
     <div class="nav-links">
-      <a href="#gestures">제스처</a>
-      <a href="#smooth">부드러움</a>
-      <a href="#scale">규모</a>
-      <a href="#flow">흐름</a>
-      <a class="nav-cta" href="#get">시작하기</a>
-      <a class="lang-switch" href="en/index.html">English</a>
+      <a href="#gestures">Gestures</a>
+      <a href="#smooth">Smoothness</a>
+      <a href="#scale">Scale</a>
+      <a href="#flow">Flow</a>
+      <a class="nav-cta" href="#get">Get Started</a>
+      <a class="lang-switch" href="../index.html">한국어</a>
     </div>
   </div>
 </nav>
@@ -182,21 +182,21 @@
 <header class="hero" id="top">
   <div class="hero-in">
     <div>
-      <span class="pill reveal">iOS 17+ · 네이티브 · 완전 무료 · 오픈소스</span>
-      <h1 class="silver reveal">넘기다 보면,<br>사진이 정리돼요.</h1>
-      <p class="sub reveal">사진 앱처럼 부드럽게 넘기고, 핀치로 줌하세요. 남길 사진은 보관함에, 지울 사진은 위로 쓱 — 실수해도 ↩ 한 번, 삭제는 늘 확인 후에.</p>
+      <span class="pill reveal">iOS 17+ · Native · Completely free · Open source</span>
+      <h1 class="silver reveal">Keep swiping.<br>Photos get organized.</h1>
+      <p class="sub reveal">Swipe as smoothly as the Photos app, pinch to zoom. Keep what you love in the tray, flick up what you don't — undo any slip with ↩, and nothing is ever deleted without confirmation.</p>
       <div class="cta reveal">
-        <a class="btn btn-w" href="#get">시작하기</a>
+        <a class="btn btn-w" href="#get">Get Started</a>
         <a class="btn btn-g" href="https://github.com/rescenedev/lumen-ios">GitHub</a>
       </div>
       <div class="stats reveal">
-        <div class="stat"><b>수십만 장</b><span>즉시 열림</span></div>
-        <div class="stat"><b>비파괴</b><span>확인 전 삭제 없음</span></div>
-        <div class="stat"><b>사진 + 동영상</b><span>한 흐름으로 정리</span></div>
+        <div class="stat"><b>100k+ items</b><span>opens instantly</span></div>
+        <div class="stat"><b>Non-destructive</b><span>nothing deleted unconfirmed</span></div>
+        <div class="stat"><b>Photos + videos</b><span>one flow for both</span></div>
       </div>
     </div>
     <div class="phone-wrap reveal">
-      <img class="phone-img" src="mockup.png" alt="Lumen 정리 화면">
+      <img class="phone-img" src="../mockup.png" alt="Lumen organize screen">
     </div>
   </div>
 </header>
@@ -204,15 +204,15 @@
 <section id="gestures">
   <div class="wrap">
     <p class="eyebrow reveal">Gestures</p>
-    <h2 class="stitle reveal">손에 익은 제스처 그대로</h2>
-    <p class="ssub reveal">새로 배울 건 없어요. 사진 앱에서 쓰던 그 손짓이 전부 통합니다.</p>
+    <h2 class="stitle reveal">The gestures you already know</h2>
+    <p class="ssub reveal">Nothing to learn. Every move you use in the Photos app just works.</p>
     <div class="gest">
-      <div class="g reveal"><div class="ico">👈</div><div class="dir">Swipe</div><h3>넘기며 둘러보기</h3><p>다음 사진이 손가락에 붙어 따라옵니다. 아무것도 결정되지 않아요 — 그냥 구경.</p></div>
-      <div class="g reveal"><div class="ico">👆</div><div class="dir">Tap edge</div><h3>탭으로 스텝</h3><p>화면 가장자리를 톡톡. 한 손 엄지로도 빠르게 다음·이전 사진으로.</p></div>
-      <div class="g reveal"><div class="ico">🤏</div><div class="dir">Pinch</div><h3>핀치 줌</h3><p>두 손가락으로 디테일 확대, 더블탭으로 토글. 줌 상태에선 드래그가 팬이 됩니다.</p></div>
-      <div class="g reveal"><div class="ico">⬆️</div><div class="dir">Swipe up</div><h3>삭제 후보</h3><p>지울 사진은 위로 쓱 — ‘후보’로만 담겨요. 마지막에 확인 후 한 번에 삭제.</p></div>
-      <div class="g reveal"><div class="ico">🗄</div><div class="dir">Keep</div><h3>보관함에 담기</h3><p>남길 사진은 보관함 버튼. 즉시 ‘Lumen’ 앨범에 모여요 — 나중에 천천히 분류.</p></div>
-      <div class="g reveal"><div class="ico">↩</div><div class="dir">Undo</div><h3>실수는 한 번에 복구</h3><p>잘못 넘겼나요? ↩ 하나면 마지막 동작이 그대로 되돌아옵니다 — 보관도, 삭제 후보도.</p></div>
+      <div class="g reveal"><div class="ico">👈</div><div class="dir">Swipe</div><h3>Browse through</h3><p>The next photo follows your finger. Nothing gets decided — you're just looking.</p></div>
+      <div class="g reveal"><div class="ico">👆</div><div class="dir">Tap edge</div><h3>Step with a tap</h3><p>Tap the screen edges to step back and forth — fast, one-thumb friendly.</p></div>
+      <div class="g reveal"><div class="ico">🤏</div><div class="dir">Pinch</div><h3>Pinch to zoom</h3><p>Zoom into details with two fingers, double-tap to toggle. While zoomed, dragging pans.</p></div>
+      <div class="g reveal"><div class="ico">⬆️</div><div class="dir">Swipe up</div><h3>Mark for deletion</h3><p>Flick unwanted photos up — they're only <i>candidates</i>. Everything deletes at once, after you confirm.</p></div>
+      <div class="g reveal"><div class="ico">🗄</div><div class="dir">Keep</div><h3>Into the tray</h3><p>Keepers go to the tray — filed into your ‘Lumen’ album instantly, to sort properly later.</p></div>
+      <div class="g reveal"><div class="ico">↩</div><div class="dir">Undo</div><h3>One-tap recovery</h3><p>Swiped the wrong way? One ↩ brings your last action right back — keeps and delete-marks alike.</p></div>
     </div>
   </div>
 </section>
@@ -220,19 +220,19 @@
 <section id="smooth" class="band">
   <div class="wrap">
     <p class="eyebrow reveal">Feels native</p>
-    <h2 class="stitle reveal">사진 앱이라고 착각할 만큼</h2>
-    <p class="ssub reveal">탭하는 순간 메인스레드 작업 0 — 빨라서가 아니라, 끊기지 않아서 부드럽습니다.</p>
+    <h2 class="stitle reveal">You'll mistake it for the Photos app</h2>
+    <p class="ssub reveal">Zero main-thread work on tap — smooth not because it's fast, but because it never stutters.</p>
     <div class="smooth">
       <div class="shots reveal">
-        <div class="frame"><img src="shot_home.png" alt="홈 — 정리할 앨범" loading="lazy"></div>
-        <div class="frame"><img src="shot_organize.png" alt="정리 화면" loading="lazy"></div>
+        <div class="frame"><img src="../shot_home.png" alt="Home — albums to organize" loading="lazy"></div>
+        <div class="frame"><img src="../shot_organize.png" alt="Organize screen" loading="lazy"></div>
       </div>
       <div class="feat reveal">
-        <div class="f"><div class="fi">⚡</div><div><b>탭하면 그냥 열려요</b><span>앨범을 누르는 순간 어떤 로딩도 끼어들지 않아요. 사진은 필요한 만큼만 그때그때.</span></div></div>
-        <div class="f"><div class="fi">🪄</div><div><b>끊김 없는 페이지 스와이프</b><span>다음 사진이 미리 준비된 채 손가락을 따라 들어와요. 스피너 없이, 깜빡임 없이.</span></div></div>
-        <div class="f"><div class="fi">🔍</div><div><b>그리드도 핀치로</b><span>썸네일 그리드를 두 손가락으로 키우고 줄이면 사진 앱처럼 연속적으로 재배치됩니다.</span></div></div>
-        <div class="f"><div class="fi">🎬</div><div><b>동영상도 같은 흐름</b><span>길이 배지가 붙은 채 그리드에 함께. 탭으로 재생하고, 스크럽 바로 원하는 장면까지.</span></div></div>
-        <div class="f"><div class="fi">☁️</div><div><b>iCloud도 거뜬히</b><span>기기에 없는 사진도 미리 데워 둔 썸네일로 빠르게. 원본은 필요할 때 내려받아요.</span></div></div>
+        <div class="f"><div class="fi">⚡</div><div><b>Albums just open</b><span>No loading screen gets between your tap and the grid. Photos load exactly as needed.</span></div></div>
+        <div class="f"><div class="fi">🪄</div><div><b>Seamless page swipes</b><span>The next photo comes in pre-decoded, glued to your finger. No spinners, no flashes.</span></div></div>
+        <div class="f"><div class="fi">🔍</div><div><b>Pinch the grid too</b><span>Resize the thumbnail grid with two fingers and it reflows continuously, Photos-style.</span></div></div>
+        <div class="f"><div class="fi">🎬</div><div><b>Videos, same flow</b><span>Duration badges in the grid, tap to play, scrub to any moment — videos sort right alongside photos.</span></div></div>
+        <div class="f"><div class="fi">☁️</div><div><b>iCloud, no problem</b><span>Photos not on device show pre-warmed thumbnails fast; originals download only when needed.</span></div></div>
       </div>
     </div>
   </div>
@@ -241,17 +241,17 @@
 <section id="scale">
   <div class="wrap">
     <p class="eyebrow reveal">Scale</p>
-    <h2 class="stitle reveal">사진이 아무리 많아도</h2>
+    <h2 class="stitle reveal">However many photos you have</h2>
     <div class="scale">
       <div class="reveal">
-        <div class="big silver">수십만<small> 장</small></div>
-        <p class="lead">10만 장 라이브러리도 즉시</p>
-        <p class="lead-sub">장수와 무관하게 같은 속도로 열립니다.</p>
+        <div class="big silver">100k<small>+ items</small></div>
+        <p class="lead">Huge libraries open instantly</p>
+        <p class="lead-sub">The same speed whether it's 400 photos or 400,000.</p>
       </div>
       <div class="feat reveal">
-        <div class="f"><div class="fi">📚</div><div><b>전체를 훑지 않아요</b><span>목록을 만들 때도, 앨범을 열 때도 전체 사진을 순회하지 않습니다. 카운트와 표지는 쿼리로 즉시.</span></div></div>
-        <div class="f"><div class="fi">🧊</div><div><b>보이는 만큼만 그려요</b><span>네이티브 그리드가 화면에 보이는 셀만 렌더 — 수십만 장이어도 손가락을 그대로 따라옵니다.</span></div></div>
-        <div class="f"><div class="fi">🎯</div><div><b>스크롤을 앞질러 준비</b><span>빠르게 내릴수록 다음 화면의 썸네일을 미리 디코딩해 둡니다.</span></div></div>
+        <div class="f"><div class="fi">📚</div><div><b>Never walks your library</b><span>Building the album list and opening albums never iterates your photos. Counts and covers come from queries, instantly.</span></div></div>
+        <div class="f"><div class="fi">🧊</div><div><b>Renders only what you see</b><span>The native grid draws visible cells only — scrolling stays glued to your finger at any size.</span></div></div>
+        <div class="f"><div class="fi">🎯</div><div><b>Prefetches ahead of you</b><span>Scroll fast and the next screenful of thumbnails is already decoding.</span></div></div>
       </div>
     </div>
   </div>
@@ -260,12 +260,12 @@
 <section id="flow" class="band">
   <div class="wrap">
     <p class="eyebrow reveal">Flow</p>
-    <h2 class="stitle reveal">고르고, 넘기고, 정리 끝</h2>
+    <h2 class="stitle reveal">Pick, swipe, done</h2>
     <div class="steps">
-      <div class="step reveal"><div class="n">01</div><h4>앨범 고르기</h4><p>전체 · 즐겨찾기 · 동영상 · 스크린샷, 또는 앨범별로. 정리할 묶음을 하나 선택.</p></div>
-      <div class="step reveal"><div class="n">02</div><h4>넘기며 둘러보기</h4><p>좌우로 편하게 구경하고, ★로 즐겨찾기. 아무 사진에서나 정리를 시작할 수 있어요.</p></div>
-      <div class="step reveal"><div class="n">03</div><h4>고른 것만 정리</h4><p>‘정리 시작’을 누르면 보관함(Lumen 앨범) 버튼이 나타나요. 지울 사진은 위로 쓱.</p></div>
-      <div class="step reveal"><div class="n">04</div><h4>확인 후 마무리</h4><p>요약에서 보관·삭제 수를 확인하고, 삭제는 한 번에 안전하게. 다음엔 ‘이어서 정리’로 그 자리부터.</p></div>
+      <div class="step reveal"><div class="n">01</div><h4>Pick an album</h4><p>All photos · Favorites · Videos · Screenshots, or any album. Choose one bundle to organize.</p></div>
+      <div class="step reveal"><div class="n">02</div><h4>Browse through</h4><p>Swipe side to side, ★ what you love. Start organizing from any photo — not just the first.</p></div>
+      <div class="step reveal"><div class="n">03</div><h4>Organize the keepers</h4><p>Tap ‘Start Organizing’ and the tray (Lumen album) appears. Flick rejects upward.</p></div>
+      <div class="step reveal"><div class="n">04</div><h4>Confirm and finish</h4><p>Review keep/delete counts in the summary; deletion happens once, safely. Next time, ‘Resume Organizing’ takes you right back.</p></div>
     </div>
   </div>
 </section>
@@ -273,11 +273,11 @@
 <section id="why">
   <div class="wrap">
     <p class="eyebrow reveal">Safety</p>
-    <h2 class="stitle reveal">실수해도 사진은 무사해요</h2>
+    <h2 class="stitle reveal">Your photos survive your mistakes</h2>
     <div class="why">
-      <div class="card reveal"><div class="badge">🛟</div><h3>중간에 멈춰도 안전</h3><p>보관은 누르는 즉시 Lumen 앨범에 저장돼 앱이 꺼져도 남아요. 다음에 열면 ‘이어서 정리’ 카드가 마지막 자리로 데려다줍니다.</p></div>
-      <div class="card reveal"><div class="badge">🛡️</div><h3>삭제는 늘 확인 후</h3><p>위로 올린 사진은 ‘후보’일 뿐. 실수는 ↩로 즉시 복구되고, 실제 삭제는 마지막에 시스템 확인을 거쳐 한 번에 — 그 전엔 아무것도 사라지지 않습니다.</p></div>
-      <div class="card reveal"><div class="badge">⭐</div><h3>Apple 생태계 그대로</h3><p>즐겨찾기·앨범은 모두 Apple 사진의 것을 씁니다. Lumen을 지워도 정리 결과는 사진 앱에 그대로.</p></div>
+      <div class="card reveal"><div class="badge">🛟</div><h3>Safe to stop anytime</h3><p>Keeps are saved to the Lumen album the moment you tap — they survive the app closing. Next launch, the ‘Resume Organizing’ card returns you to the exact spot.</p></div>
+      <div class="card reveal"><div class="badge">🛡️</div><h3>Deletion always confirms</h3><p>Up-swiped photos are only candidates. Slips undo instantly with ↩, and actual deletion happens once at the end, behind the system confirmation — nothing disappears before that.</p></div>
+      <div class="card reveal"><div class="badge">⭐</div><h3>Plain Apple ecosystem</h3><p>Favorites and albums are Apple Photos' own. Delete Lumen and everything you organized stays right there in Photos.</p></div>
     </div>
   </div>
 </section>
@@ -285,19 +285,19 @@
 <section id="get" class="band">
   <div class="wrap" style="text-align:center">
     <p class="eyebrow reveal">Get started</p>
-    <h2 class="stitle reveal">직접 빌드해서 써보기</h2>
-    <p class="ssub reveal">아직 App Store 배포 전이에요. 무료 Apple ID면 내 폰에 올릴 수 있습니다.</p>
+    <h2 class="stitle reveal">Build it onto your phone</h2>
+    <p class="ssub reveal">Not on the App Store yet — a free Apple ID is enough to install it on your own iPhone.</p>
     <div class="install reveal">
-      <h4>Xcode로 내 폰에 설치</h4>
+      <h4>Install with Xcode</h4>
       <ol>
-        <li><code>git clone</code> 후 <code>cd ios &amp;&amp; xcodegen generate</code></li>
-        <li><code>LumenIOS.xcodeproj</code>를 Xcode로 열기</li>
-        <li>Signing &amp; Capabilities에서 본인 Apple ID 팀 선택</li>
-        <li>아이폰 연결 → <code>⌘R</code> → 첫 실행 시 설정에서 개발자 신뢰</li>
+        <li><code>git clone</code>, then <code>cd ios &amp;&amp; xcodegen generate</code></li>
+        <li>Open <code>LumenIOS.xcodeproj</code> in Xcode</li>
+        <li>Pick your Apple ID team under Signing &amp; Capabilities</li>
+        <li>Plug in your iPhone → <code>⌘R</code> → trust the developer in Settings on first run</li>
       </ol>
     </div>
     <p class="ssub reveal" style="margin-top:20px;font-size:13.5px">
-      iOS 17 이상 · Apple Photos(PhotoKit) 권한 필요 · 한국어/English · MIT License
+      iOS 17+ · Requires Apple Photos (PhotoKit) access · English/한국어 · MIT License
     </p>
   </div>
 </section>
@@ -305,21 +305,21 @@
 <section id="sponsor">
   <div class="wrap" style="text-align:center">
     <p class="eyebrow reveal">Support</p>
-    <h2 class="stitle reveal">Lumen이 마음에 드시나요?</h2>
-    <p class="ssub reveal">Lumen은 한도도 구독도 없는 완전 무료 앱입니다.<br>커피 한 잔의 후원이 다음 업데이트의 큰 힘이 돼요.</p>
+    <h2 class="stitle reveal">Enjoying Lumen?</h2>
+    <p class="ssub reveal">Lumen is completely free — no limits, no subscriptions.<br>A coffee-sized donation powers the next update.</p>
     <div class="cta reveal" style="margin-top:26px;justify-content:center">
-      <a class="btn btn-w" href="https://fairy.hada.io/@lumen">후원하기</a>
+      <a class="btn btn-w" href="https://fairy.hada.io/@lumen">Support the developer</a>
     </div>
   </div>
 </section>
 
 <footer>
-  <p><b>Lumen for iOS</b> · 넘기다 보면, 사진이 정리돼요</p>
+  <p><b>Lumen for iOS</b> · Keep swiping. Photos get organized.</p>
   <p style="margin-top:8px">
-    <a href="https://rescenedev.github.io/lumen/">macOS 버전</a> ·
+    <a href="https://rescenedev.github.io/lumen/en/">macOS version</a> ·
     <a href="https://github.com/rescenedev/lumen-ios">GitHub</a> ·
-    <a href="https://fairy.hada.io/@lumen">후원하기</a> ·
-    <a href="privacy.html">개인정보처리방침</a> ·
+    <a href="https://fairy.hada.io/@lumen">Support</a> ·
+    <a href="../privacy.html">Privacy Policy</a> ·
     MIT License
   </p>
 </footer>
