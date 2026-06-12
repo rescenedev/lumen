@@ -66,6 +66,14 @@ struct PhotoCollectionView: NSViewRepresentable {
         scroll.drawsBackground = false
         scroll.automaticallyAdjustsContentInsets = false
 
+        // Recompute the column count whenever the clip (visible) width changes —
+        // window resize, sidebar/inspector toggle. Without this the grid can
+        // stay stuck at a stale column count after the width changes.
+        scroll.contentView.postsFrameChangedNotifications = true
+        coord.clipObserver = NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification, object: scroll.contentView,
+            queue: .main) { [weak cv] _ in cv?.collectionViewLayout?.invalidateLayout() }
+
         coord.appliedToken = token
         coord.appliedNavToken = navToken
         coord.reload(cv)
@@ -147,9 +155,11 @@ struct PhotoCollectionView: NSViewRepresentable {
         var appliedSelection: Set<Photo.ID> = []
         var appliedAnchor: Photo.ID?
         var appliedViewerActive = false
+        var clipObserver: NSObjectProtocol?
         private var syncingSelection = false
 
         init(model: AppModel) { self.model = model }
+        deinit { if let o = clipObserver { NotificationCenter.default.removeObserver(o) } }
 
         func reload(_ cv: NSCollectionView) {
             photos = model.visiblePhotos
@@ -446,9 +456,20 @@ final class AdaptiveFlowLayout: NSCollectionViewLayout {
     private var cols = 1
     private var count = 0
 
+    /// Lay the grid out to the SCROLL VIEW's clip width, not the collection
+    /// view's own bounds. `collectionViewContentSize.width` feeds back into the
+    /// CV's frame, so keying off `cv.bounds.width` is self-referential: once the
+    /// CV is narrower than the window (e.g. after a programmatic resize) it can
+    /// stay stuck at a low column count. The clip view always reflects the real
+    /// available width.
+    private var layoutWidth: CGFloat {
+        collectionView?.enclosingScrollView?.contentView.bounds.width
+            ?? collectionView?.bounds.width ?? 0
+    }
+
     override func prepare() {
         guard let cv = collectionView else { return }
-        let available = max(0, cv.bounds.width - sectionInset.left - sectionInset.right)
+        let available = max(0, layoutWidth - sectionInset.left - sectionInset.right)
         let g = minimumInteritemSpacing
         cols = max(1, Int((available + g) / (targetItemWidth + g)))
         let w = max(40, floor((available - CGFloat(cols - 1) * g) / CGFloat(cols)))
@@ -460,7 +481,7 @@ final class AdaptiveFlowLayout: NSCollectionViewLayout {
         let rows = (count + cols - 1) / max(cols, 1)
         let height = sectionInset.top + sectionInset.bottom
             + CGFloat(rows) * itemSize.height + CGFloat(max(0, rows - 1)) * minimumLineSpacing
-        return NSSize(width: collectionView?.bounds.width ?? 0, height: height)
+        return NSSize(width: layoutWidth, height: height)
     }
 
     private func frame(at index: Int) -> NSRect {
