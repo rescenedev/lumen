@@ -160,6 +160,14 @@ struct PhotoBrowserView: View {
             }
         } else if model.isIndexingExif && !model.searchText.isEmpty {
             indexingState
+        } else if case .onThisDay = model.committedSidebar {
+            // Friendly, not a dead end: "On This Day" empties every midnight,
+            // so a generic "No Photos" reads like an error. Soft reassurance.
+            ContentUnavailableView {
+                Label("No memories on this day", systemImage: "calendar")
+            } description: {
+                Text("…and that's perfectly fine. Go make some. 📷")
+            }
         } else {
             ContentUnavailableView {
                 Label("No Photos", systemImage: "photo.on.rectangle")
