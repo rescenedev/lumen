@@ -425,14 +425,23 @@ struct OrganizeView: View {
             }
             .buttonStyle(.plain)
             // Browsing shouldn't lock favorites behind "정리 시작" — ★ toggles in
-            // place here (no fly-away, that's an organize-mode behavior).
+            // place here (no fly-away, that's an organize-mode behavior). Compact
+            // size: it sits next to the small capsule, not the 72pt organize pads.
             HStack {
                 Spacer()
-                control(currentIsFav ? "star.fill" : "star") { favorite() }
+                Button { favorite() } label: {
+                    Image(systemName: currentIsFav ? "star.fill" : "star")
+                        .font(.system(size: 18, weight: .bold)).foregroundStyle(.white.opacity(0.85))
+                        .frame(width: 46, height: 46)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.15)))
+                        .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 52)
+            .padding(.horizontal, 28)
         }
-        .padding(.bottom, 18)
+        .padding(.bottom, 21)
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
 
