@@ -84,10 +84,11 @@ Lumen is completely free — no limits, no subscriptions. Tidy your camera roll 
 
 ## 이미지 에셋 (이 폴더)
 - 아이콘: `icon_1024.png` (1024×1024, 알파 없음)
-- 스크린샷: `screenshots/ko/`, `screenshots/en/`
-  - iPhone 6.9" (1320×2868): `{home,grid,viewer,organize}_6.9.png`
-  - iPhone 6.5" (1242×2688): `{home,grid,viewer,organize}_6.5.png`
-  - iPad 13" (2064×2752): `{home,grid,organize}_13.png`
+- 스크린샷: App Store Connect / Fastlane deliver 규칙대로 로케일 코드 폴더 + 표시순 번호 프리픽스.
+  - `screenshots/ko/`, `screenshots/en-US/` (ASC 로케일 코드)
+  - 파일명 `N_<screen>_<size>.png` — 숫자 = 표시 순서(홈→그리드→뷰어→정리), 크기는 ASC가 해상도로 자동 인식
+  - iPhone 6.9"(1320×2868)·6.5"(1242×2688): 1_home / 2_grid / 3_viewer / 4_organize
+  - iPad 13"(2064×2752): 1_home / 2_grid / 3_organize
 - 캡션·프레임은 시뮬레이터 실촬영분(iPhone 17 / iPad Pro 13") 위에 CoreGraphics 합성. 재생성: `/tmp/lumen_shots/compose.swift` 참고(메모리 레시피).
 
 스크린샷 사진은 Wikimedia Commons CC0/퍼블릭 도메인 + 무인(無人) 랜드마크(그랜드캐년·모뉴먼트 밸리·뉴욕·런던·파리·골든게이트·콜로세움·마터호른)라 저작권/초상권 문제 없음.
