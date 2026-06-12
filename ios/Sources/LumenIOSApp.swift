@@ -129,7 +129,7 @@ struct FloatingTabBar: View {
         HStack(spacing: 0) {
             tabBtn(.home,       "house.fill")
             tabBtn(.allPhotos,  "photo.stack.fill")
-            tabBtn(.organize,   "sparkles")
+            tabBtn(.organize,   "square.stack.3d.up.fill")   // card stack = the swipe-organize metaphor (sparkles read as "AI")
             tabBtn(.favorites,  "star.fill")
             tabBtn(.vault,      "tray.full.fill")
         }

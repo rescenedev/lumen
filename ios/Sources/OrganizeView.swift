@@ -66,6 +66,10 @@ struct OrganizeView: View {
     // Video playback (current item only) — tap plays/pauses, swiping away stops.
     @State private var player: AVPlayer?
     @State private var playing = false
+    @State private var videoProgress: Double = 0   // 0...1, driven by a time observer
+    @State private var videoDuration: Double = 0
+    @State private var scrubbing = false
+    @State private var timeObserver: Any?
 
     private let threshold: CGFloat = 80
     private var isZoomed: Bool { zoom > 1.01 }
@@ -87,6 +91,7 @@ struct OrganizeView: View {
                 flashOverlay
                 topBar
                 if organizing { bottomControls } else { startBar }
+                if currentIsVideo, player != nil { videoScrubber.zIndex(3) }
             }
         }
         .preferredColorScheme(.dark)
@@ -152,7 +157,7 @@ struct OrganizeView: View {
             .task(id: index) {
                 guard index < source.count else { return }
                 zoom = 1; zoomBase = 1; pan = .zero; panBase = .zero   // new photo starts unzoomed
-                player?.pause(); player = nil; playing = false         // leaving a video stops it
+                stopPlayback()                                         // leaving a video stops it
                 // Favorite state: session toggles are tracked locally — no per-swipe
                 // PhotoKit fetch on the main thread.
                 let a = source.asset(index)
@@ -296,9 +301,52 @@ struct OrganizeView: View {
             guard index < count, source.asset(index).localIdentifier == a.localIdentifier else { return }
             let p = AVPlayer(playerItem: item)
             player = p
+            videoDuration = a.duration
+            videoProgress = 0
+            timeObserver = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
+                                                     queue: .main) { t in
+                guard videoDuration > 0, !scrubbing else { return }
+                videoProgress = min(max(t.seconds / videoDuration, 0), 1)
+            }
             p.play()
             playing = true
         }
+    }
+
+    /// Tear the player down completely (observer included).
+    private func stopPlayback() {
+        if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
+        timeObserver = nil
+        player?.pause(); player = nil; playing = false
+        videoProgress = 0; videoDuration = 0
+    }
+
+    private static func timeText(_ seconds: Double) -> String {
+        let t = Int(seconds.rounded())
+        return String(format: "%d:%02d", t / 60, t % 60)
+    }
+
+    /// Minimal video transport: elapsed · scrubber · total. Sits above the bottom
+    /// controls only while a player exists for the current video.
+    private var videoScrubber: some View {
+        HStack(spacing: 10) {
+            Text(Self.timeText(videoProgress * videoDuration))
+                .font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.85))
+            Slider(value: $videoProgress, in: 0...1) { editing in
+                scrubbing = editing
+                if !editing {
+                    player?.seek(to: CMTime(seconds: videoProgress * videoDuration, preferredTimescale: 600),
+                                 toleranceBefore: .zero, toleranceAfter: .zero)
+                }
+            }
+            Text(Self.timeText(videoDuration))
+                .font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.85))
+        }
+        .padding(.horizontal, 16).padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.horizontal, 24)
+        .padding(.bottom, organizing ? 104 : 96)
+        .frame(maxHeight: .infinity, alignment: .bottom)
     }
 
     /// Trash icon that grows as you drag up — hint that releasing deletes the photo.
@@ -361,21 +409,30 @@ struct OrganizeView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    // MARK: - Viewer "정리 시작" button (starts organizing from the current photo)
+    // MARK: - Viewer bottom bar ("정리 시작" centered, ★ always available on the right)
 
     private var startBar: some View {
-        Button {
-            withAnimation(.spring(response: 0.35)) { organizing = true }
-        } label: {
-            Text("정리 시작")
-                .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-                .padding(.horizontal, 28).padding(.vertical, 13)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
-                .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+        ZStack {
+            Button {
+                withAnimation(.spring(response: 0.35)) { organizing = true }
+            } label: {
+                Text("정리 시작")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 28).padding(.vertical, 13)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
+                    .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+            }
+            .buttonStyle(.plain)
+            // Browsing shouldn't lock favorites behind "정리 시작" — ★ toggles in
+            // place here (no fly-away, that's an organize-mode behavior).
+            HStack {
+                Spacer()
+                control(currentIsFav ? "star.fill" : "star") { favorite() }
+            }
+            .padding(.horizontal, 52)
         }
-        .buttonStyle(.plain)
-        .padding(.bottom, 24)
+        .padding(.bottom, 18)
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
 
@@ -386,7 +443,7 @@ struct OrganizeView: View {
         HStack {
             control("tray.full.fill") { decide(.keep) }
             Spacer()
-            control("star.fill") { favorite() }
+            control(currentIsFav ? "star.fill" : "star") { favorite() }
         }
         .padding(.horizontal, 52)
         .padding(.bottom, 18)
@@ -506,7 +563,8 @@ struct OrganizeView: View {
         currentIsFav = newValue
         tick += 1
         showFlash(newValue ? .favorite : .unfavorite)
-        flyAndAdvance(CGSize(width: 0, height: -1200))
+        // Organize mode: ★ is a decision, fly on. Viewer mode: toggle in place.
+        if organizing { flyAndAdvance(CGSize(width: 0, height: -1200)) }
     }
 
     /// Undo the most recent action: restore the decision table, revert the side

@@ -21,6 +21,9 @@ struct PhotoGridView: UIViewRepresentable {
     func makeUIView(context: Context) -> UICollectionView {
         let layout = InterpolatingGridLayout()
         layout.spacing = 2
+        // Remember the pinched column count across grids and launches.
+        let saved = UserDefaults.standard.double(forKey: "lumen.gridCols")
+        layout.cols = (2...9).contains(Int(saved)) ? saved : 4
         let cv = UICollectionView(frame: .zero, collectionViewLayout: layout)
         cv.backgroundColor = .clear
         cv.contentInsetAdjustmentBehavior = .always
@@ -117,6 +120,7 @@ struct PhotoGridView: UIViewRepresentable {
                 layout.invalidateLayout()
             case .ended, .cancelled:
                 let snapped = min(max(layout.cols.rounded(), 2), 9)
+                UserDefaults.standard.set(Double(snapped), forKey: "lumen.gridCols")
                 UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut]) {
                     layout.cols = snapped
                     layout.invalidateLayout()
