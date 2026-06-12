@@ -322,6 +322,11 @@ final class AppModel {
 
     init() {
         albums = store.albums
+        store.onFirstWriteFailure = { [weak self] in
+            Task { @MainActor in
+                self?.showToast(String(localized: "Couldn’t save metadata changes — check disk space (favorites/albums may not persist).", bundle: .module))
+            }
+        }
         loadSettings()
         if let report = CrashReporter.pendingReports().first {
             pendingCrashReport = report
@@ -630,6 +635,13 @@ final class AppModel {
         hasher.combine(filter)
         if viewDependsOnExif { hasher.combine(indexVersion) }
         if viewDependsOnMeta { hasher.combine(metaRevision) }
+        // Time-relative scopes read Date() — fold the day in so an app left
+        // running overnight doesn't keep showing yesterday's "On This Day".
+        switch committedSidebar {
+        case .recentlyAdded, .onThisDay:
+            hasher.combine(Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0)
+        default: break
+        }
         return hasher.finalize()
     }
 
@@ -1734,10 +1746,18 @@ final class AppModel {
     var folderRenameDraft = ""
     @ObservationIgnored private var folderRenameURL: URL?
 
-    /// All photos in a folder and its descendants.
+    /// All photos in a folder and its descendants. Walks the cached folder
+    /// index (hundreds of keys) instead of prefix-scanning all 67k photos —
+    /// this runs on every folder context-menu action.
     func photosInFolder(_ url: URL) -> [Photo] {
-        let prefix = url.path.hasSuffix("/") ? url.path : url.path + "/"
-        return allPhotos.filter { $0.url.path.hasPrefix(prefix) }
+        let base = url.path
+        let prefix = base.hasSuffix("/") ? base : base + "/"
+        var result: [Photo] = []
+        for (folder, photos) in directPhotosByFolder
+        where folder == base || folder.hasPrefix(prefix) {
+            result.append(contentsOf: photos)
+        }
+        return result
     }
 
     func isRootFolder(_ url: URL) -> Bool { rootFolders.contains(url) }
@@ -1860,21 +1880,45 @@ final class AppModel {
     }
 
     func rename(_ photos: [Photo], pattern: String, startIndex: Int) {
+        // Target names are pure computation; the per-photo SMB moves run
+        // detached (renaming hundreds of NAS files froze the main thread),
+        // then ONE batched store remap + rescan lands back on the main actor.
+        var jobs: [(from: URL, to: URL)] = []
         var index = startIndex
         for photo in sortOrder.sorted(photos) where !photo.isAsset {
             let ext = photo.url.pathExtension
             let newName = RenamePattern.filename(pattern: pattern, index: index, ext: ext)
             let newURL = photo.folderURL.appendingPathComponent(newName)
             index += 1
-            guard newURL != photo.url, !FileManager.default.fileExists(atPath: newURL.path) else { continue }
-            do {
-                try FileManager.default.moveItem(at: photo.url, to: newURL)
-                store.rename(from: photo.url.path, to: newURL.path)
-            } catch {
-                NSLog("Lumen rename failed: \(error.localizedDescription)")
-                showToast("Couldn’t rename “\(photo.filename)”: \(error.localizedDescription)")
-            }
+            guard newURL != photo.url else { continue }
+            jobs.append((from: photo.url, to: newURL))
         }
+        guard !jobs.isEmpty else { return }
+        Task.detached(priority: .userInitiated) {
+            var pairs: [(from: String, to: String)] = []
+            var failed = 0
+            for job in jobs {
+                guard !FileManager.default.fileExists(atPath: job.to.path) else { failed += 1; continue }
+                do {
+                    try FileManager.default.moveItem(at: job.from, to: job.to)
+                    pairs.append((from: job.from.path, to: job.to.path))
+                } catch {
+                    failed += 1
+                    NSLog("Lumen rename failed: \(error.localizedDescription)")
+                }
+            }
+            let pairsResult = pairs
+            let failedResult = failed
+            await MainActor.run { self.finishRename(pairs: pairsResult, failed: failedResult) }
+        }
+    }
+
+    private func finishRename(pairs: [(from: String, to: String)], failed: Int) {
+        if failed > 0 {
+            showToast(String(localized: "Couldn’t rename \(failed) items (name in use or permission issue).", bundle: .module))
+        }
+        guard !pairs.isEmpty else { return }
+        store.rename(pairs: pairs)
         rescanRoots()
         albums = store.albums
         bumpMeta()

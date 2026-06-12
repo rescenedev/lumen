@@ -10,6 +10,25 @@ final class MetadataStore {
     private var itemsCache: [String: PhotoMeta] = [:]
     private var albumsCache: [Album] = []
 
+    /// Fired once per session on the first failed DB write. Without it a full
+    /// disk or corrupt lumen.sqlite silently stops persisting favorites/
+    /// ratings/albums while the in-memory mirror keeps "working" until quit.
+    var onFirstWriteFailure: (() -> Void)?
+    private var reportedWriteFailure = false
+
+    /// All writes go through here so a failure is logged and surfaced (once).
+    private func write(_ updates: (Database) throws -> Void) {
+        do {
+            try db.write(updates)
+        } catch {
+            NSLog("Lumen: metadata write failed: \(error)")
+            if !reportedWriteFailure {
+                reportedWriteFailure = true
+                onFirstWriteFailure?()
+            }
+        }
+    }
+
     init() {
         db = AppDatabase.shared.queue
         load()
@@ -35,11 +54,11 @@ final class MetadataStore {
         transform(&meta)
         if meta.isEmpty {
             itemsCache.removeValue(forKey: path)
-            try? db.write { try $0.execute(sql: "DELETE FROM photo_meta WHERE path = ?", arguments: [path]) }
+            write { try $0.execute(sql: "DELETE FROM photo_meta WHERE path = ?", arguments: [path]) }
         } else {
             itemsCache[path] = meta
             let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8)) ?? "[]"
-            try? db.write {
+            write {
                 try $0.execute(sql: """
                     INSERT INTO photo_meta (path, favorite, rating, label, tags, rejected) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET favorite=excluded.favorite, rating=excluded.rating,
@@ -72,7 +91,7 @@ final class MetadataStore {
             }
         }
         guard !upserts.isEmpty || !deletes.isEmpty else { return }
-        try? db.write { db in
+        write { db in
             for item in upserts {
                 try db.execute(sql: """
                     INSERT INTO photo_meta (path, favorite, rating, label, tags, rejected) VALUES (?, ?, ?, ?, ?, ?)
@@ -107,7 +126,7 @@ final class MetadataStore {
         let album = Album(name: name)
         albumsCache.append(album)
         let pos = albumsCache.count - 1
-        try? db.write {
+        write {
             try $0.execute(sql: "INSERT INTO album (id, name, position) VALUES (?, ?, ?)",
                            arguments: [album.id.uuidString, name, pos])
         }
@@ -117,14 +136,14 @@ final class MetadataStore {
     func renameAlbum(_ id: UUID, to name: String) {
         guard let index = albumsCache.firstIndex(where: { $0.id == id }) else { return }
         albumsCache[index].name = name
-        try? db.write {
+        write {
             try $0.execute(sql: "UPDATE album SET name = ? WHERE id = ?", arguments: [name, id.uuidString])
         }
     }
 
     func deleteAlbum(_ id: UUID) {
         albumsCache.removeAll { $0.id == id }
-        try? db.write {
+        write {
             try $0.execute(sql: "DELETE FROM album WHERE id = ?", arguments: [id.uuidString])
             try $0.execute(sql: "DELETE FROM album_photo WHERE album_id = ?", arguments: [id.uuidString])
         }
@@ -145,7 +164,7 @@ final class MetadataStore {
         let base = existing.count
         existing.append(contentsOf: added)
         albumsCache[index].photoPaths = existing
-        try? db.write { db in
+        write { db in
             for (offset, path) in added.enumerated() {
                 try db.execute(sql: """
                     INSERT INTO album_photo (album_id, path, position) VALUES (?, ?, ?)
@@ -161,7 +180,7 @@ final class MetadataStore {
         // measured 7.6s on the main thread with the quadratic scan.
         let toRemove = Set(paths)
         albumsCache[index].photoPaths.removeAll { toRemove.contains($0) }
-        try? db.write { db in
+        write { db in
             // Chunked IN (…) deletes — SQLite's parameter limit is 999.
             var rest = paths[...]
             while !rest.isEmpty {
@@ -176,13 +195,26 @@ final class MetadataStore {
 
     /// Move metadata + album membership when a file is renamed.
     func rename(from: String, to: String) {
-        if let meta = itemsCache.removeValue(forKey: from) { itemsCache[to] = meta }
-        for index in albumsCache.indices {
-            albumsCache[index].photoPaths = albumsCache[index].photoPaths.map { $0 == from ? to : $0 }
+        rename(pairs: [(from: from, to: to)])
+    }
+
+    /// Batched rename: ONE pass over the album arrays and one transaction.
+    /// The single-pair version remaps every album's full path array per call —
+    /// 1k renames over a 20k-photo album would be 20M iterations and 1k commits.
+    func rename(pairs: [(from: String, to: String)]) {
+        guard !pairs.isEmpty else { return }
+        let mapping = Dictionary(pairs.map { ($0.from, $0.to) }, uniquingKeysWith: { _, last in last })
+        for (from, to) in pairs {
+            if let meta = itemsCache.removeValue(forKey: from) { itemsCache[to] = meta }
         }
-        try? db.write { db in
-            try db.execute(sql: "UPDATE OR REPLACE photo_meta SET path = ? WHERE path = ?", arguments: [to, from])
-            try db.execute(sql: "UPDATE OR REPLACE album_photo SET path = ? WHERE path = ?", arguments: [to, from])
+        for index in albumsCache.indices {
+            albumsCache[index].photoPaths = albumsCache[index].photoPaths.map { mapping[$0] ?? $0 }
+        }
+        write { db in
+            for (from, to) in pairs {
+                try db.execute(sql: "UPDATE OR REPLACE photo_meta SET path = ? WHERE path = ?", arguments: [to, from])
+                try db.execute(sql: "UPDATE OR REPLACE album_photo SET path = ? WHERE path = ?", arguments: [to, from])
+            }
         }
     }
 
@@ -197,7 +229,7 @@ final class MetadataStore {
         for index in albumsCache.indices {
             albumsCache[index].photoPaths = albumsCache[index].photoPaths.map(remap)
         }
-        try? db.write { db in
+        write { db in
             let pattern = oldPrefix + "%"
             try db.execute(sql: "UPDATE photo_meta SET path = ? || substr(path, ?) WHERE path LIKE ?",
                            arguments: [newPrefix, oldPrefix.count + 1, pattern])
@@ -216,7 +248,7 @@ final class MetadataStore {
         for index in albumsCache.indices {
             albumsCache[index].photoPaths.removeAll { toRemove.contains($0) }
         }
-        try? db.write { db in
+        write { db in
             var rest = paths[...]
             while !rest.isEmpty {
                 let chunk = Array(rest.prefix(500))
@@ -296,7 +328,7 @@ final class MetadataStore {
     }
 
     private func persistAll() {
-        try? db.write { db in
+        write { db in
             for (path, meta) in itemsCache {
                 let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8) ?? "[]") ?? "[]"
                 try db.execute(sql: "INSERT OR REPLACE INTO photo_meta (path, favorite, rating, label, tags, rejected) VALUES (?, ?, ?, ?, ?, ?)",
