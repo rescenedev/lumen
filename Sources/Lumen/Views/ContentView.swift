@@ -66,6 +66,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showAbout) { AboutView() }
         .sheet(isPresented: $model.showShortcuts) { ShortcutsView() }
+        .sheet(isPresented: $model.showHistory) { HistoryView() }
         .sheet(isPresented: $model.showEditor) {
             if let target = model.editTarget { CropResizeView(photo: target) }
         }

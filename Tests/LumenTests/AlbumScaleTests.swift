@@ -57,6 +57,63 @@ func albumScaleTests() {
         checkEqual(reloaded.items.count, 10)
     }
 
+    test("operationLogRecordsAndRevertsMetaChanges") {
+        let queue = try AppDatabase.inMemoryQueue()
+        let store = MetadataStore(queue: queue)
+        let p = paths(0..<3)
+
+        // Two logged actions: rate 4, then favorite.
+        store.update(paths: p, logAs: (.rating, "Rated ★4")) { $0.rating = 4 }
+        store.update(paths: p, logAs: (.favorite, "Favorited")) { $0.favorite = true }
+
+        var log = store.recentOperations()
+        checkEqual(log.count, 2)
+        checkEqual(log[0].summary, "Favorited")        // newest first
+        checkEqual(log[0].kind, .favorite)
+        checkEqual(log[0].affectedCount, 3)
+        checkEqual(log[1].summary, "Rated ★4")
+        check(store.meta(for: p[0]).favorite)
+        checkEqual(store.meta(for: p[0]).rating, 4)
+
+        // Revert the favorite → rating 4 stays, favorite gone.
+        let affected = store.undoOperation(log[0].id)
+        checkEqual(Set(affected), Set(p))
+        check(!store.meta(for: p[0]).favorite, "favorite should be reverted")
+        checkEqual(store.meta(for: p[0]).rating, 4, "rating must survive the favorite revert")
+
+        // Entry is marked undone and can't be reverted twice.
+        log = store.recentOperations()
+        check(log[0].undone)
+        check(!store.canUndo(log[0].id))
+        checkEqual(store.undoOperation(log[0].id).count, 0)
+
+        // Revert the rating too → back to empty meta (row deleted).
+        store.undoOperation(log[1].id)
+        check(store.meta(for: p[0]).isEmpty, "all meta reverted")
+        checkEqual(store.items.count, 0)
+    }
+
+    test("operationLogPersistsAndBoundsHugePayloads") {
+        let queue = try AppDatabase.inMemoryQueue()
+        let store = MetadataStore(queue: queue)
+
+        // Below the cap: undoable + survives reload.
+        store.update(paths: paths(0..<10), logAs: (.tag, "Tagged “trip”")) { $0.tags = ["trip"] }
+        let reloaded = MetadataStore(queue: queue)
+        let log = reloaded.recentOperations()
+        checkEqual(log.count, 1)
+        check(reloaded.canUndo(log[0].id), "small action should remain undoable after reload")
+
+        // Above the cap: recorded but NOT undoable (no giant payload kept).
+        let store2 = MetadataStore(queue: try AppDatabase.inMemoryQueue())
+        let big = (0..<(MetadataStore.maxLoggedPaths + 1)).map { "/p/\($0).jpg" }
+        store2.update(paths: big, logAs: (.favorite, "Favorited")) { $0.favorite = true }
+        let big1 = store2.recentOperations()
+        checkEqual(big1.count, 1)
+        check(!store2.canUndo(big1[0].id), "oversized action must not be undoable")
+        checkEqual(big1[0].affectedCount, 0, "oversized payload isn't stored")
+    }
+
     test("removeFromAlbumAtScaleIsFastAndCorrect") {
         let store = try makeStore()
         let album = store.addAlbum(named: "Big")

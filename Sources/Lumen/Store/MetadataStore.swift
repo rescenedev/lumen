@@ -72,15 +72,30 @@ final class MetadataStore {
     /// per-path `update` commits once per call — favoriting a ⌘A selection
     /// of 67k photos would mean 67k serial commits on the main thread.
     /// No-op transforms (meta unchanged) are skipped entirely.
-    func update(paths: [String], _ transform: (inout PhotoMeta) -> Void) {
-        guard !paths.isEmpty else { return }
+    ///
+    /// Pass `logAs` (kind + summary) to record the change in the history
+    /// timeline so it can be reverted later. The per-path BEFORE state is
+    /// captured here and stored as the undo payload — but only up to
+    /// `maxLoggedPaths` affected photos (a huge ⌘A sweep isn't a "tidy-up
+    /// action" worth keeping a 67k-entry payload for; it logs as not-undoable).
+    static let maxLoggedPaths = 5_000
+
+    @discardableResult
+    func update(paths: [String],
+                logAs log: (kind: OperationLogEntry.Kind, summary: String)? = nil,
+                _ transform: (inout PhotoMeta) -> Void) -> Int64? {
+        guard !paths.isEmpty else { return nil }
         var upserts: [(path: String, meta: PhotoMeta, tags: String)] = []
         var deletes: [String] = []
+        var before: [String: PhotoMeta?] = [:]   // nil = no meta existed
         for path in paths {
-            var meta = itemsCache[path] ?? PhotoMeta()
-            let before = meta
+            let prior = itemsCache[path]
+            var meta = prior ?? PhotoMeta()
             transform(&meta)
-            guard meta != before else { continue }
+            guard meta != (prior ?? PhotoMeta()) else { continue }
+            // updateValue (not subscript): `before[path] = nil` would DELETE the
+            // key; we need to store an explicit nil meaning "no meta existed".
+            before.updateValue(prior, forKey: path)
             if meta.isEmpty {
                 itemsCache.removeValue(forKey: path)
                 deletes.append(path)
@@ -90,7 +105,8 @@ final class MetadataStore {
                 upserts.append((path, meta, tags))
             }
         }
-        guard !upserts.isEmpty || !deletes.isEmpty else { return }
+        guard !upserts.isEmpty || !deletes.isEmpty else { return nil }
+        var logID: Int64?
         write { db in
             for item in upserts {
                 try db.execute(sql: """
@@ -108,7 +124,99 @@ final class MetadataStore {
                 try db.execute(sql: "DELETE FROM photo_meta WHERE path IN (\(marks))",
                                arguments: StatementArguments(chunk))
             }
+            if let log, !before.isEmpty {
+                let count = before.count
+                let undoable = count <= Self.maxLoggedPaths
+                let payload = undoable
+                    ? (try? String(data: JSONEncoder().encode(before), encoding: .utf8)) ?? "{}"
+                    : ""   // too big to keep — recorded but not revertible
+                try db.execute(sql: """
+                    INSERT INTO op_log (ts, kind, summary, payload, undone) VALUES (?, ?, ?, ?, 0)
+                    """, arguments: [Date().timeIntervalSince1970, log.kind.rawValue, log.summary, payload])
+                logID = db.lastInsertedRowID
+            }
         }
+        return logID
+    }
+
+    // MARK: - Operation history
+
+    func recentOperations(limit: Int = 200) -> [OperationLogEntry] {
+        (try? db.read { db -> [OperationLogEntry] in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id, ts, kind, summary, payload, undone FROM op_log
+                ORDER BY id DESC LIMIT ?
+                """, arguments: [limit])
+            return rows.map { row in
+                let payload: String = row["payload"]
+                let count = Self.payloadCount(payload)
+                return OperationLogEntry(
+                    id: row["id"],
+                    date: Date(timeIntervalSince1970: row["ts"]),
+                    kind: OperationLogEntry.Kind(rawValue: row["kind"]) ?? .other,
+                    summary: row["summary"],
+                    affectedCount: count,
+                    undone: (row["undone"] as Int) != 0)
+            }
+        }) ?? []
+    }
+
+    /// True if the entry still has a revertible payload and isn't already undone.
+    func canUndo(_ id: Int64) -> Bool {
+        (try? db.read { db -> Bool in
+            guard let row = try Row.fetchOne(db,
+                sql: "SELECT payload, undone FROM op_log WHERE id = ?", arguments: [id]) else { return false }
+            let payload: String = row["payload"]
+            return (row["undone"] as Int) == 0 && !payload.isEmpty
+        }) ?? false
+    }
+
+    /// Revert one logged action: restore each path's metadata to the recorded
+    /// BEFORE state, then mark the entry undone. Returns the affected paths so
+    /// the caller can refresh derived counts.
+    @discardableResult
+    func undoOperation(_ id: Int64) -> [String] {
+        guard let payload = (try? db.read { db in
+            try String.fetchOne(db, sql: "SELECT payload FROM op_log WHERE id = ? AND undone = 0",
+                                arguments: [id])
+        }) ?? nil, !payload.isEmpty,
+              let data = payload.data(using: .utf8),
+              let before = try? JSONDecoder().decode([String: PhotoMeta?].self, from: data)
+        else { return [] }
+
+        for (path, meta) in before {
+            if let meta {
+                itemsCache[path] = meta.isEmpty ? nil : meta
+            } else {
+                itemsCache.removeValue(forKey: path)
+            }
+        }
+        write { db in
+            for (path, meta) in before {
+                if let meta, !meta.isEmpty {
+                    let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8)) ?? "[]"
+                    try db.execute(sql: """
+                        INSERT INTO photo_meta (path, favorite, rating, label, tags, rejected) VALUES (?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(path) DO UPDATE SET favorite=excluded.favorite, rating=excluded.rating,
+                            label=excluded.label, tags=excluded.tags, rejected=excluded.rejected
+                        """, arguments: [path, meta.favorite, meta.rating, meta.label.rawValue, tags, meta.rejected])
+                } else {
+                    try db.execute(sql: "DELETE FROM photo_meta WHERE path = ?", arguments: [path])
+                }
+            }
+            try db.execute(sql: "UPDATE op_log SET undone = 1 WHERE id = ?", arguments: [id])
+        }
+        return Array(before.keys)
+    }
+
+    func clearOperationHistory() {
+        write { try $0.execute(sql: "DELETE FROM op_log") }
+    }
+
+    private static func payloadCount(_ payload: String) -> Int {
+        guard !payload.isEmpty, let data = payload.data(using: .utf8),
+              let dict = try? JSONDecoder().decode([String: PhotoMeta?].self, from: data) else { return 0 }
+        return dict.count
     }
 
     func allTags() -> [(tag: String, count: Int)] {

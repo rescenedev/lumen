@@ -39,6 +39,9 @@ struct LumenApp: App {
                 Button("Move to Trash") { model.requestDeletion(model.deletionTargets) }
                     .keyboardShortcut(.delete, modifiers: .command)
                     .disabled(model.deletionTargets.isEmpty)
+                Divider()
+                Button("Organize History…") { model.showHistory = true }
+                    .keyboardShortcut("y", modifiers: .command)
             }
 
             // View menu additions

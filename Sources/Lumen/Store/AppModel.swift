@@ -357,6 +357,28 @@ final class AppModel {
         pendingCrashReport = nil
     }
 
+    // MARK: - Organize history (timeline)
+
+    var showHistory = false
+
+    /// Snapshot of the recorded organizing actions, newest first. Read fresh
+    /// each time the History sheet opens (not @Observable — it's a sheet, not
+    /// a live grid).
+    func operationHistory() -> [OperationLogEntry] { store.recentOperations() }
+
+    /// Revert one logged action (restores the recorded before-state) and
+    /// refresh the derived favorite/label counts + the visible grid.
+    func undoOperation(_ id: Int64) {
+        let affected = store.undoOperation(id)
+        guard !affected.isEmpty else { return }
+        albums = store.albums
+        recomputeMetaCounts()
+        bumpMeta()
+        showToast(String(localized: "Reverted 1 action", bundle: .module))
+    }
+
+    func clearOperationHistory() { store.clearOperationHistory() }
+
     // MARK: - Per-photo metadata
 
     func meta(_ photo: Photo) -> PhotoMeta { store.meta(for: photo.url.path) }
@@ -380,7 +402,8 @@ final class AppModel {
     func setFavorite(_ photos: [Photo], _ value: Bool) {
         guard !photos.isEmpty else { return }
         let changing = photos.filter { isFavorite($0) != value }
-        store.update(paths: changing.map { $0.url.path }) { $0.favorite = value }
+        store.update(paths: changing.map { $0.url.path },
+                     logAs: (.favorite, value ? "Favorited" : "Unfavorited")) { $0.favorite = value }
         favoritesCount += (value ? 1 : -1) * changing.count   // incremental — no full rescan
         bumpMeta()
     }
@@ -399,7 +422,8 @@ final class AppModel {
     }
 
     func setRating(_ value: Int, for photos: [Photo]) {
-        store.update(paths: photos.map { $0.url.path }) { $0.rating = value }
+        store.update(paths: photos.map { $0.url.path },
+                     logAs: (.rating, value == 0 ? "Cleared rating" : "Rated ★\(value)")) { $0.rating = value }
         bumpMeta()
     }
 
@@ -410,7 +434,8 @@ final class AppModel {
     func toggleRejected(_ photos: [Photo]) {
         guard !photos.isEmpty else { return }
         let shouldReject = photos.contains { !isRejected($0) }
-        store.update(paths: photos.map { $0.url.path }) { $0.rejected = shouldReject }
+        store.update(paths: photos.map { $0.url.path },
+                     logAs: (.reject, shouldReject ? "Rejected" : "Unrejected")) { $0.rejected = shouldReject }
         bumpMeta()
     }
 
@@ -421,21 +446,24 @@ final class AppModel {
             if old != .none { labelCounts[old, default: 0] -= 1 }
             if label != .none { labelCounts[label, default: 0] += 1 }
         }
-        store.update(paths: changing.map { $0.url.path }) { $0.label = label }
+        store.update(paths: changing.map { $0.url.path },
+                     logAs: (.label, label == .none ? "Cleared label" : "Labeled \(label.title)")) { $0.label = label }
         bumpMeta()
     }
 
     func addTag(_ tag: String, to photos: [Photo]) {
         let clean = tag.trimmingCharacters(in: .whitespaces)
         guard !clean.isEmpty else { return }
-        store.update(paths: photos.map { $0.url.path }) {
+        store.update(paths: photos.map { $0.url.path },
+                     logAs: (.tag, "Tagged “\(clean)”")) {
             if !$0.tags.contains(clean) { $0.tags.append(clean) }
         }
         bumpMeta()
     }
 
     func removeTag(_ tag: String, from photos: [Photo]) {
-        store.update(paths: photos.map { $0.url.path }) { $0.tags.removeAll { $0 == tag } }
+        store.update(paths: photos.map { $0.url.path },
+                     logAs: (.tag, "Untagged “\(tag)”")) { $0.tags.removeAll { $0 == tag } }
         bumpMeta()
     }
 

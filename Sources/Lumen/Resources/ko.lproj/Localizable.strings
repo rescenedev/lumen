@@ -14,5 +14,6 @@
 "Couldn’t create the zip archive." = "ZIP 압축에 실패했습니다.";
 "Couldn’t rename %lld items (name in use or permission issue)." = "%lld개 항목의 이름을 바꾸지 못했습니다 (이름 중복 또는 권한 문제).";
 "Couldn’t save metadata changes — check disk space (favorites/albums may not persist)." = "메타데이터 저장에 실패했습니다 — 디스크 공간을 확인하세요 (즐겨찾기/앨범이 저장되지 않을 수 있습니다).";
+"Reverted 1 action" = "작업 1건 되돌림";
 "Undo" = "되돌리기";
 "Couldn’t undo (files moved or permission issue)." = "되돌리지 못했습니다 (파일이 이동되었거나 권한 문제).";

@@ -60,6 +60,22 @@ final class AppDatabase {
         migrator.registerMigration("v2-rejected") { db in
             try db.execute(sql: "ALTER TABLE photo_meta ADD COLUMN rejected INTEGER NOT NULL DEFAULT 0;")
         }
+        migrator.registerMigration("v3-oplog") { db in
+            // Append-only history of metadata-organizing actions. `payload` is
+            // the per-path PhotoMeta BEFORE the action (JSON), so each entry can
+            // be reverted without touching the photo files. Photo files are
+            // never recorded here — only Lumen-owned metadata.
+            try db.execute(sql: """
+                CREATE TABLE op_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts REAL NOT NULL,
+                    kind TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    undone INTEGER NOT NULL DEFAULT 0
+                );
+                """)
+        }
         try migrator.migrate(queue)
     }
 }
