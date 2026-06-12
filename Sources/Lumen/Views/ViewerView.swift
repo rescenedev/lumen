@@ -22,6 +22,10 @@ struct ViewerView: View {
     @State private var containerSize: CGSize = .zero
     @State private var loadedImageSize: CGSize?   // actual pixel size of the shown image
 
+    // One-time culling-shortcuts hint, shown on the very first viewer open.
+    @State private var showCullingHint = false
+    private static let cullingHintKey = "lumen.cullingHintShown"
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -48,12 +52,25 @@ struct ViewerView: View {
                     topBar(for: photo)
                     bottomBar(for: photo)
                 }
+
+                if showCullingHint {
+                    cullingHint
+                }
             }
         }
         .focusable()
         .focused($focused)
         .focusEffectDisabled()
         .onAppear { focused = true }
+        .onAppear {
+            guard !UserDefaults.standard.bool(forKey: Self.cullingHintKey) else { return }
+            UserDefaults.standard.set(true, forKey: Self.cullingHintKey)
+            withAnimation(.easeOut(duration: 0.3)) { showCullingHint = true }
+            Task {
+                try? await Task.sleep(for: .seconds(5))
+                withAnimation(.easeInOut(duration: 0.8)) { showCullingHint = false }
+            }
+        }
         .onChange(of: model.viewerIndex) { _, _ in
             resetZoom()
             loadedImageSize = nil
@@ -154,6 +171,40 @@ struct ViewerView: View {
         HStack(spacing: 8) {
             Text(label).foregroundStyle(.white.opacity(0.6)).frame(width: 80, alignment: .leading)
             Text(value)
+        }
+    }
+
+    // MARK: - Culling hint
+
+    /// One-time keyboard cheat sheet for culling, floating above the bottom
+    /// bar. Purely informational — never intercepts clicks or keys.
+    private var cullingHint: some View {
+        HStack(spacing: 16) {
+            hintItem("Space", "Favorite + next")
+            hintItem("X", "Reject + next")
+            hintItem("1–5", "Rate")
+            hintItem("← →", "Navigate")
+            hintItem("⌫", "Delete")
+        }
+        .padding(.horizontal, 18).padding(.vertical, 10)
+        .background(.black.opacity(0.6), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.15)))
+        .padding(.bottom, 96)   // clears the bottom toolbar
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .allowsHitTesting(false)
+    }
+
+    private func hintItem(_ key: String, _ label: String) -> some View {
+        HStack(spacing: 6) {
+            Text(key)
+                .font(.caption.weight(.semibold).monospaced())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.8))
         }
     }
 
