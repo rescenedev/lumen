@@ -95,7 +95,7 @@ struct RootView: View {
                              scrollTopKey: topTicks[.vault] ?? 0)
         } else {
             emptyTab("tray", lib.loaded ? "보관한 사진이 없어요" : nil,
-                     sub: "♥로 보관한 사진이 여기 모여요")
+                     sub: "보관함에 담은 사진이 여기 모여요")
         }
     }
 

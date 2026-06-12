@@ -66,23 +66,11 @@ struct AlbumGalleryView: View {
         }
     }
 
-    private var header: some View {
-        ZStack {
-            if onClose != nil {
-                // Pushed from a list: compact centered title + close button.
+    @ViewBuilder private var header: some View {
+        if let onClose {
+            // Pushed from a list: compact centered title + close button.
+            ZStack {
                 Text(scope.title).font(.headline).foregroundStyle(.white)
-            } else {
-                // Tab pane: big left title, identical to the home's "Lumen" so
-                // all five tabs share one header style.
-                HStack {
-                    Text(scope.title)
-                        .font(.system(size: 30, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                    Spacer()
-                }
-                .padding(.horizontal, 4)
-            }
-            if let onClose {
                 HStack {
                     Button { onClose() } label: {
                         Image(systemName: "xmark").font(.headline.bold()).foregroundStyle(.white)
@@ -91,9 +79,14 @@ struct AlbumGalleryView: View {
                     Spacer()
                 }
             }
+            .padding(.horizontal, 16).padding(.top, 8)
+            .frame(maxHeight: .infinity, alignment: .top)
+        } else {
+            // Tab pane: the shared pinned title (scrim keeps it legible while
+            // thumbnails scroll underneath).
+            TabTitleBar(title: scope.title)
+                .frame(maxHeight: .infinity, alignment: .top)
         }
-        .padding(.horizontal, 16).padding(.top, 8)
-        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 

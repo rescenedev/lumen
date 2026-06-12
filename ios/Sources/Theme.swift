@@ -50,3 +50,24 @@ struct LumenGlyph: View {
             }
     }
 }
+
+/// The shared five-tab header: a pinned big title over a lumenBG fade, so
+/// content scrolling underneath stays legible. One style for every tab.
+struct TabTitleBar: View {
+    let title: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 30, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+            Spacer()
+        }
+        .padding(.horizontal, 20).padding(.top, 6).padding(.bottom, 16)
+        .background(
+            LinearGradient(colors: [.lumenBG, .lumenBG, .lumenBG.opacity(0)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea(edges: .top)
+        )
+    }
+}

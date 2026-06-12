@@ -18,7 +18,7 @@ private enum Flash {
     }
     var icon: String {
         switch self {
-        case .keep: "rectangle.stack.fill"; case .trash: "trash.fill"; case .favorite: "star.fill"
+        case .keep: "tray.full.fill"; case .trash: "trash.fill"; case .favorite: "star.fill"
         case .unfavorite: "star.slash.fill"; case .undo: "arrow.uturn.backward"
         }
     }
@@ -158,6 +158,8 @@ struct OrganizeView: View {
                 let a = source.asset(index)
                 currentIsFav = favOverrides[a.localIdentifier] ?? a.isFavorite
                 currentIsVideo = a.mediaType == .video
+                // Remember the spot so the 정리 탭 can offer "이어서 정리".
+                UserDefaults.standard.set(index, forKey: "lumen.resume.\(scope.id)")
                 // Warm the photos around this one at full-screen size, so the next
                 // swipe shows an already-decoded/downloaded image instead of a spinner.
                 let neighbors = [index + 1, index + 2, index - 1]
@@ -377,11 +379,12 @@ struct OrganizeView: View {
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
 
-    // MARK: - Bottom controls (♥ Lumen left, ★ favorite right)
+    // MARK: - Bottom controls (🗄 keep-to-Lumen left, ★ favorite right — the tray
+    // matches the vault tab icon, so "keep" and "where kept things live" read as one)
 
     private var bottomControls: some View {
         HStack {
-            control("heart.fill") { decide(.keep) }
+            control("tray.full.fill") { decide(.keep) }
             Spacer()
             control("star.fill") { favorite() }
         }
@@ -549,6 +552,10 @@ struct OrganizeView: View {
     }
 
     private func finish() {
+        // Went through to the end → nothing left to resume in this album.
+        if index >= count - 1 {
+            UserDefaults.standard.removeObject(forKey: "lumen.resume.\(scope.id)")
+        }
         if trashAssets.isEmpty { dismiss(); return }
         withAnimation { finished = true }
     }

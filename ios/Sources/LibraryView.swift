@@ -40,6 +40,11 @@ struct LibraryView: View {
                     scopeList
                 }
             }
+            // Pinned tab title (shared style) — sits above the list, which
+            // scrolls underneath its scrim. Hidden during onboarding.
+            .overlay(alignment: .top) {
+                if library.authorized { TabTitleBar(title: String(localized: "앨범")) }
+            }
             // Parallax: the home slides left a touch while the gallery comes in, so
             // both move together (like a nav push) instead of the gallery sliding
             // over a static background.
@@ -103,10 +108,6 @@ struct LibraryView: View {
     private var scopeList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("앨범").font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 4).padding(.top, 6).padding(.bottom, 4)
-                    .id("home-top")
                 HStack {
                     Text("정리할 앨범").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.5))
                     Spacer()
@@ -123,6 +124,7 @@ struct LibraryView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 4)
+                .id("home-top")
                 LazyVGrid(columns: gridColumns, spacing: 12) {
                     ForEach(library.scopes) { s in
                         ScopeCard(scope: s, library: library)
@@ -135,12 +137,14 @@ struct LibraryView: View {
                             }
                     }
                 }
-                Text("앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 삭제 후보, ♥는 ‘Lumen’ 앨범에 보관, ★는 즐겨찾기입니다.")
+                Text("앨범을 골라 좌우로 넘기며 둘러보세요. 위로 올리면 삭제 후보, 보관함 버튼은 ‘Lumen’ 앨범으로, ★는 즐겨찾기입니다.")
                     .font(.footnote).foregroundStyle(.white.opacity(0.4))
                     .padding(.horizontal, 4).padding(.top, 6)
             }
             .padding(.horizontal, 16).padding(.top, 4)
         }
+        // Content starts below the pinned title but still scrolls under it.
+        .contentMargins(.top, 52, for: .scrollContent)
         // Short album lists fit the screen and would never rubber-band — force
         // bouncing so the pull-down gesture works regardless of content height.
         .scrollBounceBehavior(.always, axes: .vertical)
@@ -158,7 +162,7 @@ struct LibraryView: View {
                     .font(.title3).foregroundStyle(.white.opacity(0.85))
                     .rotationEffect(.degrees(Double(pull) * 1.5))
                     .opacity(Double(p)).scaleEffect(0.5 + 0.5 * p)
-                    .offset(y: pull * 0.45 - 26)
+                    .offset(y: 38 + pull * 0.45)   // rides in below the pinned title
             }
         }
         .sensoryFeedback(.impact(flexibility: .rigid), trigger: showSettings) { _, new in new }
@@ -290,7 +294,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 18) {
                 feature("hand.draw.fill", "넘기며 둘러보기", "좌우로 넘기고, 위로 올리면 삭제 후보")
-                feature("rectangle.stack.fill", "보관은 Lumen 앨범에", "♥로 고른 사진을 한 곳에 모아 나중에 분류")
+                feature("tray.full.fill", "보관은 Lumen 앨범에", "보관함에 담은 사진을 한 곳에 모아 나중에 분류")
                 feature("checkmark.shield.fill", "안전하게", "삭제는 항상 확인 후 진행")
             }
             .padding(.top, 36).padding(.horizontal, 30)
@@ -333,6 +337,16 @@ struct OrganizePickerView: View {
     let library: PhotoLibrary
     var scrollTopKey: Int = 0   // tab re-tap: pop the open album, else scroll to top
     @State private var scope: OrganizeScope?
+    @State private var resume: ResumeTarget?
+    @AppStorage("lumen.lastOrganizedScopeId") private var lastScopeId = "all"
+
+    /// The album + position the user last organized, if it's still meaningful.
+    private var resumeTarget: ResumeTarget? {
+        guard let s = library.scopes.first(where: { $0.id == lastScopeId }) else { return nil }
+        let i = UserDefaults.standard.integer(forKey: "lumen.resume.\(s.id)")
+        guard i > 0, i < s.count - 1 else { return nil }
+        return ResumeTarget(scope: s, index: i)
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -353,6 +367,8 @@ struct OrganizePickerView: View {
                     pickerList
                 }
             }
+            // Pinned tab title — same style as every other tab.
+            .overlay(alignment: .top) { TabTitleBar(title: String(localized: "정리")) }
             .offset(x: scope != nil ? -UIScreen.main.bounds.width * 0.22 : 0)
             .overlay(Color.black.opacity(scope != nil ? 0.25 : 0).ignoresSafeArea())
 
@@ -367,6 +383,10 @@ struct OrganizePickerView: View {
         }
         .preferredColorScheme(.dark)
         .tint(.lumenAccent)
+        .fullScreenCover(item: $resume) { r in
+            // Straight into the viewer at the saved spot — 정리 시작 is one tap away.
+            OrganizeView(scope: r.scope, library: library, startIndex: r.index)
+        }
         // Tab re-tap: an open album pops back to the picker; the picker scrolls to top.
         .onChange(of: scrollTopKey) {
             if scope != nil {
@@ -381,18 +401,20 @@ struct OrganizePickerView: View {
     private var pickerList: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // 헤더 — 다섯 탭 공통 타이틀 스타일 (홈의 "Lumen"과 동일)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("정리")
-                        .font(.system(size: 30, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("앨범을 골라보세요 · 위로 올리면 삭제 · 정리가 끝나면 한번에 삭제")
-                        .font(.subheadline).foregroundStyle(.white.opacity(0.35))
+                // 안내 한 줄 — 타이틀은 핀(TabTitleBar)으로 올라갔다.
+                Text("앨범을 골라보세요 · 위로 올리면 삭제 · 정리가 끝나면 한번에 삭제")
+                    .font(.subheadline).foregroundStyle(.white.opacity(0.35))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 18)
+                    .id("organize-top")
+
+                // 이어서 정리 — 마지막으로 보던 앨범·위치로 바로 점프.
+                if let r = resumeTarget {
+                    Button { resume = r } label: { ResumeCard(target: r, library: library) }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16).padding(.bottom, 12)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.top, 10).padding(.bottom, 24)
-                .id("organize-top")
 
                 // 리스트
                 VStack(spacing: 0) {
@@ -411,6 +433,52 @@ struct OrganizePickerView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.06)))
                 .padding(.horizontal, 16)
+            }
+        }
+        .contentMargins(.top, 52, for: .scrollContent)   // start below the pinned title
+    }
+}
+
+/// Where the user left off — drives the 정리 탭's "이어서 정리" card.
+struct ResumeTarget: Identifiable {
+    var id: String { scope.id }
+    let scope: OrganizeScope
+    let index: Int
+}
+
+/// The 정리 탭's hero card: jump back to where organizing left off.
+private struct ResumeCard: View {
+    let target: ResumeTarget
+    let library: PhotoLibrary
+    @State private var cover: UIImage?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Color.white.opacity(0.06)
+                if let cover {
+                    Image(uiImage: cover).resizable().scaledToFill()
+                }
+            }
+            .frame(width: 52, height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("이어서 정리").font(.body.weight(.semibold)).foregroundStyle(.white)
+                Text("\(target.scope.title) · \(target.index + 1)번째 사진부터")
+                    .font(.caption).foregroundStyle(.white.opacity(0.45))
+            }
+            Spacer()
+            Image(systemName: "arrow.forward.circle.fill")
+                .font(.title3).foregroundStyle(.white.opacity(0.85))
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .background(Color.lumenCard, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.06)))
+        .contentShape(Rectangle())
+        .task(id: target.scope.cover?.localIdentifier) {
+            if let a = target.scope.cover {
+                for await img in library.imageStream(a, points: 52, mode: .aspectFill) { cover = img }
             }
         }
     }

@@ -206,7 +206,8 @@ final class InterpolatingGridLayout: UICollectionViewLayout {
 /// One square thumbnail cell with a favorite heart (and a duration badge for videos).
 final class ThumbCell: UICollectionViewCell {
     let imageView = UIImageView()
-    private let heart = UIImageView(image: UIImage(systemName: "heart.fill"))
+    // ★ matches the favorite action/tab icon (hearts are reserved for the brand).
+    private let heart = UIImageView(image: UIImage(systemName: "star.fill"))
     private let duration = UILabel()
     private var assetID: String?
     private var requestID: PHImageRequestID = 0
