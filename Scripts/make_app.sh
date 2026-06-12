@@ -48,7 +48,9 @@ rm -rf "$ICON_TMP"
 # runs locally. Configure for real signing via env vars:
 #   export DEVELOPER_ID="Developer ID Application: Your Name (TEAMID)"
 #   export NOTARY_PROFILE="lumen-notary"   # from: xcrun notarytool store-credentials
-#   export ENTITLEMENTS="$ROOT/Scripts/Lumen.entitlements"   # optional
+# ENTITLEMENTS defaults to Scripts/Lumen.entitlements (Photos-library access
+# under the hardened runtime); override the env var to use a different file.
+ENTITLEMENTS="${ENTITLEMENTS:-$ROOT/Scripts/Lumen.entitlements}"
 have_developer_id=false
 if [ -n "${DEVELOPER_ID:-}" ] && \
    security find-identity -v -p codesigning 2>/dev/null | grep -qF "$DEVELOPER_ID"; then

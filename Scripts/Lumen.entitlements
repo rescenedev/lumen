@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Hardened-runtime resource access: without this, a hardened-runtime
+	     build is silently denied Photos-library access (the TCC prompt never
+	     even appears). Location is NOT needed — the map only plots EXIF
+	     coordinates, never the user's location. -->
+	<key>com.apple.security.personal-information.photos-library</key>
+	<true/>
+</dict>
+</plist>
