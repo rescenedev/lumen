@@ -222,12 +222,18 @@ struct ContentView: View {
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         let group = DispatchGroup()
+        // loadObject completions arrive on arbitrary queues — appending to a
+        // shared array from them is a data race on multi-file drops, so each
+        // append is funneled through one serial queue.
+        let collectQueue = DispatchQueue(label: "lumen.drop.collect")
         var urls: [URL] = []
         for provider in providers {
             group.enter()
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                if let url { urls.append(url) }
-                group.leave()
+                collectQueue.async {
+                    if let url { urls.append(url) }
+                    group.leave()
+                }
             }
         }
         group.notify(queue: .main) {

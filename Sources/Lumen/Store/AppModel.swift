@@ -1348,21 +1348,25 @@ final class AppModel {
         // Incremental: reuse cached photos for folders whose mtime is unchanged.
         // The folder index is the same grouping, precomputed off-main at load —
         // grouping 67k photos here measured ~145ms on the main thread.
-        let cachedByFolder = directPhotosByFolder
-        let result = await Task.detached(priority: .utility) {
-            let knownMtimes = LibraryCache.loadFolderMtimes()
-            let r = IncrementalScanner.scan(roots: roots, knownMtimes: knownMtimes, cachedByFolder: cachedByFolder)
-            LibraryCache.saveFolderMtimes(r.folderMtimes)
-            return r
-        }.value
-        let scanned = result.photos
-
-        // Diff off-main against a snapshot; retry if the library was edited
-        // while the diff was being computed (rare — the diff takes <1s).
+        //
+        // ONE version span covers scan + diff: the scan can take seconds on a
+        // NAS, so a delete/undo landing mid-scan (not just mid-diff) leaves
+        // `scanned` stale and the diff would revert the user's action —
+        // restored photos pruned as removed, deleted ones resurrected as
+        // added. Re-scans on retry are cheap: only the folders the edit
+        // touched have changed mtimes; everything else is a cache hit.
         var diff = ReconcileDiff()
         var diffIsCurrent = false
         for _ in 0..<3 {
             let snapshotVersion = libraryVersion
+            let cachedByFolder = directPhotosByFolder
+            let result = await Task.detached(priority: .utility) {
+                let knownMtimes = LibraryCache.loadFolderMtimes()
+                let r = IncrementalScanner.scan(roots: roots, knownMtimes: knownMtimes, cachedByFolder: cachedByFolder)
+                LibraryCache.saveFolderMtimes(r.folderMtimes)
+                return r
+            }.value
+            let scanned = result.photos
             let current = allPhotos
             let currentRoots = rootFolders
             diff = await Task.detached(priority: .userInitiated) {
@@ -1373,6 +1377,7 @@ final class AppModel {
         }
         // Never apply a diff computed against an outdated library — it would
         // silently revert whatever the user just deleted/imported/renamed.
+        // (Giving up is safe: the edit's own FSEvents trigger the next pass.)
         guard diffIsCurrent else { return }
 
         let missingRoots = rootFolders.filter { !roots.contains($0) }
@@ -1381,7 +1386,11 @@ final class AppModel {
         // no-op launch reconcile would bump the version and force the grid to
         // reload (throwing away in-flight thumbnail decodes).
         if diff.hasChanges {
-            for path in diff.removedPaths { exif.removeValue(forKey: path) }
+            // One assignment, not per-item removeValue — each mutation of the
+            // observed dictionary runs the observation machinery.
+            var prunedExif = exif
+            for path in diff.removedPaths { prunedExif.removeValue(forKey: path) }
+            exif = prunedExif
             duplicatePaths.subtract(diff.removedPaths)
             allPhotos = diff.offline + diff.scanned
             installStats(diff.stats)
@@ -1464,7 +1473,11 @@ final class AppModel {
         Task(priority: .utility) {
             let chunkSize = 200
             let saveEvery = 2_000   // checkpoint so a long NAS pass survives a quit
-            var merged = exif
+            // Accumulate only the NEW entries and merge them into the CURRENT
+            // exif at publish time. The old `var merged = exif` snapshot taken
+            // at pass start resurrected every entry deleted during a long NAS
+            // pass — and each publish CoW-copied the whole 67k dictionary.
+            var pending: [String: ExifInfo] = [:]
             var start = 0
             var sinceSave = 0
             var tickTime = Date()
@@ -1474,7 +1487,7 @@ final class AppModel {
                 let end = min(start + chunkSize, urls.count)
                 let chunk = Array(urls[start..<end])
                 let added = await Task.detached(priority: .utility) { ExifIndexer.index(chunk) }.value
-                for (key, value) in added { merged[key] = value }
+                pending.merge(added) { _, new in new }
                 // Cheap status updates every chunk (status bar only).
                 exifIndexDone = baseDone + end
                 exifIndexSource = start < localCount ? "Local disk" : "NAS"
@@ -1482,7 +1495,8 @@ final class AppModel {
                 // the whole library — expensive while a search is active. Throttle
                 // it to ~1.5s so streaming results don't make the grid stutter.
                 if -lastPublish.timeIntervalSinceNow >= 1.5 {
-                    exif = merged
+                    exif = exif.merging(pending) { _, new in new }
+                    pending.removeAll(keepingCapacity: true)
                     lastPublish = Date()
                 }
                 // Rolling throughput (photos/sec) over the last ~second.
@@ -1499,7 +1513,7 @@ final class AppModel {
                     sinceSave = 0
                 }
             }
-            exif = merged            // final publish so the cache + search are complete
+            exif = exif.merging(pending) { _, new in new }   // final publish so the cache + search are complete
             persistExifCache()
             isIndexingExif = false
             exifIndexTotal = 0
@@ -1666,14 +1680,28 @@ final class AppModel {
         if panel.runModal() == .OK, let url = panel.url { completion(url) }
     }
 
+    // Exports run detached — copyOriginals reads every file over the network
+    // and exportResized adds a full decode+encode per photo; a 200-photo NAS
+    // export beachballed the app for the whole copy. The count comes back to
+    // the main actor as a toast (the result used to be silently discarded).
     func exportOriginals(_ photos: [Photo]) {
         guard !photos.isEmpty else { return }
-        chooseDirectory(prompt: "Export Here") { dir in _ = Exporter.copyOriginals(photos, to: dir) }
+        chooseDirectory(prompt: "Export Here") { dir in
+            Task.detached(priority: .userInitiated) {
+                let copied = Exporter.copyOriginals(photos, to: dir)
+                await MainActor.run { self.didExport(count: copied, of: photos.count, to: dir) }
+            }
+        }
     }
 
     func exportResized(_ photos: [Photo], maxPixel: Int) {
         guard !photos.isEmpty else { return }
-        chooseDirectory(prompt: "Export Here") { dir in _ = Exporter.exportResized(photos, maxPixel: maxPixel, to: dir) }
+        chooseDirectory(prompt: "Export Here") { dir in
+            Task.detached(priority: .userInitiated) {
+                let exported = Exporter.exportResized(photos, maxPixel: maxPixel, to: dir)
+                await MainActor.run { self.didExport(count: exported, of: photos.count, to: dir) }
+            }
+        }
     }
 
     func exportZip(_ photos: [Photo]) {
@@ -1682,7 +1710,21 @@ final class AppModel {
         panel.nameFieldStringValue = "Lumen Export.zip"
         panel.allowedContentTypes = [.zip]
         if panel.runModal() == .OK, let url = panel.url {
-            Task.detached { _ = Exporter.zip(photos, to: url) }
+            Task.detached(priority: .userInitiated) {
+                let ok = Exporter.zip(photos, to: url)
+                await MainActor.run {
+                    if ok { self.didExport(count: photos.count, of: photos.count, to: url) }
+                    else { self.showToast(String(localized: "Couldn’t create the zip archive.", bundle: .module)) }
+                }
+            }
+        }
+    }
+
+    private func didExport(count: Int, of total: Int, to destination: URL) {
+        if count < total {
+            showToast(String(localized: "Exported \(count) of \(total) photos · \(destination.lastPathComponent)", bundle: .module))
+        } else {
+            showToast(String(localized: "Exported \(count) photos · \(destination.lastPathComponent)", bundle: .module))
         }
     }
 
@@ -2122,6 +2164,7 @@ final class AppModel {
         // scope and warms the first screenful of thumbnails, so the grid
         // appears already filled instead of empty-grid → sort → images pop.
         let launchSort = sortOrder
+        let launchVersion = libraryVersion
         let launchTier = viewMode == .grid
             ? ThumbnailCache.tier(forPointSize: thumbnailSize)
             : ThumbnailCache.tier(forPointSize: 40)   // list rows
@@ -2150,7 +2193,7 @@ final class AppModel {
                                     indexes: indexes, sort: launchSort, sorted: sorted)
             }
             guard let self else { return }
-            await self.installLoadedLibrary(loaded)
+            await self.installLoadedLibrary(loaded, launchVersion: launchVersion)
             // EXIF (a 680ms decode of its own) loads only after the grid is up —
             // decoding both caches concurrently slowed the grid-gating decode
             // ~2x (CPU/allocator contention, measured), and the grid doesn't
@@ -2185,21 +2228,31 @@ final class AppModel {
     /// Main-actor landing for the off-main load pipeline: publish the library
     /// with its precomputed stats/indexes so the sidebar's first body, first
     /// folder click, and first search never recompute them on the main thread.
-    private func installLoadedLibrary(_ loaded: LaunchLoad?) {
+    private func installLoadedLibrary(_ loaded: LaunchLoad?, launchVersion: Int) {
         if let loaded {
-            allPhotos = loaded.photos
-            installStats(LibraryStats(recentlyAdded: loaded.dates.recentlyAdded,
-                                      onThisDay: loaded.dates.onThisDay,
-                                      folderCounts: Self.folderCounts(from: loaded.indexes.byFolder)))
-            installDerivedIndexes(loaded.indexes)
-            recomputeMetaCounts()
-            // Seed the visible cache with the pre-sorted default scope: without
-            // it the first visiblePhotos access kicks the async 67k sort and
-            // the grid sits empty behind a spinner for another ~300ms.
-            if committedSidebar == .allPhotos, sortOrder == loaded.sort,
-               searchText.isEmpty, !filter.isActive {
-                cacheVisible(visibleSignature, loaded.sorted)
-                lastVisible = loaded.sorted
+            if libraryVersion != launchVersion {
+                // Something (an early drag-import) already mutated the library
+                // while the cache was decoding — merge instead of clobbering
+                // it, and let stats/indexes recompute lazily (rare path).
+                let known = Set(loaded.photos.map { $0.url.path })
+                let extras = allPhotos.filter { !known.contains($0.url.path) }
+                allPhotos = loaded.photos + extras
+                recomputeMetaCounts()
+            } else {
+                allPhotos = loaded.photos
+                installStats(LibraryStats(recentlyAdded: loaded.dates.recentlyAdded,
+                                          onThisDay: loaded.dates.onThisDay,
+                                          folderCounts: Self.folderCounts(from: loaded.indexes.byFolder)))
+                installDerivedIndexes(loaded.indexes)
+                recomputeMetaCounts()
+                // Seed the visible cache with the pre-sorted default scope: without
+                // it the first visiblePhotos access kicks the async 67k sort and
+                // the grid sits empty behind a spinner for another ~300ms.
+                if committedSidebar == .allPhotos, sortOrder == loaded.sort,
+                   searchText.isEmpty, !filter.isActive {
+                    cacheVisible(visibleSignature, loaded.sorted)
+                    lastVisible = loaded.sorted
+                }
             }
         }
         isLoadingLibrary = false   // grid is on screen from here

@@ -11,11 +11,24 @@ enum CrashReporter {
     private static let fatalSignals: [Int32] = [SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE, SIGTRAP]
     private static let maxKeptReports = 5
 
-    /// Pre-computed at install time: signal handlers may only call
-    /// async-signal-safe functions (open/write/close), so the path and header
-    /// must already exist as plain C strings.
-    private static var reportPathC: [CChar] = []
-    private static var headerC: [CChar] = []
+    /// Pre-computed at install time: a signal handler may only call
+    /// async-signal-safe functions (open/write/close/backtrace) — if the crash
+    /// originated inside malloc, ANY allocation in the handler deadlocks on
+    /// the allocator lock and the app hangs instead of crashing. So the path,
+    /// header, per-signal messages, AND the backtrace frame buffer are all
+    /// raw C allocations made up front; the handler only loads and writes.
+    nonisolated(unsafe) private static var reportPathC: UnsafeMutablePointer<CChar>?
+    nonisolated(unsafe) private static var headerC: UnsafeMutablePointer<CChar>?
+    nonisolated(unsafe) private static let signalMessages: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?> = {
+        let p = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: 32)
+        p.initialize(repeating: nil, count: 32)
+        return p
+    }()
+    nonisolated(unsafe) private static let framesBuffer: UnsafeMutablePointer<UnsafeMutableRawPointer?> = {
+        let p = UnsafeMutablePointer<UnsafeMutableRawPointer?>.allocate(capacity: 128)
+        p.initialize(repeating: nil, count: 128)
+        return p
+    }()
 
     static var reportsDirectory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -36,8 +49,11 @@ enum CrashReporter {
         Crashed \(stamp)
 
         """
-        reportPathC = Array(path.utf8CString)
-        headerC = Array(header.utf8CString)
+        reportPathC = strdup(path)
+        headerC = strdup(header)
+        for sig in fatalSignals where sig >= 0 && sig < 32 {
+            signalMessages[Int(sig)] = strdup("Fatal signal \(sig)\n\n")
+        }
 
         NSSetUncaughtExceptionHandler { exception in
             let body = """
@@ -56,34 +72,33 @@ enum CrashReporter {
         pruneOldReports()
     }
 
-    /// Async-signal-safe path: open/write/close + backtrace_symbols_fd only.
+    /// Async-signal-safe path: ONLY open/write/close/backtrace on pre-allocated
+    /// memory. No Swift strings, no Arrays, no allocation of any kind.
     private static func handleSignal(_ sig: Int32) {
-        let fd = reportPathC.withUnsafeBufferPointer {
-            open($0.baseAddress!, O_CREAT | O_WRONLY | O_APPEND, 0o644)
-        }
-        if fd >= 0 {
-            headerC.withUnsafeBufferPointer { buf in
-                _ = write(fd, buf.baseAddress!, strlen(buf.baseAddress!))
+        if let pathC = reportPathC {
+            let fd = open(pathC, O_CREAT | O_WRONLY | O_APPEND, 0o644)
+            if fd >= 0 {
+                if let headerC {
+                    _ = write(fd, headerC, strlen(headerC))
+                }
+                if sig >= 0, sig < 32, let message = signalMessages[Int(sig)] {
+                    _ = write(fd, message, strlen(message))
+                }
+                let count = backtrace(framesBuffer, 128)
+                backtrace_symbols_fd(framesBuffer, count, fd)
+                close(fd)
             }
-            var name: [CChar] = Array("Fatal signal \(sig)\n\n".utf8CString)
-            name.withUnsafeBufferPointer { buf in
-                _ = write(fd, buf.baseAddress!, strlen(buf.baseAddress!))
-            }
-            var frames = [UnsafeMutableRawPointer?](repeating: nil, count: 128)
-            let count = backtrace(&frames, 128)
-            backtrace_symbols_fd(&frames, count, fd)
-            close(fd)
         }
         // Restore default disposition and re-raise so the OS report still happens.
         signal(sig, SIG_DFL)
         raise(sig)
     }
 
+    /// Uncaught-exception path — NOT signal context, so Foundation is fine here.
     private static func writeReport(_ body: String) {
-        let path = String(decoding: reportPathC.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) },
-                          as: UTF8.self)
-        let header = String(decoding: headerC.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) },
-                            as: UTF8.self)
+        guard let pathC = reportPathC, let headerC else { return }
+        let path = String(cString: pathC)
+        let header = String(cString: headerC)
         try? (header + body).write(toFile: path, atomically: true, encoding: .utf8)
     }
 
