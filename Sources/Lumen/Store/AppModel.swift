@@ -1582,7 +1582,20 @@ final class AppModel {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.writeObjects(photos.map { $0.url as NSURL })
-        if photos.count == 1, let image = NSImage(contentsOf: photos[0].url) { pasteboard.writeObjects([image]) }
+        // Single-photo copies also carry image data so image fields accept the
+        // paste — loaded OFF the main thread: NSImage(contentsOf:) on a NAS
+        // original is a network read + full decode (seconds of beachball).
+        // changeCount guards against clobbering a newer copy when it lands.
+        guard photos.count == 1, !photos[0].isAsset else { return }
+        let url = photos[0].url
+        let change = pasteboard.changeCount
+        Task.detached(priority: .userInitiated) {
+            guard let image = NSImage(contentsOf: url) else { return }
+            await MainActor.run {
+                guard NSPasteboard.general.changeCount == change else { return }
+                NSPasteboard.general.writeObjects([image])
+            }
+        }
     }
 
     func share(_ photos: [Photo]) {

@@ -21,5 +21,6 @@ imageEditorTests()
 incrementalScannerTests()
 thumbnailCacheTests()
 libraryCacheTests()
+albumScaleTests()
 
 exit(Harness.finish())

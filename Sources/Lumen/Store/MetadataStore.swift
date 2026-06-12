@@ -90,26 +90,43 @@ final class MetadataStore {
     func addToAlbum(_ id: UUID, paths: [String]) {
         guard let index = albumsCache.firstIndex(where: { $0.id == id }) else { return }
         var existing = albumsCache[index].photoPaths
-        let added = paths.filter { !existing.contains($0) }
+        // Set-based dedup and insert ONLY the added rows: the old version
+        // checked membership with Array.contains (quadratic) and re-upserted
+        // the WHOLE album to refresh positions — moving photos into a 20k
+        // album measured 10s on the main thread. Existing rows keep their
+        // positions, so appending at base+offset preserves order exactly.
+        let existingSet = Set(existing)
+        var seen = Set<String>()   // dedup within `paths` itself too
+        let added = paths.filter { !existingSet.contains($0) && seen.insert($0).inserted }
+        guard !added.isEmpty else { return }
+        let base = existing.count
         existing.append(contentsOf: added)
         albumsCache[index].photoPaths = existing
         try? db.write { db in
-            for (offset, path) in existing.enumerated() {
+            for (offset, path) in added.enumerated() {
                 try db.execute(sql: """
                     INSERT INTO album_photo (album_id, path, position) VALUES (?, ?, ?)
                     ON CONFLICT(album_id, path) DO UPDATE SET position=excluded.position
-                    """, arguments: [id.uuidString, path, offset])
+                    """, arguments: [id.uuidString, path, base + offset])
             }
         }
     }
 
     func removeFromAlbum(_ id: UUID, paths: [String]) {
         guard let index = albumsCache.firstIndex(where: { $0.id == id }) else { return }
-        albumsCache[index].photoPaths.removeAll { paths.contains($0) }
+        // Set membership, not Array.contains — removing 10k from a 20k album
+        // measured 7.6s on the main thread with the quadratic scan.
+        let toRemove = Set(paths)
+        albumsCache[index].photoPaths.removeAll { toRemove.contains($0) }
         try? db.write { db in
-            for path in paths {
-                try db.execute(sql: "DELETE FROM album_photo WHERE album_id = ? AND path = ?",
-                               arguments: [id.uuidString, path])
+            // Chunked IN (…) deletes — SQLite's parameter limit is 999.
+            var rest = paths[...]
+            while !rest.isEmpty {
+                let chunk = rest.prefix(500)
+                rest = rest.dropFirst(500)
+                let marks = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                try db.execute(sql: "DELETE FROM album_photo WHERE album_id = ? AND path IN (\(marks))",
+                               arguments: StatementArguments([id.uuidString] + Array(chunk)))
             }
         }
     }
