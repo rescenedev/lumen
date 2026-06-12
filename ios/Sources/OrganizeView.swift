@@ -43,6 +43,9 @@ struct OrganizeView: View {
         let s = library.gridSource(for: scope)
         _source = State(initialValue: s)
         _index = State(initialValue: min(max(startIndex, 0), max(s.count - 1, 0)))
+        // Screenshot helper: jump straight into organize mode (no taps possible
+        // in automated captures). Pair with -autoOrganize -autoViewer.
+        _organizing = State(initialValue: ProcessInfo.processInfo.arguments.contains("-autoStartOrganize"))
     }
     @State private var offset: CGSize = .zero
     @State private var session = OrganizeSession()         // decisions + undo history
