@@ -1796,7 +1796,16 @@ final class AppModel {
         let prefix = url.path + "/"
         let removed = allPhotos.filter { $0.url.path == url.path || $0.url.path.hasPrefix(prefix) }
         allPhotos.removeAll { $0.url.path == url.path || $0.url.path.hasPrefix(prefix) }
-        for photo in removed { exif.removeValue(forKey: photo.url.path); duplicatePaths.remove(photo.url.path) }
+        // One assignment each — per-item removeValue on the observed dicts fires
+        // the observation machinery per element (a large root = thousands).
+        var prunedExif = exif
+        var prunedDups = duplicatePaths
+        for photo in removed {
+            prunedExif.removeValue(forKey: photo.url.path)
+            prunedDups.remove(photo.url.path)
+        }
+        exif = prunedExif
+        duplicatePaths = prunedDups
         if case .folder(let sel) = selectedSidebar, sel == url || sel.path.hasPrefix(prefix) {
             selectedSidebar = .allPhotos
         }

@@ -24,5 +24,6 @@ libraryCacheTests()
 albumScaleTests()
 lumenTrashTests()
 crashReporterTests()
+stressScanTests()
 
 exit(Harness.finish())
