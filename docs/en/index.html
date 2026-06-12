@@ -292,9 +292,11 @@
         <tr><td>Click a photo → info panel update</td><td><b>~3 ms</b></td></tr>
         <tr><td>Select All (⌘A, 67,676 photos)</td><td><b>~0.2 s</b></td></tr>
         <tr><td>Search — filter + sort across 67k</td><td><b>0</b> main-thread blocking (runs in background)</td></tr>
+        <tr><td>Bulk add to album (10k into a 20k album)</td><td><b>~0.2 s</b></td></tr>
+        <tr><td>Bulk remove from album (10k of 20k)</td><td><b>17 ms</b></td></tr>
         <tr><td>Thumbnail-size slider · window resize</td><td>no stalls (GPU-scaled)</td></tr>
       </table>
-      <p class="bench-note">Method: 120 Hz main-thread hitch monitor + frame-by-frame screen capture + profiler sampling, as of v0.3.6.
+      <p class="bench-note">Method: 120 Hz main-thread hitch monitor + frame-by-frame screen capture + profiler sampling, as of v0.3.7.
       The whole process is documented in the <a href="releases.html">release notes</a>.</p>
     </div>
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">

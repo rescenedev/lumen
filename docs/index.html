@@ -292,9 +292,11 @@
         <tr><td>사진 클릭 → 정보 패널 갱신</td><td><b>~3 ms</b></td></tr>
         <tr><td>전체 선택 (⌘A, 67,676장)</td><td><b>~0.2 초</b></td></tr>
         <tr><td>검색 — 67k장 필터+정렬</td><td>메인 스레드 차단 <b>0</b> (백그라운드 처리)</td></tr>
+        <tr><td>앨범에 대량 추가 (2만 장 앨범 + 1만 장)</td><td><b>~0.2 초</b></td></tr>
+        <tr><td>앨범에서 대량 제거 (2만 장 중 1만)</td><td><b>17 ms</b></td></tr>
         <tr><td>썸네일 크기 조절 · 창 리사이즈</td><td>멈춤 없음 (GPU 스케일)</td></tr>
       </table>
-      <p class="bench-note">측정 방법: 메인 스레드 히치 모니터(120Hz) + 프레임 단위 화면 캡처 + 프로파일러 샘플링, v0.3.6 기준.
+      <p class="bench-note">측정 방법: 메인 스레드 히치 모니터(120Hz) + 프레임 단위 화면 캡처 + 프로파일러 샘플링, v0.3.7 기준.
       과정은 <a href="releases.html">릴리즈 노트</a>에 그대로 적혀 있습니다.</p>
     </div>
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
