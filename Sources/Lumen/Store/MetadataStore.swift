@@ -165,16 +165,38 @@ final class MetadataStore {
 
     /// Drop metadata + album membership for deleted files.
     func forget(paths: [String]) {
+        // Set membership + chunked IN(…) deletes — same fix as removeFromAlbum:
+        // Array.contains inside removeAll is quadratic, and per-path DELETEs
+        // pay one statement each over a large batch.
+        let toRemove = Set(paths)
         for path in paths { itemsCache.removeValue(forKey: path) }
         for index in albumsCache.indices {
-            albumsCache[index].photoPaths.removeAll { paths.contains($0) }
+            albumsCache[index].photoPaths.removeAll { toRemove.contains($0) }
         }
         try? db.write { db in
-            for path in paths {
-                try db.execute(sql: "DELETE FROM photo_meta WHERE path = ?", arguments: [path])
-                try db.execute(sql: "DELETE FROM album_photo WHERE path = ?", arguments: [path])
+            var rest = paths[...]
+            while !rest.isEmpty {
+                let chunk = Array(rest.prefix(500))
+                rest = rest.dropFirst(500)
+                let marks = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+                try db.execute(sql: "DELETE FROM photo_meta WHERE path IN (\(marks))",
+                               arguments: StatementArguments(chunk))
+                try db.execute(sql: "DELETE FROM album_photo WHERE path IN (\(marks))",
+                               arguments: StatementArguments(chunk))
             }
         }
+    }
+
+    /// Which albums contain each of `paths` — captured before `forget` so a
+    /// deletion can be undone with album memberships intact.
+    func albumMemberships(forPaths paths: [String]) -> [UUID: [String]] {
+        let wanted = Set(paths)
+        var result: [UUID: [String]] = [:]
+        for album in albumsCache {
+            let members = album.photoPaths.filter { wanted.contains($0) }
+            if !members.isEmpty { result[album.id] = members }
+        }
+        return result
     }
 
     // MARK: - Loading

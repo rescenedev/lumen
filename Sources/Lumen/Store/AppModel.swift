@@ -253,17 +253,33 @@ final class AppModel {
         }
     }
 
-    // Transient status toast (friendly error/info messages).
+    // Transient status toast (friendly error/info messages), with an optional
+    // action button (e.g. Undo after a deletion).
     private(set) var toast: String?
+    private(set) var toastActionLabel: String?
+    @ObservationIgnored private var toastAction: (() -> Void)?
     @ObservationIgnored private var toastWork: DispatchWorkItem?
-    func showToast(_ message: String) {
+    func showToast(_ message: String, actionLabel: String? = nil,
+                   duration: TimeInterval = 3.5, action: (() -> Void)? = nil) {
         toast = message
+        toastActionLabel = actionLabel
+        toastAction = action
         toastWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.toast = nil }
+        let work = DispatchWorkItem { [weak self] in self?.dismissToast() }
         toastWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
-    func dismissToast() { toastWork?.cancel(); toast = nil }
+    func performToastAction() {
+        let action = toastAction
+        dismissToast()
+        action?()
+    }
+    func dismissToast() {
+        toastWork?.cancel()
+        toast = nil
+        toastActionLabel = nil
+        toastAction = nil
+    }
 
     // Metadata
     private(set) var metaRevision = 0
@@ -1807,10 +1823,11 @@ final class AppModel {
         }
     }
 
-    /// True when a pending photo sits on a volume with no Trash (NAS/SMB
-    /// shares) — those files can't be trashed and are deleted in place,
-    /// Finder-style. Checked once per distinct volume, not per photo.
-    var deletionIsPermanent: Bool {
+    /// True when a pending photo sits on a volume with no system Trash
+    /// (NAS/SMB shares) — those files are staged into a hidden
+    /// `.LumenTrash` folder at the library root instead, kept 30 days.
+    /// Checked once per distinct volume, not per photo.
+    var deletionUsesLumenTrash: Bool {
         var seenVolumes = Set<String>()
         for photo in photosPendingDeletion {
             let comps = photo.url.pathComponents
@@ -1829,11 +1846,23 @@ final class AppModel {
         let subject = count == 1
             ? "“\(photosPendingDeletion.first?.filename ?? "")”"
             : "\(count) photos"
-        if deletionIsPermanent {
-            return "\(subject) will be deleted immediately — this volume has no Trash. "
-                + "(A NAS-side recycle bin, if enabled, can still recover the files.)"
+        if deletionUsesLumenTrash {
+            return "\(subject) will move to a hidden “.LumenTrash” folder on the same volume "
+                + "(this volume has no Trash). Kept for \(LumenTrash.retentionDays) days, "
+                + "then removed automatically. You can undo right after deleting."
         }
-        return "\(subject) will be moved to the Trash."
+        return "\(subject) will be moved to the Trash. You can undo right after deleting."
+    }
+
+    /// Everything needed to reverse one delete action: where each file went,
+    /// plus the library entries, metadata, EXIF, and album memberships that
+    /// were detached from it.
+    struct DeletionUndoBatch {
+        var moves: [(staged: URL, original: URL)] = []
+        var photos: [Photo] = []
+        var metas: [String: PhotoMeta] = [:]
+        var exifInfos: [String: ExifInfo] = [:]
+        var albumMemberships: [UUID: [String]] = [:]
     }
 
     func confirmDeletion() {
@@ -1844,22 +1873,43 @@ final class AppModel {
         let ordered = visiblePhotos
         let firstIndex = photos.compactMap { ordered.firstIndex(of: $0) }.min()
 
+        var batch = DeletionUndoBatch()
         var trashed = Set<URL>()
         var failed = 0
+        let stamp = LumenTrash.stamp()
         for photo in photos {
             do {
-                try FileManager.default.trashItem(at: photo.url, resultingItemURL: nil)
+                var staged: NSURL?
+                try FileManager.default.trashItem(at: photo.url, resultingItemURL: &staged)
                 trashed.insert(photo.url)
+                if let staged = staged as URL? {
+                    batch.moves.append((staged: staged, original: photo.url))
+                }
             } catch {
-                // No Trash on this volume (NAS/SMB) — delete in place, like
-                // Finder does there. Synology-style server-side recycle bins
-                // still intercept the SMB delete, so it's often recoverable.
-                do {
-                    try FileManager.default.removeItem(at: photo.url)
-                    trashed.insert(photo.url)
-                } catch {
-                    failed += 1
-                    NSLog("Lumen: failed to delete \(photo.url.path): \(error.localizedDescription)")
+                // No Trash on this volume (NAS/SMB). Stage into
+                // `<root>/.LumenTrash/<stamp>/` on the same volume instead of
+                // deleting in place — a rename is instant even over SMB, the
+                // delete becomes undoable, and startup purges batches after
+                // 30 days.
+                if let root = LumenTrash.root(for: photo.url, roots: rootFolders) {
+                    do {
+                        let staged = try LumenTrash.stage(photo.url, under: root, stamp: stamp)
+                        trashed.insert(photo.url)
+                        batch.moves.append((staged: staged, original: photo.url))
+                    } catch {
+                        failed += 1
+                        NSLog("Lumen: failed to stage \(photo.url.path): \(error.localizedDescription)")
+                    }
+                } else {
+                    // Outside every open root (shouldn't happen) — last
+                    // resort: delete in place, like Finder does there. No undo.
+                    do {
+                        try FileManager.default.removeItem(at: photo.url)
+                        trashed.insert(photo.url)
+                    } catch {
+                        failed += 1
+                        NSLog("Lumen: failed to delete \(photo.url.path): \(error.localizedDescription)")
+                    }
                 }
             }
         }
@@ -1868,7 +1918,17 @@ final class AppModel {
         }
         guard !trashed.isEmpty else { return }
 
-        store.forget(paths: trashed.map { $0.path })
+        // Snapshot everything the undo needs BEFORE detaching it from the library.
+        let trashedPaths = trashed.map { $0.path }
+        batch.photos = photos.filter { trashed.contains($0.url) }
+        for path in trashedPaths {
+            let meta = store.meta(for: path)
+            if !meta.isEmpty { batch.metas[path] = meta }
+            if let info = exif[path] { batch.exifInfos[path] = info }
+        }
+        batch.albumMemberships = store.albumMemberships(forPaths: trashedPaths)
+
+        store.forget(paths: trashedPaths)
         albums = store.albums
         allPhotos.removeAll { trashed.contains($0.url) }
         for url in trashed { exif.removeValue(forKey: url.path); duplicatePaths.remove(url.path) }
@@ -1888,6 +1948,58 @@ final class AppModel {
         } else {
             clearSelection()
         }
+
+        if !batch.moves.isEmpty {
+            let undo = batch
+            showToast("\(batch.moves.count)장 삭제됨", actionLabel: "되돌리기", duration: 10) { [weak self] in
+                self?.undoDeletion(undo)
+            }
+        }
+    }
+
+    /// Reverse a just-confirmed deletion: move staged files back to their
+    /// original paths, then re-attach library entries, metadata, EXIF, and
+    /// album memberships.
+    func undoDeletion(_ batch: DeletionUndoBatch) {
+        let fm = FileManager.default
+        var restoredPaths = Set<String>()
+        var failed = 0
+        for move in batch.moves {
+            guard fm.fileExists(atPath: move.staged.path),
+                  !fm.fileExists(atPath: move.original.path) else { failed += 1; continue }
+            do {
+                try fm.moveItem(at: move.staged, to: move.original)
+                restoredPaths.insert(move.original.path)
+            } catch {
+                failed += 1
+                NSLog("Lumen: failed to restore \(move.original.path): \(error.localizedDescription)")
+            }
+        }
+        guard !restoredPaths.isEmpty else {
+            if failed > 0 { showToast("되돌리지 못했습니다 (파일이 이동되었거나 권한 문제).") }
+            return
+        }
+
+        let existing = Set(allPhotos.map { $0.url.path })
+        allPhotos.append(contentsOf: batch.photos.filter {
+            restoredPaths.contains($0.url.path) && !existing.contains($0.url.path)
+        })
+        for (path, meta) in batch.metas where restoredPaths.contains(path) {
+            store.update(path) { $0 = meta }
+        }
+        for (id, paths) in batch.albumMemberships {
+            store.addToAlbum(id, paths: paths.filter { restoredPaths.contains($0) })
+        }
+        albums = store.albums
+        for (path, info) in batch.exifInfos where restoredPaths.contains(path) {
+            exif[path] = info
+        }
+        recomputeMetaCounts()
+        bumpMeta()
+        persistLibraryCache()
+        showToast(failed > 0
+            ? "\(restoredPaths.count)장 복원됨 · \(failed)장 실패"
+            : "\(restoredPaths.count)장 복원됨")
     }
 
     // MARK: - Persistence
@@ -2019,6 +2131,13 @@ final class AppModel {
         if !available.isEmpty { await reconcile(roots: available) }
 
         ensureExifIndex()   // catch any photos reconcile newly added
+
+        // Purge .LumenTrash batches older than 30 days — one directory
+        // listing per root when nothing is staged, so it's effectively free.
+        let roots = available
+        Task.detached(priority: .background) {
+            LumenTrash.cleanup(roots: roots)
+        }
     }
 
     private func loadSettings() {

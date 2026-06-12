@@ -33,9 +33,9 @@ struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers)
         }
-        .alert(model.deletionIsPermanent ? "Delete Immediately?" : "Move to Trash?",
+        .alert(model.deletionUsesLumenTrash ? "Move to Lumen Trash?" : "Move to Trash?",
                isPresented: $model.showDeleteConfirmation) {
-            Button(model.deletionIsPermanent ? "Delete" : "Move to Trash",
+            Button(model.deletionUsesLumenTrash ? "Move to Lumen Trash" : "Move to Trash",
                    role: .destructive) { model.confirmDeletion() }
             Button("Cancel", role: .cancel) { model.photosPendingDeletion = [] }
         } message: {
@@ -96,15 +96,22 @@ struct ContentView: View {
     @ViewBuilder
     private var toastBanner: some View {
         if let toast = model.toast {
-            Label(toast, systemImage: "exclamationmark.triangle.fill")
-                .font(.callout)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.separator))
-                .shadow(radius: 8, y: 2)
-                .padding(.bottom, 24)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .onTapGesture { model.dismissToast() }
+            HStack(spacing: 10) {
+                Label(toast, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                if let actionLabel = model.toastActionLabel {
+                    Button(actionLabel) { model.performToastAction() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.separator))
+            .shadow(radius: 8, y: 2)
+            .padding(.bottom, 24)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onTapGesture { model.dismissToast() }
         }
     }
 
