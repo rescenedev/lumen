@@ -22,12 +22,18 @@
     --grad:linear-gradient(120deg,var(--blue),var(--purple));
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
+  /* overflow-x:clip on BOTH html and body — body-only overflow-x:hidden lets
+     the root scroll horizontally on mobile Safari (the page rocked left/right).
+     clip prevents that without creating a scroll container, so the sticky nav
+     keeps working. */
+  html{scroll-behavior:smooth;overflow-x:clip}
   body{
     font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Segoe UI",sans-serif;
     background:var(--bg); color:var(--text); line-height:1.65; -webkit-font-smoothing:antialiased;
-    overflow-x:hidden;
+    overflow-x:clip; max-width:100%;
   }
+  /* Korean wraps at word (어절) boundaries, never mid-syllable overflow. */
+  h1,.stitle,.sub,.ssub,.feat h3,.feat p{word-break:keep-all;overflow-wrap:break-word}
   a{color:inherit;text-decoration:none}
   .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
   .grad-text{background:linear-gradient(120deg,#fff,#bcc9ff 55%,#e3c8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -146,7 +152,7 @@
   .bench-table{width:100%;border-collapse:collapse;font-size:14.5px}
   .bench-table th{color:var(--faint);font-size:12.5px;text-transform:uppercase;letter-spacing:.06em;
     text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
-  .bench-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--muted)}
+  .bench-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--muted);word-break:keep-all}
   .bench-table tr:last-child td{border-bottom:none}
   .bench-table td b{color:var(--text);font-weight:650}
   .bench-table td:last-child{white-space:nowrap}
@@ -156,7 +162,10 @@
 
   /* Download */
   .install{margin:30px auto 0;max-width:600px;background:#0b0e16;border:1px solid var(--border);
-    border-radius:14px;padding:18px 20px;text-align:left;position:relative}
+    border-radius:14px;padding:18px 20px;text-align:left;position:relative;overflow-x:auto}
+  /* white-space:pre keeps the command copyable as one line; overflow-x:auto on
+     the card lets a long command scroll WITHIN the card instead of widening the
+     whole page (which made mobile rock left/right). */
   .install code{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:14px;color:#cdd6f4;display:block;white-space:pre}
   .install .copy{position:absolute;top:12px;right:12px;background:var(--panel-2);border:1px solid var(--border);
     color:var(--muted);border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer}
@@ -179,7 +188,10 @@
     .feat{grid-template-columns:1fr;gap:28px} .feat:nth-child(even) .feat-media{order:0}
     .app{grid-template-columns:1fr} .side{display:none} .board{grid-template-columns:repeat(4,1fr)}
   }
-  @media(max-width:520px){.why,.why.why-4,.stats{grid-template-columns:1fr}}
+  @media(max-width:520px){
+    h1{font-size:36px} .sub{font-size:18px} .stitle{font-size:26px} .ssub{font-size:16px}
+    .why,.why.why-4,.stats{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
