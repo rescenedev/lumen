@@ -295,6 +295,10 @@
         <tr><td>앨범에 대량 추가 (2만 장 앨범 + 1만 장)</td><td><b>~0.2 초</b></td></tr>
         <tr><td>앨범에서 대량 제거 (2만 장 중 1만)</td><td><b>17 ms</b></td></tr>
         <tr><td>썸네일 크기 조절 · 창 리사이즈</td><td>멈춤 없음 (GPU 스케일)</td></tr>
+        <tr><td>앱 크기</td><td>설치 <b>10 MB</b> · 다운로드 3.5 MB</td></tr>
+        <tr><td>메모리 (67k 라이브러리 탐색)</td><td><b>~240 MB</b> · 풀사이즈 뷰어 탐색 후 ~380 MB (캐시 상한으로 바운드)</td></tr>
+        <tr><td>CPU</td><td>유휴 <b>0.0%</b> · 58k 폴더 연속 스크롤 16–27%</td></tr>
+        <tr><td>힙 분석 (leaks/heap)</td><td>앱 코드 메모리 누수 <b>0</b></td></tr>
       </table>
       <p class="bench-note">측정 방법: 메인 스레드 히치 모니터(120Hz) + 프레임 단위 화면 캡처 + 프로파일러 샘플링, v0.3.7 기준.
       과정은 <a href="releases.html">릴리즈 노트</a>에 그대로 적혀 있습니다.</p>
@@ -302,6 +306,20 @@
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
       메모이즈된 목록 · 폴더 인덱스 · 디바운스 내비게이션 · 백그라운드 썸네일 워밍 · 지연 EXIF 인덱싱 · 점진적 이미지 로딩
     </p>
+  </div>
+</section>
+
+<section class="band" id="privacy" style="padding:72px 0">
+  <div class="wrap">
+    <p class="eyebrow reveal">프라이버시</p>
+    <h2 class="stitle reveal">사진은 기기를 떠나지 않습니다</h2>
+    <p class="ssub reveal">Lumen의 네트워크 연결은 딱 두 가지 — 하루 한 번 GitHub 업데이트 확인,
+    그리고 여러분이 직접 연 NAS·iCloud 콘텐츠. 그게 전부입니다.</p>
+    <div class="why">
+      <div class="card reveal"><div class="badge">🚫</div><h3>추적 없음</h3><p>분석 도구 · 텔레메트리 · 계정 · 광고 <b>0</b>. 업로드되는 사진도 <b>0</b>. 서버 자체가 없습니다.</p></div>
+      <div class="card reveal"><div class="badge">💾</div><h3>내 데이터는 내 Mac에</h3><p>별점 · 태그 · 앨범은 로컬 SQLite 파일 하나에 저장됩니다. 원본 사진 파일은 절대 수정하지 않습니다.</p></div>
+      <div class="card reveal"><div class="badge">🔍</div><h3>말이 아니라 코드로</h3><p>오픈소스(MIT)라 위 주장 전부를 <a href="https://github.com/rescenedev/lumen" style="color:#aab6ff">코드에서 직접 확인</a>할 수 있습니다.</p></div>
+    </div>
   </div>
 </section>
 

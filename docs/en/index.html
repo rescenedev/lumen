@@ -295,6 +295,10 @@
         <tr><td>Bulk add to album (10k into a 20k album)</td><td><b>~0.2 s</b></td></tr>
         <tr><td>Bulk remove from album (10k of 20k)</td><td><b>17 ms</b></td></tr>
         <tr><td>Thumbnail-size slider · window resize</td><td>no stalls (GPU-scaled)</td></tr>
+        <tr><td>App size</td><td><b>10 MB</b> installed · 3.5 MB download</td></tr>
+        <tr><td>Memory (browsing the 67k library)</td><td><b>~240 MB</b> · ~380 MB after full-size viewing (bounded by cache limits)</td></tr>
+        <tr><td>CPU</td><td><b>0.0%</b> idle · 16–27% while continuously scrolling a 58k folder</td></tr>
+        <tr><td>Heap analysis (leaks/heap)</td><td><b>0</b> memory leaks in app code</td></tr>
       </table>
       <p class="bench-note">Method: 120 Hz main-thread hitch monitor + frame-by-frame screen capture + profiler sampling, as of v0.3.7.
       The whole process is documented in the <a href="releases.html">release notes</a>.</p>
@@ -302,6 +306,20 @@
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
       Memoized lists · folder index · debounced navigation · background thumbnail warming · lazy EXIF indexing · progressive image loading
     </p>
+  </div>
+</section>
+
+<section class="band" id="privacy" style="padding:72px 0">
+  <div class="wrap">
+    <p class="eyebrow reveal">Privacy</p>
+    <h2 class="stitle reveal">Your photos never leave your machine</h2>
+    <p class="ssub reveal">Lumen makes exactly two kinds of network connections — a once-a-day
+    update check against GitHub, and the NAS/iCloud content you open yourself. That's it.</p>
+    <div class="why">
+      <div class="card reveal"><div class="badge">🚫</div><h3>No tracking</h3><p><b>Zero</b> analytics, telemetry, accounts, or ads. <b>Zero</b> photos uploaded. There is no server.</p></div>
+      <div class="card reveal"><div class="badge">💾</div><h3>Your data stays on your Mac</h3><p>Ratings, tags, and albums live in a single local SQLite file. Your original photo files are never modified.</p></div>
+      <div class="card reveal"><div class="badge">🔍</div><h3>Verifiable, not promised</h3><p>It's open source (MIT) — every claim above is <a href="https://github.com/rescenedev/lumen" style="color:#aab6ff">checkable in the code</a>.</p></div>
+    </div>
   </div>
 </section>
 
