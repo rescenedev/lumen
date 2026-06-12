@@ -200,7 +200,7 @@
 <header class="hero" id="top">
   <span class="pill">macOS 14+ · Native · Non-destructive</span>
   <h1 class="grad-text">Tens of thousands<br>of photos. One fast app.</h1>
-  <p class="sub">Local · NAS · Apple Photos in one native app. Scrolls through 60,000+ libraries without breaking a sweat.</p>
+  <p class="sub">Local · NAS · Apple Photos in one fast, native app.<br>Proven daily on a 67,000-photo library.</p>
   <div class="cta">
     <a class="btn btn-primary" href="#download">Download</a>
   </div>
@@ -216,7 +216,7 @@
     <p class="eyebrow reveal">Why Lumen</p>
     <h2 class="stitle reveal">Photos.app can't see your NAS.<br>Most viewers choke at 60,000 photos.</h2>
     <div class="why">
-      <div class="card reveal"><div class="badge">⚡</div><h3>Built for large libraries</h3><p>Tested daily with a 67K-photo NAS library. Cell-reuse grid, two-tier thumbnail cache, and background warming mean any folder opens instantly.</p></div>
+      <div class="card reveal"><div class="badge">⚡</div><h3>Built for large libraries</h3><p>Tested daily against a 67,000-photo NAS library. Folders open in <b>1 ms</b> on average, and launch shows your photos immediately — no loading screen.</p></div>
       <div class="card reveal"><div class="badge">🗂️</div><h3>All sources, one place</h3><p>Local folders, <b>NAS</b>, and <b>Apple Photos (iCloud)</b> side-by-side in a single window. The gap Photos.app and generic viewers leave — filled.</p></div>
       <div class="card reveal"><div class="badge">🛡️</div><h3>Non-destructive by default</h3><p>Crop · resize · rotate · merge · watermark — <b>all saved as new files</b>, originals untouched (overwrite is opt-in). Favorites, tags, and ratings are stored separately from the source files.</p></div>
     </div>
@@ -273,12 +273,12 @@
   <div class="wrap">
     <p class="eyebrow reveal">Performance</p>
     <h2 class="stitle reveal">Designed for large libraries</h2>
-    <p class="ssub reveal">Tens of thousands of photos on a NAS, scrolling instantly. One cache warm-up — then any folder opens right away.</p>
+    <p class="ssub reveal">Every folder opens instantly, and your photos are on screen the moment the app is. The table below is all measured, not promised.</p>
     <div class="stats">
-      <div class="stat reveal"><div class="num">67K+</div><div class="lbl">photos in real-world testing</div></div>
+      <div class="stat reveal"><div class="num">67K</div><div class="lbl">photos in daily real-world use</div></div>
+      <div class="stat reveal"><div class="num">1ms</div><div class="lbl">average folder open (644 folders)</div></div>
+      <div class="stat reveal"><div class="num">0</div><div class="lbl">loading screens — launch straight into the grid</div></div>
       <div class="stat reveal"><div class="num">2-tier</div><div class="lbl">memory + disk cache (survives relaunch)</div></div>
-      <div class="stat reveal"><div class="num">AppKit</div><div class="lbl">cell-reuse grid (60 fps)</div></div>
-      <div class="stat reveal"><div class="num">Fast</div><div class="lbl">incremental scan on relaunch</div></div>
     </div>
     <div class="bench reveal">
       <p class="bench-env">Measured on a real library — <b>67,676 photos</b> · <b>638 folders</b> · Synology NAS (SMB) · Apple Silicon.
@@ -307,7 +307,7 @@
   <div class="wrap" style="text-align:center">
     <p class="eyebrow reveal">Download</p>
     <h2 class="stitle reveal">Get started in seconds</h2>
-    <p class="ssub reveal">One Homebrew command. Requires macOS 14 Sonoma or later.</p>
+    <p class="ssub reveal">Install via Homebrew · macOS 14 (Sonoma) or later · Free</p>
     <div class="install reveal">
       <button class="copy" onclick="copyInstall(event)">Copy</button>
       <code>brew tap rescenedev/tap
@@ -315,8 +315,9 @@ brew trust --cask rescenedev/tap/lumen-photos
 brew install --cask lumen-photos</code>
     </div>
     <div class="note reveal">
-      This build is not yet notarized. If Gatekeeper blocks the app on first launch,
-      <b>right-click → Open</b> the app, or run the command below to remove the quarantine flag:
+      This build is not yet notarized, so Gatekeeper may block the first launch.
+      Remove the quarantine flag with the command below (recommended), or allow the app
+      under <b>System Settings → Privacy &amp; Security</b> ("Open Anyway"):
     </div>
     <div class="install compact reveal">
       <button class="copy" onclick="copyXattr(event)">Copy</button>

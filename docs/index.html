@@ -198,9 +198,9 @@
 </nav>
 
 <header class="hero" id="top">
-  <span class="pill">macOS 14+ · 네이티브 · 비파괴 뷰어</span>
+  <span class="pill">macOS 14+ · 네이티브 · 비파괴</span>
   <h1 class="grad-text">사진 수만 장,<br>한 곳에서 가볍게.</h1>
-  <p class="sub">로컬 · NAS · Apple Photos를 하나의 빠른 네이티브 앱에서. 6만 장이 넘어도 휙휙 넘어가는 macOS 사진 뷰어 &amp; 매니저.</p>
+  <p class="sub">로컬 · NAS · Apple Photos를 하나의 빠른 네이티브 앱에서.<br>67,000장 라이브러리로 검증된 macOS 사진 뷰어 &amp; 매니저.</p>
   <div class="cta">
     <a class="btn btn-primary" href="#download">다운로드</a>
   </div>
@@ -216,7 +216,7 @@
     <p class="eyebrow reveal">왜 Lumen인가</p>
     <h2 class="stitle reveal">사진앱은 NAS를 못 보고,<br>대부분의 뷰어는 6만 장에서 버벅댑니다.</h2>
     <div class="why">
-      <div class="card reveal"><div class="badge">⚡</div><h3>대용량에 진심</h3><p>6만 장 넘는 NAS 라이브러리로 실사용 테스트. 셀 재사용 그리드, 2단 썸네일 캐시, 백그라운드 워밍으로 어느 폴더든 즉시 열립니다.</p></div>
+      <div class="card reveal"><div class="badge">⚡</div><h3>대용량에 진심</h3><p>67,000장 NAS 라이브러리로 매일 실사용 테스트. 폴더 열기 평균 <b>1ms</b>, 시작하면 로딩 화면 없이 바로 사진이 보입니다.</p></div>
       <div class="card reveal"><div class="badge">🗂️</div><h3>모든 소스를 한 곳에</h3><p>로컬 폴더, <b>NAS</b>, 그리고 <b>Apple Photos(iCloud)</b>까지 한 창에서. 사진앱이 못 보는 NAS와, 뷰어가 못 보는 iCloud를 동시에.</p></div>
       <div class="card reveal"><div class="badge">🛡️</div><h3>비파괴가 기본</h3><p>크롭·리사이즈·회전·합치기·워터마크까지 <b>전부 새 파일로 저장</b>해 원본을 보존합니다(덮어쓰기는 확인 후 선택). 즐겨찾기·태그·별점은 원본과 분리 저장.</p></div>
     </div>
@@ -273,12 +273,12 @@
   <div class="wrap">
     <p class="eyebrow reveal">성능</p>
     <h2 class="stitle reveal">대용량 라이브러리를 위해 설계</h2>
-    <p class="ssub reveal">NAS에 흩어진 수만 장도 휙휙. 한 번 캐싱하면 어느 폴더든 즉시.</p>
+    <p class="ssub reveal">어떤 폴더든 즉시 열리고, 앱을 켜면 바로 사진이 보입니다. 전부 아래 표의 실측값으로 말합니다.</p>
     <div class="stats">
-      <div class="stat reveal"><div class="num">67K+</div><div class="lbl">장 실사용 테스트</div></div>
+      <div class="stat reveal"><div class="num">67K</div><div class="lbl">장 라이브러리로 매일 실사용</div></div>
+      <div class="stat reveal"><div class="num">1ms</div><div class="lbl">폴더 열기 (644개 폴더 평균)</div></div>
+      <div class="stat reveal"><div class="num">0</div><div class="lbl">시작 로딩 화면 — 켜면 바로 그리드</div></div>
       <div class="stat reveal"><div class="num">2-tier</div><div class="lbl">메모리+디스크 캐시 (재실행 유지)</div></div>
-      <div class="stat reveal"><div class="num">AppKit</div><div class="lbl">셀 재사용 그리드 (60fps)</div></div>
-      <div class="stat reveal"><div class="num">즉시</div><div class="lbl">증분 스캔으로 빠른 재실행</div></div>
     </div>
     <div class="bench reveal">
       <p class="bench-env">실측 환경 — 사진 <b>67,676장</b> · 폴더 <b>638개</b> · Synology NAS(SMB) · Apple Silicon.
@@ -307,7 +307,7 @@
   <div class="wrap" style="text-align:center">
     <p class="eyebrow reveal">다운로드</p>
     <h2 class="stitle reveal">지금 바로 시작</h2>
-    <p class="ssub reveal">Homebrew로 한 줄. macOS 14(Sonoma) 이상.</p>
+    <p class="ssub reveal">Homebrew로 설치 · macOS 14(Sonoma) 이상 · 무료</p>
     <div class="install reveal">
       <button class="copy" onclick="copyInstall(event)">복사</button>
       <code>brew tap rescenedev/tap
@@ -315,8 +315,9 @@ brew trust --cask rescenedev/tap/lumen-photos
 brew install --cask lumen-photos</code>
     </div>
     <div class="note reveal">
-      현재는 노타라이즈되지 않은 빌드라, 첫 실행 시 Gatekeeper가 막으면
-      앱을 <b>우클릭 → 열기</b> 하거나, 아래 명령으로 격리 속성을 제거하세요:
+      현재는 노타라이즈되지 않은 빌드라 첫 실행 시 Gatekeeper가 막을 수 있습니다.
+      아래 명령으로 격리 속성을 제거하거나(권장), <b>시스템 설정 → 개인정보 보호 및 보안</b>
+      맨 아래의 "확인 없이 열기"로 허용해 주세요:
     </div>
     <div class="install compact reveal">
       <button class="copy" onclick="copyXattr(event)">복사</button>
