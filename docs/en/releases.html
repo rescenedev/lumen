@@ -106,9 +106,38 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.4.0">
+    <div class="release-head">
+      <h2>0.4.0</h2><span class="date">June 12, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Deletion safety net — undo, even on a NAS</h3>
+    <ul>
+      <li><b>Deleting on a volume with no Trash (NAS/SMB) is no longer permanent.</b> Files move to a hidden <code>.LumenTrash</code> folder on the same volume (an instant rename), purged automatically after 30 days.</li>
+      <li><b>Every delete shows a 10-second Undo button</b> that restores the files — and their favorites, ratings, and album memberships.</li>
+    </ul>
+    <h3>Crash reporting — privacy intact</h3>
+    <ul>
+      <li>A crash writes a report with only the version, OS, and stack trace <b>to your Mac</b>; the next launch offers to open a prefilled GitHub issue. Nothing is ever sent unless you choose to — no file paths or photo data are in the report at all.</li>
+    </ul>
+    <h3>Performance — bulk operations</h3>
+    <ul>
+      <li><b>Favorite/rate/label/tag a big selection in one transaction.</b> Favoriting 20,000 photos: 0.4s (was one commit per photo — minutes).</li>
+      <li><b>File work for delete, undo, batch rename, and export all runs in the background</b> — hundreds of NAS photos no longer freeze the UI.</li>
+      <li>Renaming a folder no longer recomputes paths in a way that could hang a 60k library for minutes.</li>
+    </ul>
+    <h3>Fixed</h3>
+    <ul>
+      <li>A sync race where a delete/undo finishing mid-NAS-scan could be reverted.</li>
+      <li>EXIF info for photos deleted during a long indexing pass coming back.</li>
+      <li>The slideshow-interval setting now actually applies, and the default sort persists across launches.</li>
+      <li>Failed metadata writes (full disk etc.) now show a notice instead of being silently dropped.</li>
+      <li>A one-time culling-shortcuts hint (Space/X/1–5) on first viewer open; toasts follow the system language (English/Korean).</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.3.7">
     <div class="release-head">
-      <h2>0.3.7</h2><span class="date">June 12, 2026</span><span class="tag">Latest</span>
+      <h2>0.3.7</h2><span class="date">June 12, 2026</span>
     </div>
     <h3>Performance — bulk album operations</h3>
     <ul>
