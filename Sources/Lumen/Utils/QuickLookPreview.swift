@@ -2,8 +2,13 @@ import AppKit
 import QuickLookUI
 
 /// Presents the system Quick Look panel for a photo (triggered by the spacebar).
+/// The panel only calls its data source/delegate on the main thread, so the
+/// @preconcurrency conformance (which checks that at runtime) is safe — and
+/// required: the nonisolated protocol requirements can't see the @MainActor
+/// isolation under Swift 6.
 @MainActor
-final class QuickLookPreview: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate {
+final class QuickLookPreview: NSObject, @preconcurrency QLPreviewPanelDataSource,
+                              QLPreviewPanelDelegate {
     static let shared = QuickLookPreview()
 
     private var urls: [URL] = []

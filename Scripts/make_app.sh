@@ -22,6 +22,11 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp "$BUILD_DIR/$APP_NAME" "$CONTENTS/MacOS/$APP_NAME"
 cp "$ROOT/Scripts/Info.plist" "$CONTENTS/Info.plist"
 
+# LumenKit's processed resources (String Catalog → toast localization).
+# Bundle.module resolves this bundle from Contents/Resources at runtime —
+# without it the app aborts on the first localized string.
+cp -R "$BUILD_DIR/Lumen_LumenKit.bundle" "$CONTENTS/Resources/"
+
 # --- App icon -------------------------------------------------------------
 echo "==> Generating app icon…"
 ICON_TMP="$(mktemp -d)"

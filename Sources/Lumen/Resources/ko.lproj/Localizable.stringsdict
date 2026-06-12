@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Exported %lld photos · %@</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@photos@ · %2$@</string>
+        <key>photos</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>other</key>
+            <string>%lld장 내보냄</string>
+        </dict>
+    </dict>
+    <key>Couldn’t delete %lld items (check permissions/connection).</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@items@</string>
+        <key>items</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>other</key>
+            <string>%lld개 항목을 삭제하지 못했습니다 (권한/연결 상태를 확인하세요).</string>
+        </dict>
+    </dict>
+    <key>%lld photos deleted</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@photos@</string>
+        <key>photos</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>other</key>
+            <string>%lld장 삭제됨</string>
+        </dict>
+    </dict>
+    <key>%lld photos restored</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@photos@</string>
+        <key>photos</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>other</key>
+            <string>%lld장 복원됨</string>
+        </dict>
+    </dict>
+    <key>%lld photos restored · %lld failed</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@restored@ · %#@failed@</string>
+        <key>restored</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>other</key>
+            <string>%lld장 복원됨</string>
+        </dict>
+        <key>failed</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>other</key>
+            <string>%lld장 실패</string>
+        </dict>
+    </dict>
+</dict>
+</plist>

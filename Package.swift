@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Lumen",
+    defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0")
@@ -14,7 +15,8 @@ let package = Package(
         .target(
             name: "LumenKit",
             dependencies: [.product(name: "GRDB", package: "GRDB.swift")],
-            path: "Sources/Lumen"
+            path: "Sources/Lumen",
+            resources: [.process("Resources")]
         ),
         // The shipping app: a 2-line executable that launches LumenKit. Kept
         // named "Lumen" so Scripts/make_app.sh copies .build/release/Lumen.

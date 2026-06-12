@@ -1,0 +1,14 @@
+/* Toast messages — Korean. Simple (non-plural) strings; plurals live in
+   Localizable.stringsdict next to this file. */
+
+"Couldn’t merge the photos." = "합치기에 실패했습니다.";
+"Upgrade command copied: %@" = "업그레이드 명령을 복사했어요: %@";
+"You’re on the latest version (%@)." = "최신 버전을 사용 중입니다 (%@).";
+"Apple Photos items can’t be edited (file photos only)." = "Apple Photos 항목은 편집할 수 없습니다 (파일 사진만 가능).";
+"Select 2 or more file photos to merge." = "합치려면 파일 사진 2장 이상을 선택하세요.";
+"Merged image saved · %@" = "합친 이미지 저장됨 · %@";
+"Select file photos to resize (Apple Photos excluded)." = "리사이즈할 파일 사진을 선택하세요 (Apple Photos 제외).";
+"Original replaced with the edit · %@" = "원본을 편집본으로 덮어썼습니다 · %@";
+"Edit saved · %@" = "편집본 저장됨 · %@";
+"Undo" = "되돌리기";
+"Couldn’t undo (files moved or permission issue)." = "되돌리지 못했습니다 (파일이 이동되었거나 권한 문제).";

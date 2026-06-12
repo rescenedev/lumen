@@ -165,7 +165,7 @@ final class AppModel {
                 availableUpdate = info
                 updateBannerDismissed = false
             } else if force {
-                showToast("최신 버전을 사용 중입니다 (\(UpdateChecker.currentVersion)).")
+                showToast(String(localized: "You’re on the latest version (\(UpdateChecker.currentVersion)).", bundle: .module))
             }
         }
     }
@@ -177,7 +177,10 @@ final class AppModel {
     /// Open the crop/resize editor for a file-backed photo. Apple Photos assets
     /// have no editable file, so they're skipped.
     func startEdit(_ photo: Photo) {
-        guard !photo.isAsset else { showToast("Apple Photos 항목은 편집할 수 없습니다 (파일 사진만 가능)."); return }
+        guard !photo.isAsset else {
+            showToast(String(localized: "Apple Photos items can’t be edited (file photos only).", bundle: .module))
+            return
+        }
         editTarget = photo
         showEditor = true
     }
@@ -189,7 +192,7 @@ final class AppModel {
     func startCombine(_ photos: [Photo]) {
         let files = photos.filter { !$0.isAsset }
         guard files.count >= 2 else {
-            showToast("합치려면 파일 사진 2장 이상을 선택하세요.")
+            showToast(String(localized: "Select 2 or more file photos to merge.", bundle: .module))
             return
         }
         combineTargets = files
@@ -198,7 +201,8 @@ final class AppModel {
 
     func didCombine(output: URL) {
         revealNewFile(output)
-        showToast("합친 이미지 저장됨 · \(output.deletingLastPathComponent().lastPathComponent)/\(output.lastPathComponent)")
+        let location = "\(output.deletingLastPathComponent().lastPathComponent)/\(output.lastPathComponent)"
+        showToast(String(localized: "Merged image saved · \(location)", bundle: .module))
     }
 
     // Batch resize/canvas → export many photos at once (non-destructive copies).
@@ -208,7 +212,7 @@ final class AppModel {
     func startBatchResize(_ photos: [Photo]) {
         let files = photos.filter { !$0.isAsset }
         guard !files.isEmpty else {
-            showToast("리사이즈할 파일 사진을 선택하세요 (Apple Photos 제외).")
+            showToast(String(localized: "Select file photos to resize (Apple Photos excluded).", bundle: .module))
             return
         }
         batchTargets = files
@@ -216,7 +220,7 @@ final class AppModel {
     }
 
     func didBatchResize(count: Int, folder: URL) {
-        showToast("\(count)장 내보냄 · \(folder.lastPathComponent)")
+        showToast(String(localized: "Exported \(count) photos · \(folder.lastPathComponent)", bundle: .module))
         NSWorkspace.shared.activateFileViewerSelecting([folder])
     }
 
@@ -246,10 +250,10 @@ final class AppModel {
             ThumbnailCache.shared.clear()
             FullImageLoader.shared.clear()
             allPhotos = allPhotos            // bump libraryVersion → grid reloads
-            showToast("원본을 편집본으로 덮어썼습니다 · \(source.lastPathComponent)")
+            showToast(String(localized: "Original replaced with the edit · \(source.lastPathComponent)", bundle: .module))
         } else {
             revealNewFile(output)            // add + select + scroll to the new copy
-            showToast("편집본 저장됨 · \(output.lastPathComponent)")
+            showToast(String(localized: "Edit saved · \(output.lastPathComponent)", bundle: .module))
         }
     }
 
@@ -1029,7 +1033,11 @@ final class AppModel {
         assetMapTruncated = false
         let photos = visiblePhotos
         let limit = Self.assetMapPinLimit
+        // Rebind weak→strong once: referencing a captured weak VAR from the
+        // inner MainActor closures is a Swift 6 sendability error. AppModel
+        // lives for the app's lifetime, so holding it during the scan is fine.
         Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
             var batch: [(photo: Photo, latitude: Double, longitude: Double)] = []
             var total = 0
             for photo in photos {
@@ -1038,17 +1046,17 @@ final class AppModel {
                 total += 1
                 if batch.count >= 40 || total >= limit {
                     let chunk = batch; batch = []
-                    await MainActor.run { self?.appendAssetMapPins(chunk, forKey: key) }
+                    await MainActor.run { self.appendAssetMapPins(chunk, forKey: key) }
                 }
                 if total >= limit {
-                    await MainActor.run { self?.finishAssetMap(forKey: key, truncated: true) }
+                    await MainActor.run { self.finishAssetMap(forKey: key, truncated: true) }
                     return
                 }
             }
             let chunk = batch
             await MainActor.run {
-                self?.appendAssetMapPins(chunk, forKey: key)
-                self?.finishAssetMap(forKey: key, truncated: false)
+                self.appendAssetMapPins(chunk, forKey: key)
+                self.finishAssetMap(forKey: key, truncated: false)
             }
         }
     }
@@ -1939,7 +1947,7 @@ final class AppModel {
             }
         }
         if failed > 0 {
-            showToast("\(failed)개 항목을 삭제하지 못했습니다 (권한/연결 상태를 확인하세요).")
+            showToast(String(localized: "Couldn’t delete \(failed) items (check permissions/connection).", bundle: .module))
         }
         guard !trashed.isEmpty else { return }
 
@@ -1976,7 +1984,9 @@ final class AppModel {
 
         if !batch.moves.isEmpty {
             let undo = batch
-            showToast("\(batch.moves.count)장 삭제됨", actionLabel: "되돌리기", duration: 10) { [weak self] in
+            showToast(String(localized: "\(batch.moves.count) photos deleted", bundle: .module),
+                      actionLabel: String(localized: "Undo", bundle: .module),
+                      duration: 10) { [weak self] in
                 self?.undoDeletion(undo)
             }
         }
@@ -2001,7 +2011,9 @@ final class AppModel {
             }
         }
         guard !restoredPaths.isEmpty else {
-            if failed > 0 { showToast("되돌리지 못했습니다 (파일이 이동되었거나 권한 문제).") }
+            if failed > 0 {
+                showToast(String(localized: "Couldn’t undo (files moved or permission issue).", bundle: .module))
+            }
             return
         }
 
@@ -2023,8 +2035,8 @@ final class AppModel {
         bumpMeta()
         persistLibraryCache()
         showToast(failed > 0
-            ? "\(restoredPaths.count)장 복원됨 · \(failed)장 실패"
-            : "\(restoredPaths.count)장 복원됨")
+            ? String(localized: "\(restoredPaths.count) photos restored · \(failed) failed", bundle: .module)
+            : String(localized: "\(restoredPaths.count) photos restored", bundle: .module))
     }
 
     // MARK: - Persistence
