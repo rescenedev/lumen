@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Release Notes — Lumen</title>
+<meta name="description" content="What changed in each version of Lumen, the native macOS photo viewer.">
+<meta property="og:title" content="Release Notes — Lumen">
+<meta property="og:description" content="What changed in each version of Lumen, the native macOS photo viewer.">
+<meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/png" href="../favicon.png">
+<link rel="alternate" hreflang="ko" href="https://rescenedev.github.io/lumen/releases.html">
+<link rel="alternate" hreflang="en" href="https://rescenedev.github.io/lumen/en/releases.html">
+<style>
+  :root{
+    --blue:#5b86ff; --purple:#9a5cff; --pink:#ff6fae;
+    --bg:#070910; --bg2:#0b0e17;
+    --panel:#121622; --panel-2:#171c2b;
+    --text:#eef1f7; --muted:#98a2b8; --faint:#6b7488;
+    --border:rgba(255,255,255,.08);
+    --grad:linear-gradient(120deg,var(--blue),var(--purple));
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:840px;margin:0 auto;padding:0 24px}
+  nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:saturate(160%) blur(14px);
+    background:rgba(7,9,16,.7); border-bottom:1px solid var(--border);
+  }
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:62px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
+  .brand img{width:28px;height:28px;border-radius:7px}
+  .nav-links{display:flex;align-items:center;gap:26px;font-size:14px;color:var(--muted)}
+  .nav-links a:hover{color:var(--text)}
+  .nav-cta{padding:8px 16px;border-radius:9px;background:var(--grad);color:#fff;font-weight:600;font-size:14px}
+  .lang-switch{font-size:13px;color:var(--faint);border:1px solid var(--border);padding:5px 11px;border-radius:8px;transition:color .15s,border-color .15s}
+  .lang-switch:hover{color:var(--muted);border-color:rgba(255,255,255,.18)}
+
+  header{position:relative;text-align:center;padding:72px 24px 30px;overflow:hidden}
+  header::before{content:"";position:absolute;inset:0;z-index:0;
+    background:radial-gradient(700px 360px at 50% -12%,rgba(154,92,255,.26),transparent 70%);}
+  header>*{position:relative;z-index:1}
+  h1{font-size:44px;font-weight:850;letter-spacing:-.03em}
+  .grad-text{background:linear-gradient(120deg,#fff,#bcc9ff 55%,#e3c8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);margin-top:10px;font-size:17px}
+
+  main{padding:36px 0 70px}
+  .release{
+    background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    padding:28px 30px;margin:0 0 22px;
+  }
+  .release-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  .release h2{font-size:24px;font-weight:800;letter-spacing:-.02em}
+  .date{color:var(--faint);font-size:14px}
+  .tag{font-size:12px;font-weight:700;color:#fff;background:var(--grad);
+    padding:3px 10px;border-radius:999px;letter-spacing:.02em}
+  .release h3{font-size:14px;font-weight:700;color:#aab6ff;text-transform:uppercase;
+    letter-spacing:.08em;margin:18px 0 8px}
+  .release ul{list-style:none}
+  .release li{position:relative;padding-left:20px;margin:7px 0;color:var(--muted);font-size:15.5px}
+  .release li::before{content:"";position:absolute;left:2px;top:11px;width:7px;height:7px;
+    border-radius:50%;background:var(--grad)}
+  .release li b{color:var(--text);font-weight:650}
+  .release code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;
+    background:rgba(255,255,255,.06);border:1px solid var(--border);
+    padding:1.5px 7px;border-radius:6px;color:#cdd6ff}
+  footer{text-align:center;padding:54px 24px;color:var(--muted);border-top:1px solid var(--border);font-size:14px}
+  footer a{color:#aab6ff}
+  @media(max-width:680px){
+    h1{font-size:34px}
+    .nav-links a:not(.nav-cta):not(.lang-switch){display:none}
+    .release{padding:22px 20px}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="index.html"><img src="../icon.png" alt="">Lumen</a>
+    <div class="nav-links">
+      <a href="index.html#why">Why Lumen</a>
+      <a href="index.html#features">Features</a>
+      <a href="index.html#perf">Performance</a>
+      <a href="../releases.html" class="lang-switch">한국어</a>
+      <a class="nav-cta" href="index.html#download">Download</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <h1 class="grad-text">Release Notes</h1>
+  <p class="sub">Update with <code>brew upgrade --cask lumen-photos</code></p>
+</header>
+
+<main class="wrap">
+
+  <article class="release" id="v0.3.6">
+    <div class="release-head">
+      <h2>0.3.6</h2><span class="date">June 12, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Sidebar folder tree, Finder-style</h3>
+    <ul>
+      <li><b>Clicking a folder always selects it and toggles its children.</b> Clicking an expanded folder while browsing another album now folds it immediately — no second click, no swallowed clicks (input was rewritten at the AppKit event level).</li>
+      <li><b>Keyboard navigation is calm now.</b> ↑/↓ only move the selection — folders no longer unfold as you arrow past them; → reveals the selected folder's children, ← folds them.</li>
+    </ul>
+    <h3>Fixes</h3>
+    <ul>
+      <li>Favorite/label counting sent a per-photo round-trip to the NAS — large favorite sets could freeze the main thread.</li>
+      <li>Thumbnails and badges went blurry after moving the window to a display with a different scale.</li>
+    </ul>
+  </article>
+
+  <article class="release" id="v0.3.5">
+    <div class="release-head">
+      <h2>0.3.5</h2><span class="date">June 12, 2026</span>
+    </div>
+    <h3>Performance — your photos are just there when the app opens</h3>
+    <p class="sub" style="margin:0 0 8px">The launch path was redesigned, measured frame-by-frame against a 67,676-photo library.</p>
+    <ul>
+      <li><b>The launch loading state is gone.</b> The window appears with a fully populated grid — thumbnails included — within a frame or two. Previously a "Loading your photos…" spinner sat on screen for ~1.4 seconds.</li>
+      <li><b>New binary library cache</b> — decoding 67k photos went from 410ms to ~100ms. Your existing cache migrates automatically on first launch.</li>
+      <li><b>Sorting, stats, and search indexes are all precomputed in the background</b>, overlapping the window construction time — and the first screenful of thumbnails is pre-warmed into memory before first paint.</li>
+      <li>The loading indicator now only appears when loading genuinely takes long (first scan, cold NAS).</li>
+    </ul>
+  </article>
+
+  <article class="release" id="v0.3.4">
+    <div class="release-head">
+      <h2>0.3.4</h2><span class="date">June 12, 2026</span>
+    </div>
+    <h3>Performance</h3>
+    <p class="sub" style="margin:0 0 8px">A large performance batch, measured and fixed against a real 67,676-photo NAS library.</p>
+    <ul>
+      <li><b>Selecting photos is instant.</b> Inspector updates went from ~70ms per click to ~3ms; Select All on 67k photos went from an 800ms freeze to ~0.2s.</li>
+      <li><b>Search no longer freezes the UI.</b> Filtering a large library (~0.4s per search on the main thread) now runs in the background alongside the sort.</li>
+      <li><b>Removed a 3–4 second freeze ~40 seconds after launch</b> — the library reconcile and the thumbnail-cache warm-up scan were blocking the main thread.</li>
+      <li><b>The thumbnail-size slider and window resizing are smooth now.</b> Grid thumbnails are GPU-scaled instead of being re-rasterized on the CPU (~350ms per tick before).</li>
+      <li><b>List view is now a native table</b> — opens instantly with tens of thousands of rows, and large selections are ~5x faster.</li>
+      <li>First folder click after launch 156ms → 4ms; first-search and launch-time hiccups trimmed by precomputing the library indexes.</li>
+    </ul>
+  </article>
+
+  <article class="release" id="v0.3.3">
+    <div class="release-head">
+      <h2>0.3.3</h2><span class="date">June 10, 2026</span>
+    </div>
+    <h3>Fixes</h3>
+    <ul>
+      <li><b>Deleting photos now works on NAS volumes.</b> SMB shares have no Trash, so deletion silently did nothing; Lumen now warns Finder-style ("deleted immediately") and deletes in place. NAS-side recycle bins (e.g. Synology <code>#recycle</code>) still catch it, and failures surface a toast instead of vanishing.</li>
+      <li><b>Backspace/Delete actually delete</b> in the viewer, list, and month views.</li>
+      <li><b>Switching folders starts at the top</b> instead of keeping the previous scroll position; deleting/importing in place still keeps your spot.</li>
+      <li><b>Folders with subfolders</b> select correctly (accent highlight) on a single click and reveal their children every time; re-clicking folds them.</li>
+      <li><b>Corrupt image files</b> (zero-filled failed copies) show a warning mark instead of masquerading as a generic JPEG icon — and no longer poison the thumbnail cache.</li>
+    </ul>
+    <h3>New</h3>
+    <ul>
+      <li><b>Closing the window no longer quits.</b> Thumbnail cache warming continues at a trickle (under 1% CPU, one decode every few seconds) and returns to full speed when you reopen the window. ⌘Q quits as usual.</li>
+    </ul>
+  </article>
+
+  <article class="release" id="v0.3.2">
+    <div class="release-head">
+      <h2>0.3.2</h2><span class="date">June 10, 2026</span>
+    </div>
+    <ul>
+      <li><b>Folder tree</b>: clicking a folder with subfolders selects it and toggles its children — expand on the first click, fold on the next (Finder-style).</li>
+    </ul>
+  </article>
+
+  <article class="release" id="v0.3.1">
+    <div class="release-head">
+      <h2>0.3.1</h2><span class="date">June 10, 2026</span>
+    </div>
+    <h3>Performance</h3>
+    <ul>
+      <li>Thumbnail loads no longer stat the original file — one NAS round-trip saved per photo while scrolling.</li>
+      <li><b>Viewport-driven prefetching</b> follows the scroll direction instead of decoding the whole list up front.</li>
+      <li><b>Two-tier thumbnail cache</b>: small grid cells use a 256px tier, fitting ~4x more thumbnails in the memory cache (no more cache thrashing on dense grids).</li>
+      <li>The monthly timeline no longer regroups the whole library on every redraw.</li>
+      <li>Large albums sort off the main thread like every other view.</li>
+      <li>Background cache warming starts with the folder you're currently viewing.</li>
+    </ul>
+    <h3>Fixes</h3>
+    <ul>
+      <li>Folders with subfolders select on a single click in the sidebar.</li>
+      <li>Grid ←/→ keys wrap to the next/previous row at row ends (Finder-style).</li>
+    </ul>
+  </article>
+
+  <article class="release" id="v0.3.0">
+    <div class="release-head">
+      <h2>0.3.0</h2><span class="date">June 8, 2026</span>
+    </div>
+    <h3>New — update notifications</h3>
+    <ul>
+      <li>Lumen checks for new versions automatically (once a day) and shows a banner when one is available. <b>Check for Updates…</b> in the menu works on demand.</li>
+      <li>Homebrew installs get the upgrade command; direct downloads get the release page (no auto-install, so it never fights Homebrew's version tracking).</li>
+      <li>The cask gained <code>livecheck</code> — <code>brew outdated</code> / <code>brew upgrade</code> detect new versions reliably.</li>
+    </ul>
+  </article>
+
+  <article class="release" id="v0.2.0">
+    <div class="release-head">
+      <h2>0.2.0</h2><span class="date">June 8, 2026</span>
+    </div>
+    <h3>Search &amp; indexing</h3>
+    <ul>
+      <li><b>Camera/EXIF search</b> — search by camera name (e.g. "SONY"). The EXIF index builds itself in the background (local disk first, then NAS).</li>
+      <li>Indexing progress shows in the status bar, with a checkpoint every 2,000 photos so a relaunch resumes where it left off.</li>
+    </ul>
+    <h3>Apple Photos / iCloud</h3>
+    <ul>
+      <li>Selecting a Photos-library photo shows its metadata in the inspector (dimensions, kind, size, camera EXIF, GPS).</li>
+    </ul>
+    <h3>Browsing &amp; editing UX</h3>
+    <ul>
+      <li>Home/End/PageUp/PageDown keyboard navigation in the grid.</li>
+    </ul>
+  </article>
+
+  <article class="release" id="v0.1.0">
+    <div class="release-head">
+      <h2>0.1.0</h2><span class="date">June 7, 2026</span>
+    </div>
+    <ul>
+      <li>First public release — local &amp; NAS folder libraries, grid/list/map views, non-destructive editing (crop, rotate, combine, watermark), favorites/labels/tags/albums, Homebrew cask distribution.</li>
+    </ul>
+  </article>
+
+</main>
+
+<footer>
+  <p><b>Lumen</b> · A native macOS viewer &amp; manager for large photo libraries</p>
+  <p style="margin-top:8px">
+    <a href="index.html">Home</a> ·
+    <a href="https://github.com/rescenedev/lumen">GitHub</a> ·
+    <a href="https://github.com/rescenedev/lumen/releases">GitHub Releases</a> ·
+    <a href="opensource.html">Open Source</a> ·
+    <a href="https://fairy.hada.io/@lumen">Sponsor</a> ·
+    <a href="../releases.html">한국어</a> ·
+    MIT License
+  </p>
+</footer>
+
+</body>
+</html>

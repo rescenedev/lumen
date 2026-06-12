@@ -10,6 +10,8 @@
 <meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
 <meta property="og:type" content="website">
 <link rel="icon" type="image/png" href="favicon.png">
+<link rel="alternate" hreflang="ko" href="https://rescenedev.github.io/lumen/releases.html">
+<link rel="alternate" hreflang="en" href="https://rescenedev.github.io/lumen/en/releases.html">
 <style>
   :root{
     --blue:#5b86ff; --purple:#9a5cff; --pink:#ff6fae;
@@ -38,6 +40,8 @@
   .nav-links{display:flex;align-items:center;gap:26px;font-size:14px;color:var(--muted)}
   .nav-links a:hover{color:var(--text)}
   .nav-cta{padding:8px 16px;border-radius:9px;background:var(--grad);color:#fff;font-weight:600;font-size:14px}
+  .lang-switch{font-size:13px;color:var(--faint);border:1px solid var(--border);padding:5px 11px;border-radius:8px;transition:color .15s,border-color .15s}
+  .lang-switch:hover{color:var(--muted);border-color:rgba(255,255,255,.18)}
 
   header{position:relative;text-align:center;padding:72px 24px 30px;overflow:hidden}
   header::before{content:"";position:absolute;inset:0;z-index:0;
@@ -71,7 +75,7 @@
   footer a{color:#aab6ff}
   @media(max-width:680px){
     h1{font-size:34px}
-    .nav-links a:not(.nav-cta){display:none}
+    .nav-links a:not(.nav-cta):not(.lang-switch){display:none}
     .release{padding:22px 20px}
   }
 </style>
@@ -85,6 +89,7 @@
       <a href="index.html#why">왜 Lumen</a>
       <a href="index.html#features">기능</a>
       <a href="index.html#perf">성능</a>
+      <a href="en/releases.html" class="lang-switch">English</a>
       <a class="nav-cta" href="index.html#download">다운로드</a>
     </div>
   </div>

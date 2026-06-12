@@ -10,6 +10,8 @@
 <meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
 <meta property="og:type" content="website">
 <link rel="icon" type="image/png" href="../favicon.png">
+<link rel="alternate" hreflang="ko" href="https://rescenedev.github.io/lumen/index.html">
+<link rel="alternate" hreflang="en" href="https://rescenedev.github.io/lumen/en/index.html">
 <style>
   :root{
     --blue:#5b86ff; --purple:#9a5cff; --pink:#ff6fae;
@@ -44,7 +46,7 @@
   .nav-cta{padding:8px 16px;border-radius:9px;background:var(--grad);color:#fff;font-weight:600;font-size:14px}
   .lang-switch{font-size:13px;color:var(--faint);border:1px solid var(--border);padding:5px 11px;border-radius:8px;transition:color .15s,border-color .15s}
   .lang-switch:hover{color:var(--muted);border-color:rgba(255,255,255,.18)}
-  @media(max-width:680px){.nav-links a:not(.nav-cta){display:none}}
+  @media(max-width:680px){.nav-links a:not(.nav-cta):not(.lang-switch){display:none}}
 
   /* Hero */
   .hero{position:relative;text-align:center;padding:86px 24px 40px;overflow:hidden}
@@ -172,7 +174,7 @@
       <a href="#why">Why Lumen</a>
       <a href="#features">Features</a>
       <a href="#perf">Performance</a>
-      <a href="../releases.html">Release Notes</a>
+      <a href="releases.html">Release Notes</a>
       <a href="../index.html" class="lang-switch">한국어</a>
       <a class="nav-cta" href="#download">Download</a>
     </div>
@@ -310,8 +312,8 @@ brew install --cask lumen-photos</code>
   <p><b>Lumen</b> · Native macOS photo viewer &amp; manager for large libraries</p>
   <p style="margin-top:8px">
     <a href="https://github.com/rescenedev/lumen">GitHub</a> ·
-    <a href="../releases.html">Release Notes</a> ·
-    <a href="../opensource.html">Open Source</a> ·
+    <a href="releases.html">Release Notes</a> ·
+    <a href="opensource.html">Open Source</a> ·
     <a href="https://fairy.hada.io/@lumen">Sponsor</a> ·
     <a href="https://github.com/rescenedev/lumen/blob/main/CONTRIBUTING.md">Contributing</a> ·
     MIT License ·

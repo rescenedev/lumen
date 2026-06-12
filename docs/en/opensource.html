@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>오픈소스 — Lumen</title>
-<meta name="description" content="Lumen이 사용하는 오픈소스 소프트웨어와 라이선스 고지.">
-<meta property="og:title" content="오픈소스 — Lumen">
-<meta property="og:description" content="Lumen이 사용하는 오픈소스 소프트웨어와 라이선스 고지.">
+<title>Open Source — Lumen</title>
+<meta name="description" content="Open-source software shipped with Lumen, and its license notices.">
+<meta property="og:title" content="Open Source — Lumen">
+<meta property="og:description" content="Open-source software shipped with Lumen, and its license notices.">
 <meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
 <meta property="og:type" content="website">
-<link rel="icon" type="image/png" href="favicon.png">
+<link rel="icon" type="image/png" href="../favicon.png">
 <link rel="alternate" hreflang="ko" href="https://rescenedev.github.io/lumen/opensource.html">
 <link rel="alternate" hreflang="en" href="https://rescenedev.github.io/lumen/en/opensource.html">
 <style>
@@ -24,7 +24,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Segoe UI",sans-serif;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     background:var(--bg); color:var(--text); line-height:1.65; -webkit-font-smoothing:antialiased;
   }
   a{color:inherit;text-decoration:none}
@@ -86,21 +86,21 @@
 
 <nav>
   <div class="wrap nav-in">
-    <a class="brand" href="index.html"><img src="icon.png" alt="">Lumen</a>
+    <a class="brand" href="index.html"><img src="../icon.png" alt="">Lumen</a>
     <div class="nav-links">
-      <a href="index.html#why">왜 Lumen</a>
-      <a href="index.html#features">기능</a>
-      <a href="releases.html">릴리즈 노트</a>
-      <a href="en/opensource.html" class="lang-switch">English</a>
-      <a class="nav-cta" href="index.html#download">다운로드</a>
+      <a href="index.html#why">Why Lumen</a>
+      <a href="index.html#features">Features</a>
+      <a href="releases.html">Release Notes</a>
+      <a href="../opensource.html" class="lang-switch">한국어</a>
+      <a class="nav-cta" href="index.html#download">Download</a>
     </div>
   </div>
 </nav>
 
 <header>
-  <h1 class="grad-text">오픈소스</h1>
-  <p class="sub">Lumen은 오픈소스 위에서 만들어졌고, Lumen 자신도 오픈소스입니다.
-  아래는 함께 배포되는 오픈소스 소프트웨어와 라이선스 고지입니다.</p>
+  <h1 class="grad-text">Open Source</h1>
+  <p class="sub">Lumen is built on open source — and is open source itself.
+  Below is the open-source software it ships with, and the license notices.</p>
 </header>
 
 <main class="wrap">
@@ -111,8 +111,8 @@
       <span class="badge grad">MIT License</span>
       <span class="meta">© 2026 rescenedev</span>
     </div>
-    <p>Lumen 자체도 MIT 라이선스의 오픈소스입니다. 소스 코드, 이슈, 기여는
-      <a class="ext" href="https://github.com/rescenedev/lumen">github.com/rescenedev/lumen</a>에서.</p>
+    <p>Lumen itself is MIT-licensed open source. Source code, issues, and contributions at
+      <a class="ext" href="https://github.com/rescenedev/lumen">github.com/rescenedev/lumen</a>.</p>
   </article>
 
   <article class="card">
@@ -121,11 +121,11 @@
       <span class="badge">MIT License</span>
       <span class="meta">v6.29.3 · Gwendal Roué</span>
     </div>
-    <p>SQLite를 Swift답게 다루게 해주는 데이터베이스 툴킷. Lumen은 사진 메타데이터
-      (즐겨찾기·라벨·태그·앨범)와 EXIF 인덱스 저장에 사용합니다.
+    <p>A toolkit that makes SQLite feel at home in Swift. Lumen uses it to store photo
+      metadata (favorites, labels, tags, albums) and the EXIF index.
       <a class="ext" href="https://github.com/groue/GRDB.swift">github.com/groue/GRDB.swift</a></p>
     <details>
-      <summary>라이선스 전문 보기</summary>
+      <summary>Show full license</summary>
       <pre>Copyright (C) 2015-2024 Gwendal Roué
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -140,33 +140,34 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     <div class="card-head">
       <h2>SQLite</h2>
       <span class="badge">Public Domain</span>
-      <span class="meta">macOS 시스템 라이브러리</span>
+      <span class="meta">macOS system library</span>
     </div>
-    <p>세상에서 가장 널리 쓰이는 임베디드 데이터베이스. GRDB를 통해 macOS에 내장된
-      SQLite를 사용합니다.
+    <p>The most widely deployed embedded database in the world. Lumen uses the SQLite
+      built into macOS, through GRDB.
       <a class="ext" href="https://www.sqlite.org/copyright.html">sqlite.org</a></p>
   </article>
 
   <article class="card">
     <div class="card-head">
-      <h2>Apple 시스템 프레임워크</h2>
+      <h2>Apple system frameworks</h2>
       <span class="meta">macOS SDK</span>
     </div>
-    <p>그 외 기능은 모두 macOS에 내장된 Apple 프레임워크로 구현했습니다 —
-      SwiftUI·AppKit(인터페이스), ImageIO·CoreImage(디코딩·편집), PhotoKit(Apple Photos 연동),
-      MapKit(지도), QuickLook(미리보기), CryptoKit(캐시 키) 등. 별도 라이선스 고지가 필요한
-      서드파티 코드는 위 목록이 전부입니다.</p>
+    <p>Everything else is built on Apple frameworks that ship with macOS —
+      SwiftUI &amp; AppKit (interface), ImageIO &amp; CoreImage (decoding, editing), PhotoKit
+      (Apple Photos integration), MapKit (maps), QuickLook (previews), CryptoKit (cache keys),
+      and more. The list above is the complete set of third-party code requiring a notice.</p>
   </article>
 
 </main>
 
 <footer>
-  <p><b>Lumen</b> · 대용량 사진 라이브러리를 위한 네이티브 macOS 뷰어 &amp; 매니저</p>
+  <p><b>Lumen</b> · A native macOS viewer &amp; manager for large photo libraries</p>
   <p style="margin-top:8px">
-    <a href="index.html">홈</a> ·
-    <a href="releases.html">릴리즈 노트</a> ·
+    <a href="index.html">Home</a> ·
+    <a href="releases.html">Release Notes</a> ·
     <a href="https://github.com/rescenedev/lumen">GitHub</a> ·
-    <a href="https://fairy.hada.io/@lumen">후원하기</a> ·
+    <a href="https://fairy.hada.io/@lumen">Sponsor</a> ·
+    <a href="../opensource.html">한국어</a> ·
     MIT License
   </p>
 </footer>
