@@ -177,6 +177,7 @@
 
   footer{text-align:center;padding:54px 24px;color:var(--muted);border-top:1px solid var(--border);font-size:14px}
   footer a{color:#aab6ff}
+  .footer-links{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 18px;margin-top:12px}
 
   /* reveal */
   .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s ease}
@@ -393,15 +394,13 @@ brew install --cask lumen-photos</code>
 
 <footer>
   <p><b>Lumen</b> · 대용량 사진 라이브러리를 위한 네이티브 macOS 뷰어 &amp; 매니저</p>
-  <p style="margin-top:8px">
-    <a href="https://github.com/rescenedev/lumen">GitHub</a> ·
-    <a href="releases.html">릴리즈 노트</a> ·
-    <a href="opensource.html">오픈소스</a> ·
-    <a href="https://fairy.hada.io/@lumen">후원하기</a> ·
-    <a href="https://github.com/rescenedev/lumen/blob/main/CONTRIBUTING.md">기여</a> ·
-    MIT License ·
+  <nav class="footer-links">
+    <a href="https://github.com/rescenedev/lumen">GitHub</a>
+    <a href="releases.html">릴리즈 노트</a>
+    <a href="opensource.html">오픈소스 (MIT)</a>
+    <a href="https://github.com/rescenedev/lumen/blob/main/CONTRIBUTING.md">기여</a>
     <a href="en/index.html">English</a>
-  </p>
+  </nav>
   <p style="margin-top:10px;font-size:12.5px;opacity:.55">Made with ♥ and Claude</p>
 </footer>
 
