@@ -86,6 +86,7 @@ struct PhotoBrowserView: View {
                 .onChange(of: model.searchText) { _, value in
                     if value != searchInput { searchInput = value }  // external clears
                 }
+                .onDisappear { searchDebounce?.cancel() }   // don't fire after the view is gone
             if !searchInput.isEmpty {
                 Button {
                     searchInput = ""
