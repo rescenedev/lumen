@@ -278,8 +278,10 @@ struct CropResizeView: View {
         Task {
             let ok = await Task.detached(priority: .userInitiated) {
                 if overwrite {
+                    let ext = src.pathExtension
+                    let base = "lumen-edit-\(UUID().uuidString)"
                     let tmp = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("lumen-edit-\(UUID().uuidString).\(src.pathExtension)")
+                        .appendingPathComponent(ext.isEmpty ? base : "\(base).\(ext)")
                     guard ImageEditor.process(source: src, edit: current, to: tmp, background: bg,
                                               caption: cap, logo: lg) else { return false }
                     do { _ = try FileManager.default.replaceItemAt(src, withItemAt: tmp); return true }

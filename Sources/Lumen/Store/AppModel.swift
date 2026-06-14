@@ -640,7 +640,8 @@ final class AppModel {
     /// True when the current view's contents depend on per-photo metadata, so a
     /// favorite/rating/label edit should invalidate the cached list. Most views
     /// (All Photos, a folder) don't — so culling stays fast.
-    @ObservationIgnored private var viewDependsOnMeta: Bool {
+    // (Computed: @ObservationIgnored is only meaningful on stored properties.)
+    private var viewDependsOnMeta: Bool {
         switch committedSidebar {
         case .favorites, .label, .tag: return true
         default: break
@@ -652,7 +653,7 @@ final class AppModel {
 
     /// True when the current view's contents depend on the EXIF index — so a
     /// background indexing pass shouldn't reload a plain folder/All-Photos grid.
-    @ObservationIgnored private var viewDependsOnExif: Bool {
+    private var viewDependsOnExif: Bool {
         if case .duplicates = committedSidebar { return true }
         if filter.gpsOnly || filter.camera != nil { return true }
         return !searchText.trimmingCharacters(in: .whitespaces).isEmpty
