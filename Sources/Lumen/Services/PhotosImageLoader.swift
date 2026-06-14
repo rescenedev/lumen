@@ -98,10 +98,16 @@ final class PhotosImageLoader {
         options.deliveryMode = .highQualityFormat
         options.isSynchronous = false
         return await withCheckedContinuation { continuation in
+            // PhotoKit may invoke this handler on an arbitrary (and, across
+            // degraded/final deliveries, potentially concurrent) thread, so the
+            // resume-once guard must be synchronized — a plain `var` is a data race.
+            let lock = NSLock()
             var resumed = false
             manager.requestImageDataAndOrientation(for: asset, options: options) { data, _, _, _ in
-                if resumed { return }
+                lock.lock()
+                if resumed { lock.unlock(); return }
                 resumed = true
+                lock.unlock()
                 continuation.resume(returning: data)
             }
         }
@@ -124,15 +130,23 @@ final class PhotosImageLoader {
     private func requestImage(_ asset: PHAsset, target: CGSize,
                               options: PHImageRequestOptions, skipDegraded: Bool) async -> NSImage? {
         await withCheckedContinuation { continuation in
+            // Synchronize the resume-once guard: the handler can fire on any
+            // thread and, for degraded+final deliveries, concurrently — an
+            // unsynchronized `var` is a data race (and could double-resume).
+            let lock = NSLock()
             var resumed = false
             manager.requestImage(for: asset, targetSize: target,
                                  contentMode: .aspectFit, options: options) { image, info in
-                if resumed { return }
                 let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
                 let cancelled = (info?[PHImageCancelledKey] as? Bool) ?? false
                 let failed = info?[PHImageErrorKey] != nil
+                // Wait past the low-quality placeholder, but only when a real
+                // final frame is still coming (image present, not cancelled/failed).
                 if skipDegraded && degraded && image != nil && !cancelled && !failed { return }
+                lock.lock()
+                if resumed { lock.unlock(); return }
                 resumed = true
+                lock.unlock()
                 continuation.resume(returning: image)
             }
         }
