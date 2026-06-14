@@ -158,6 +158,7 @@ final class AppModel {
     var availableUpdate: UpdateInfo?
     var updateBannerDismissed = false
     @ObservationIgnored private let updateCheckKey = "lumen.lastUpdateCheck"
+    @ObservationIgnored private var updateCheckTask: Task<Void, Never>?
 
     /// Check GitHub for a newer release. Throttled to once/day unless `force`d
     /// (e.g. from the "Check for Updates…" menu item). Silent on failure.
@@ -166,7 +167,11 @@ final class AppModel {
             let last = UserDefaults.standard.double(forKey: updateCheckKey)
             if last > 0, Date().timeIntervalSince1970 - last < 86_400 { return }
         }
-        Task {
+        // Skip if a check is already running so rapid calls (auto + menu) don't
+        // fire redundant network requests racing to write availableUpdate.
+        guard updateCheckTask == nil else { return }
+        updateCheckTask = Task {
+            defer { updateCheckTask = nil }
             let info = await UpdateChecker.check()
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: updateCheckKey)
             if let info {

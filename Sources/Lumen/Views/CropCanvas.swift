@@ -219,10 +219,20 @@ struct CropCanvas: View {
                 }
                 mx = min(max(0, mx), 1); my = min(max(0, my), 1)
                 var w = abs(mx - ax), h = abs(my - ay)
-                if let aspect, image.size.width > 0 {
-                    let k = aspect * image.size.height / image.size.width   // normalized w/h
-                    // Constrain to ratio using the smaller available extent.
-                    if w / max(h, 0.0001) > k { w = h * k } else { h = w / k }
+                if let aspect {
+                    // Use the rep's PIXEL dimensions (cropNorm is normalized to
+                    // pixels), not image.size in points — they differ for
+                    // non-square-pixel / DPI-scaled images.
+                    let rep = image.representations.first
+                    let pw = CGFloat(rep?.pixelsWide ?? 0)
+                    let ph = CGFloat(rep?.pixelsHigh ?? 0)
+                    let w0 = pw > 0 ? pw : image.size.width
+                    let h0 = ph > 0 ? ph : image.size.height
+                    if w0 > 0 {
+                        let k = aspect * h0 / w0   // normalized w/h
+                        // Constrain to ratio using the smaller available extent.
+                        if w / max(h, 0.0001) > k { w = h * k } else { h = w / k }
+                    }
                 }
                 w = max(0.05, w); h = max(0.05, h)
                 let nx = mx >= ax ? ax : ax - w
