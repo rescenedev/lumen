@@ -90,8 +90,16 @@ struct ClusteredPhotoMap: NSViewRepresentable {
                     let p = MKMapPoint(member.coordinate)
                     rect = rect.union(MKMapRect(x: p.x, y: p.y, width: 0, height: 0))
                 }
-                let pad = NSEdgeInsets(top: 80, left: 80, bottom: 80, right: 80)
-                mapView.setVisibleMapRect(rect, edgePadding: pad, animated: true)
+                if rect.size.width == 0, rect.size.height == 0 {
+                    // All members share one coordinate — a zero-size rect would
+                    // zoom in to the maximum. Frame a fixed region instead.
+                    mapView.setRegion(MKCoordinateRegion(center: cluster.coordinate,
+                                                         latitudinalMeters: 1000,
+                                                         longitudinalMeters: 1000), animated: true)
+                } else {
+                    let pad = NSEdgeInsets(top: 80, left: 80, bottom: 80, right: 80)
+                    mapView.setVisibleMapRect(rect, edgePadding: pad, animated: true)
+                }
             } else if let photo = view.annotation as? PhotoAnnotation {
                 mapView.deselectAnnotation(photo, animated: false)
                 onOpen(photo.photo)
@@ -152,7 +160,10 @@ final class PhotoMarkerView: MKAnnotationView {
     }
 
     private func setImage(_ image: NSImage) {
-        imageLayer.contents = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        // Don't clear the layer if the conversion fails — keep whatever is shown.
+        if let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) {
+            imageLayer.contents = cg
+        }
     }
 
     override func prepareForReuse() {

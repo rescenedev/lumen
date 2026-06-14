@@ -514,7 +514,7 @@ final class AdaptiveFlowLayout: NSCollectionViewLayout {
     }
 
     override func layoutAttributesForItem(at indexPath: IndexPath) -> NSCollectionViewLayoutAttributes? {
-        guard indexPath.item < count || count == 0 else { return nil }
+        guard indexPath.item < count else { return nil }
         let attributes = NSCollectionViewLayoutAttributes(forItemWith: indexPath)
         attributes.frame = frame(at: indexPath.item)
         return attributes

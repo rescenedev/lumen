@@ -141,6 +141,9 @@ enum LibraryCache {
                                  creationDate: created.isNaN ? nil : Date(timeIntervalSinceReferenceDate: created),
                                  modificationDate: modified.isNaN ? nil : Date(timeIntervalSinceReferenceDate: modified)))
             }
+            // Empty decodes to nil by design: an empty cache is indistinguishable
+            // from "no cache" and loaders fall back to a (trivial) rescan either
+            // way. See LibraryCacheTests.binaryEmptyListDecodesAsNil.
             return out.isEmpty ? nil : out
         }
     }
