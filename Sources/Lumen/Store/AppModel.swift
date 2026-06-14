@@ -73,6 +73,10 @@ final class AppModel {
     /// Lazily request access and load the Photos library (and album list) the
     /// first time a Photos source is opened. Idempotent; safe to call repeatedly.
     func loadPhotosLibraryIfNeeded() {
+        // `photosAccess = .loading` is set synchronously (no await between it and
+        // the guard), so a second call is gated out before the Task starts — no
+        // re-entrant duplicate fetch. The Task inherits @MainActor, so its
+        // post-await assignments below run on the main actor.
         guard assetPhotos.isEmpty, photosAccess != .loading, photosAccess != .denied else { return }
         photosAccess = .loading
         Task {
@@ -866,6 +870,9 @@ final class AppModel {
                         : base
                     return (sorter(gathered), built)
                 }.value
+                // This Task inherits @MainActor, so execution resumes here on the
+                // main actor after the detached work — the writes below are
+                // main-actor-confined (no data race) without an explicit hop.
                 guard let self else { return }
                 if let builtCams, self.indexVersion == indexVersionSnapshot {
                     self.lowerCameraCache = builtCams
@@ -1513,6 +1520,9 @@ final class AppModel {
         // .utility (not .background): a serial NAS read is already low-CPU since
         // it mostly waits on I/O, but .background throttles so hard the pass never
         // makes progress. .utility stays imperceptible yet actually completes.
+        // Inherits @MainActor: the loop body resumes on the main actor after each
+        // `await ...detached.value`, so the progress/exif writes below are
+        // main-confined (the inner detached task does the off-main CPU work).
         Task(priority: .utility) {
             let chunkSize = 200
             let saveEvery = 2_000   // checkpoint so a long NAS pass survives a quit
