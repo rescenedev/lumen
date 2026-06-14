@@ -39,6 +39,33 @@ enum PhotosLibraryService {
         cacheLock.lock(); defer { cacheLock.unlock() }
         return collectionsById[id]
     }
+
+    // Per-album fetch result cache. Re-entering an album (after visiting
+    // others) otherwise re-runs the PhotoKit query every time — measured
+    // 120→400ms per open. Invalidated wholesale on any library change via
+    // PhotosLibraryObserver. LRU-bounded so memory stays flat.
+    nonisolated(unsafe) private static var assetCache: [String: [Photo]] = [:]
+    nonisolated(unsafe) private static var assetCacheOrder: [String] = []
+    private static let assetCacheLimit = 12
+
+    private static func cachedAssets(_ id: String) -> [Photo]? {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        return assetCache[id]
+    }
+
+    private static func storeAssets(_ id: String, _ photos: [Photo]) {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        if assetCache[id] == nil { assetCacheOrder.append(id) }
+        assetCache[id] = photos
+        if assetCacheOrder.count > assetCacheLimit {
+            assetCache.removeValue(forKey: assetCacheOrder.removeFirst())
+        }
+    }
+
+    /// Drop the album fetch cache (PhotoKit library changed, or a forced refresh).
+    static func invalidateAssetCache() {
+        cacheLock.lock(); assetCache.removeAll(); assetCacheOrder.removeAll(); cacheLock.unlock()
+    }
     /// Request library access, returning the resulting authorization status.
     static func authorize() async -> PHAuthorizationStatus {
         let current = PHPhotoLibrary.authorizationStatus(for: .readWrite)
@@ -107,7 +134,8 @@ enum PhotosLibraryService {
     /// Fetch the image assets in one album (newest first) as synthetic-URL
     /// `Photo`s, registering their PHAssets with the image loader.
     static func fetchAssets(inAlbumId id: String) async -> [Photo] {
-        await Task.detached(priority: .userInitiated) {
+        if let hit = cachedAssets(id) { return hit }   // skip the PhotoKit query on re-entry
+        return await Task.detached(priority: .userInitiated) {
             let cached = cachedCollection(id)
             let collection = cached ?? PHAssetCollection.fetchAssetCollections(
                 withLocalIdentifiers: [id], options: nil).firstObject
@@ -126,7 +154,26 @@ enum PhotosLibraryService {
                 assetsById[asset.localIdentifier] = asset
             }
             PhotosImageLoader.shared.register(assetsById)
+            Self.storeAssets(id, photos)
             return photos
         }.value
+    }
+}
+
+/// Observes the system Photos library and drops Lumen's album fetch cache on
+/// any change, so a photo added/removed in Photos is reflected on next open.
+/// PhotoKit calls back on a private queue; `invalidateAssetCache` is lock-guarded.
+final class PhotosLibraryObserver: NSObject, PHPhotoLibraryChangeObserver {
+    static let shared = PhotosLibraryObserver()
+    private var registered = false
+
+    func start() {
+        guard !registered else { return }
+        registered = true
+        PHPhotoLibrary.shared().register(self)
+    }
+
+    func photoLibraryDidChange(_ changeInstance: PHChange) {
+        PhotosLibraryService.invalidateAssetCache()
     }
 }

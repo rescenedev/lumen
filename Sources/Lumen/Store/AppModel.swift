@@ -79,6 +79,7 @@ final class AppModel {
             let status = await PhotosLibraryService.authorize()
             switch status {
             case .authorized, .limited:
+                PhotosLibraryObserver.shared.start()   // invalidate album cache on library changes
                 let photos = await PhotosLibraryService.fetchAllImages()
                 self.assetPhotos = photos
                 self.photosAccess = (status == .limited) ? .limited : .authorized
