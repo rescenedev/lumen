@@ -210,6 +210,7 @@ private struct InfoRow: View {
 
     @State private var copied = false
     @State private var hovering = false
+    @State private var resetTask: Task<Void, Never>?
 
     init(_ label: String, _ value: String, mono: Bool = false) {
         self.label = label
@@ -242,6 +243,12 @@ private struct InfoRow: View {
         pb.clearContents()
         pb.setString(value, forType: .string)
         copied = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+        // Cancel any prior reset so a rapid second copy (or row reuse) doesn't
+        // leave the checkmark stuck or clear it early.
+        resetTask?.cancel()
+        resetTask = Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            if !Task.isCancelled { copied = false }
+        }
     }
 }
