@@ -398,8 +398,8 @@ struct ViewerView: View {
     private func advanceSlideshow() {
         if model.canStepForward {
             model.viewerStep(1)
-        } else {
-            model.viewerIndex = 0 // loop
+        } else if !model.viewerPhotos.isEmpty {
+            model.viewerIndex = 0 // loop — only when there's something to show
         }
     }
 

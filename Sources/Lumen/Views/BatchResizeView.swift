@@ -81,7 +81,7 @@ struct BatchResizeView: View {
                 WatermarkBar(settings: $watermark)
 
                 if running {
-                    ProgressView(value: Double(done), total: Double(photos.count)) {
+                    ProgressView(value: Double(done), total: Double(max(photos.count, 1))) {
                         Text("내보내는 중… \(done)/\(photos.count)").font(.caption)
                     }
                 }

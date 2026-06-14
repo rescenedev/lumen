@@ -96,6 +96,10 @@ struct MetadataEditor: View {
     }
 
     private func addTag() {
+        // Match the Add button's disabled state: onSubmit (Return) would
+        // otherwise clear the field on a whitespace-only entry. (The model
+        // also trims and rejects empty tags, so no blank tag is ever stored.)
+        guard !newTag.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         model.addTag(newTag, to: targets)
         newTag = ""
     }
