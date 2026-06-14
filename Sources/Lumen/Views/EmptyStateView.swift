@@ -60,11 +60,14 @@ struct EmptyStateView: View {
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         let group = DispatchGroup()
+        let lock = NSLock()
         var urls: [URL] = []
         for provider in providers {
             group.enter()
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                if let url { urls.append(url) }
+                // Callbacks fire on arbitrary background queues; serialize the
+                // append so concurrent providers don't race on the array.
+                if let url { lock.lock(); urls.append(url); lock.unlock() }
                 group.leave()
             }
         }
