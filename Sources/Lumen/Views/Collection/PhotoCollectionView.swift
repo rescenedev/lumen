@@ -67,12 +67,22 @@ struct PhotoCollectionView: NSViewRepresentable {
         scroll.automaticallyAdjustsContentInsets = false
 
         // Recompute the column count whenever the clip (visible) width changes —
-        // window resize, sidebar/inspector toggle. Without this the grid can
-        // stay stuck at a stale column count after the width changes.
+        // window resize, sidebar/inspector toggle. Resize the collection view to
+        // the clip width FIRST: invalidateLayout alone recomputes columns but
+        // doesn't widen the doc view, so the grid stays at the old column count
+        // with empty space on the right. Setting cv width = clip width makes it
+        // fill the scroll view, then the layout lays out columns across it.
         scroll.contentView.postsFrameChangedNotifications = true
         coord.clipObserver = NotificationCenter.default.addObserver(
             forName: NSView.frameDidChangeNotification, object: scroll.contentView,
-            queue: .main) { [weak cv] _ in cv?.collectionViewLayout?.invalidateLayout() }
+            queue: .main) { [weak cv, weak scroll] _ in
+                guard let cv, let scroll else { return }
+                let clipWidth = scroll.contentView.bounds.width
+                if abs(cv.frame.width - clipWidth) > 0.5 {
+                    cv.setFrameSize(NSSize(width: clipWidth, height: cv.frame.height))
+                }
+                cv.collectionViewLayout?.invalidateLayout()
+            }
 
         coord.appliedToken = token
         coord.appliedNavToken = navToken
