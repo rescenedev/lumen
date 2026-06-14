@@ -38,6 +38,9 @@ final class QuickLookPreview: NSObject, @preconcurrency QLPreviewPanelDataSource
     func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int { urls.count }
 
     func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
-        urls[index] as NSURL
+        // `urls` can be replaced by `show(urls:startAt:)` while Quick Look is
+        // asking for items asynchronously, so the index may be stale.
+        guard urls.indices.contains(index) else { return nil }
+        return urls[index] as NSURL
     }
 }

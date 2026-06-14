@@ -19,8 +19,13 @@ enum IncrementalScanner {
         let fm = FileManager.default
         var photos: [Photo] = []
         var mtimes: [String: Date] = [:]
+        // Resolved directory paths already visited — guards against symlink
+        // cycles (a link pointing at an ancestor) that would otherwise recurse
+        // until the stack overflows on a malformed library.
+        var visited: Set<String> = []
 
         func walk(_ dir: URL) {
+            guard visited.insert(dir.resolvingSymlinksInPath().path).inserted else { return }
             let dirMtime = (try? dir.resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate
             mtimes[dir.path] = dirMtime

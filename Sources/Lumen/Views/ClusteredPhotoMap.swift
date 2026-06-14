@@ -67,13 +67,15 @@ struct ClusteredPhotoMap: NSViewRepresentable {
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             if let cluster = annotation as? MKClusterAnnotation {
                 let view = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: PhotoClusterView.reuseID, for: cluster) as! PhotoClusterView
+                    withIdentifier: PhotoClusterView.reuseID, for: cluster) as? PhotoClusterView
+                    ?? PhotoClusterView(annotation: cluster, reuseIdentifier: PhotoClusterView.reuseID)
                 view.configure(count: cluster.memberAnnotations.count)
                 return view
             }
             if let photo = annotation as? PhotoAnnotation {
                 let view = mapView.dequeueReusableAnnotationView(
-                    withIdentifier: PhotoMarkerView.reuseID, for: photo) as! PhotoMarkerView
+                    withIdentifier: PhotoMarkerView.reuseID, for: photo) as? PhotoMarkerView
+                    ?? PhotoMarkerView(annotation: photo, reuseIdentifier: PhotoMarkerView.reuseID)
                 view.configure(photo: photo.photo)
                 return view
             }
