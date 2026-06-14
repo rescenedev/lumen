@@ -43,8 +43,11 @@ struct ZoomableImage: View {
             } else if let thumb = await ThumbnailCache.shared.thumbnail(for: url, maxPixel: ThumbnailCache.gridMaxPixel) {
                 if image == nil { image = thumb; loadedSize = thumb.size }
             }
-            // 2. Swap in the full-resolution image when it arrives.
+            // 2. Swap in the full-resolution image when it arrives — unless the
+            //    task was cancelled (url changed) while it loaded, which would
+            //    apply the previous photo's image over the new one.
             if let full = await FullImageLoader.shared.image(for: url) {
+                guard !Task.isCancelled else { return }
                 image = full
                 loadedSize = full.size
             }

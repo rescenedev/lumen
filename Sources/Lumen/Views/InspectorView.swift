@@ -173,12 +173,16 @@ struct InspectorView: View {
         guard let photo else { return }
         // Assets have no file on disk — read their metadata from PhotoKit/iCloud.
         if photo.isAsset {
-            metadata = await PhotosImageLoader.shared.metadata(for: photo.url)
+            let m = await PhotosImageLoader.shared.metadata(for: photo.url)
+            guard !Task.isCancelled else { return }   // photo changed mid-load
+            metadata = m
         } else {
             let url = photo.url
-            metadata = await Task.detached(priority: .userInitiated) {
+            let m = await Task.detached(priority: .userInitiated) {
                 MetadataReader.read(url: url)
             }.value
+            guard !Task.isCancelled else { return }   // photo changed mid-load
+            metadata = m
         }
     }
 }
