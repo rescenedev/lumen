@@ -42,7 +42,11 @@ enum CrashReporter {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         let stamp = ISO8601DateFormatter().string(from: Date())
-        let path = dir.appendingPathComponent("crash-\(stamp).crash").path
+        // Colons are unsafe in file paths (Finder shows them as "/"); swap for
+        // "-". Zero-padded ISO components keep lexical == chronological order,
+        // so pendingReports()/pruneOldReports() still sort correctly.
+        let fileStamp = stamp.replacingOccurrences(of: ":", with: "-")
+        let path = dir.appendingPathComponent("crash-\(fileStamp).crash").path
         let header = """
         Lumen \(UpdateChecker.currentVersion)
         macOS \(ProcessInfo.processInfo.operatingSystemVersionString)
