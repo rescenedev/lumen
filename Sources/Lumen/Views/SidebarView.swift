@@ -376,13 +376,31 @@ private struct FolderTreeNode: View {
 private struct WindowReader: NSViewRepresentable {
     let onWindow: (NSWindow?) -> Void
 
+    final class Coordinator {
+        weak var lastWindow: NSWindow?
+        var reported = false
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { [weak view] in onWindow(view?.window) }
+        report(view, context.coordinator)
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async { [weak view] in onWindow(view?.window) }
+        report(view, context.coordinator)
+    }
+
+    /// Only fire `onWindow` when the hosting window actually changes — otherwise
+    /// every SwiftUI update re-posts the same window and churns the parent's body.
+    private func report(_ view: NSView, _ coordinator: Coordinator) {
+        DispatchQueue.main.async { [weak view] in
+            let window = view?.window
+            guard !coordinator.reported || window !== coordinator.lastWindow else { return }
+            coordinator.reported = true
+            coordinator.lastWindow = window
+            onWindow(window)
+        }
     }
 }
