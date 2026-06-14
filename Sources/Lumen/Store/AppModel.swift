@@ -1145,13 +1145,15 @@ final class AppModel {
     /// Cached per (selection, library) — InspectorView reads this twice per body
     /// eval, and a select-all of 67k measured 170ms per uncached access.
     @ObservationIgnored private var selectedPhotosCache: [Photo] = []
-    @ObservationIgnored private var selectedPhotosCacheKey = (-1, -1, -1, -1)
+    // Optional sentinel: nil can never collide with a real key (a fixed tuple
+    // sentinel could, in principle, match a real signature).
+    @ObservationIgnored private var selectedPhotosCacheKey: (Int, Int, Int, Int)?
     var selectedPhotos: [Photo] {
         // visibleSignature is part of the key because huge selections take
         // their ORDER from visiblePhotos — a sort/filter change after ⌘A must
         // not serve a stale ordering to order-sensitive batch actions (rename).
         let key = (selectionRevision, libraryVersion, assetsVersion, visibleSignature)
-        if selectedPhotosCacheKey == key { return selectedPhotosCache }
+        if let cached = selectedPhotosCacheKey, cached == key { return selectedPhotosCache }
         let result = computeSelectedPhotos()
         selectedPhotosCache = result
         selectedPhotosCacheKey = key
