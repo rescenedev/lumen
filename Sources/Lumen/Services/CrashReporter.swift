@@ -31,7 +31,7 @@ enum CrashReporter {
     }()
 
     static var reportsDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        AppDirectories.applicationSupport()
             .appendingPathComponent("Lumen/CrashReports", isDirectory: true)
     }
 

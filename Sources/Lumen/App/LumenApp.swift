@@ -74,7 +74,9 @@ struct LumenApp: App {
                 Button("Keyboard Shortcuts") { model.showShortcuts = true }
                     .keyboardShortcut("/", modifiers: .command)
                 Button("Lumen Help") {
-                    NSWorkspace.shared.open(URL(string: "https://rescenedev.github.io/lumen")!)
+                    if let url = URL(string: "https://rescenedev.github.io/lumen") {
+                        NSWorkspace.shared.open(url)
+                    }
                 }
             }
         }

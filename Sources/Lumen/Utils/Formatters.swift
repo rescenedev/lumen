@@ -31,7 +31,7 @@ enum Format {
 
     static func megapixels(_ width: Int?, _ height: Int?) -> String? {
         guard let width, let height else { return nil }
-        let mp = Double(width * height) / 1_000_000
+        let mp = Double(width) * Double(height) / 1_000_000
         return mp >= 0.1 ? String(format: "%.1f MP", mp) : nil
     }
 }

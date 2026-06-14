@@ -393,7 +393,7 @@ final class MetadataStore {
                 meta.favorite = row["favorite"] != 0
                 meta.rating = row["rating"]
                 meta.label = ColorLabel(rawValue: row["label"]) ?? .none
-                meta.rejected = (row["rejected"] as Int?) ?? 0 != 0
+                meta.rejected = ((row["rejected"] as Int?) ?? 0) != 0
                 if let tagsJSON: String = row["tags"],
                    let data = tagsJSON.data(using: .utf8),
                    let tags = try? JSONDecoder().decode([String].self, from: data) {
@@ -418,8 +418,7 @@ final class MetadataStore {
 
     private func migrateLegacyJSONIfNeeded() {
         guard itemsCache.isEmpty, albumsCache.isEmpty else { return }
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let url = base.appendingPathComponent("Lumen/library.json")
+        let url = AppDirectories.applicationSupport().appendingPathComponent("Lumen/library.json")
         guard let data = try? Data(contentsOf: url) else { return }
 
         struct Payload: Codable { var items: [String: PhotoMeta] = [:]; var albums: [Album] = [] }

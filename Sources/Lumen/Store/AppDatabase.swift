@@ -12,15 +12,23 @@ final class AppDatabase {
     let fileURL: URL
 
     private init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = base.appendingPathComponent("Lumen", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = AppDirectories.lumenSupport()
         fileURL = dir.appendingPathComponent("lumen.sqlite")
 
         var config = Configuration()
         config.busyMode = .timeout(5)
-        // swiftlint:disable:next force_try
-        queue = try! DatabaseQueue(path: fileURL.path, configuration: config)
+        // A corrupt DB, full disk, or sandboxing failure must NOT crash the app.
+        // Fall back to an in-memory queue so the session stays usable (metadata
+        // simply won't persist this run) instead of aborting on launch.
+        if let onDisk = try? DatabaseQueue(path: fileURL.path, configuration: config) {
+            queue = onDisk
+        } else {
+            // In-memory open touches no disk and cannot hit the failure modes
+            // above (corrupt file, full disk, sandbox), so it is a safe last
+            // resort that keeps the app running this session.
+            // swiftlint:disable:next force_try
+            queue = try! DatabaseQueue()
+        }
         try? Self.migrate(queue)
     }
 

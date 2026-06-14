@@ -208,9 +208,10 @@ struct PhotoCombineView: View {
 
 
     private func save() {
+        guard let first = ordered.first else { return }
         busy = true
         let srcs = sources, lay = layout, gap = gapFraction, bg = background.cgColor, gr = gridRows, cap = caption, lg = logo
-        let dir = ordered[0].url.deletingLastPathComponent()
+        let dir = first.url.deletingLastPathComponent()
         let ext = background == .transparent ? "png" : "jpg"
         let dest = ImageEditor.uniqueFileURL(in: dir, base: "Combined", ext: ext)
         let maxPixel = resolution.pixels

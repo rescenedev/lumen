@@ -22,7 +22,8 @@ extension Photo {
             .addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? localIdentifier
         let label = assetDateLabel(creationDate)
         let url = URL(string: "\(assetScheme):///\(encodedId)/\(label)")
-            ?? URL(string: "\(assetScheme):///\(encodedId)")!
+            ?? URL(string: "\(assetScheme):///\(encodedId)")
+            ?? URL(fileURLWithPath: encodedId)   // non-failable last resort, never crashes
         return Photo(url: url, byteSize: 0, creationDate: creationDate, modificationDate: modificationDate)
     }
 

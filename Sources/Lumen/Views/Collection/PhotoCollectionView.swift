@@ -185,7 +185,8 @@ struct PhotoCollectionView: NSViewRepresentable {
         func collectionView(_ collectionView: NSCollectionView,
                             itemForRepresentedObjectAt indexPath: IndexPath) -> NSCollectionViewItem {
             let item = collectionView.makeItem(withIdentifier: PhotoCollectionItem.identifier,
-                                               for: indexPath) as! PhotoCollectionItem
+                                               for: indexPath) as? PhotoCollectionItem
+                ?? PhotoCollectionItem(nibName: nil, bundle: nil)
             guard photos.indices.contains(indexPath.item) else { return item }
             let photo = photos[indexPath.item]
             item.configure(photo: photo, size: CGFloat(model.thumbnailSize),

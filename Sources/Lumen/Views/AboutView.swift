@@ -23,8 +23,10 @@ struct AboutView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 18) {
-                Link("Website", destination: URL(string: "https://rescenedev.github.io/lumen")!)
-                Link("GitHub", destination: URL(string: "https://github.com/rescenedev/lumen")!)
+                Link("Website", destination: URL(string: "https://rescenedev.github.io/lumen")
+                    ?? URL(fileURLWithPath: "/"))
+                Link("GitHub", destination: URL(string: "https://github.com/rescenedev/lumen")
+                    ?? URL(fileURLWithPath: "/"))
             }
             .font(.callout)
             .padding(.top, 2)

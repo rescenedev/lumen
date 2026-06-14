@@ -167,7 +167,7 @@ enum ImageEditor {
         let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any]
         let orientation = (props?[kCGImagePropertyOrientation] as? UInt32) ?? 1
         guard orientation != 1 else { return cg }
-        let ci = CIImage(cgImage: cg).oriented(forExifOrientation: Int32(orientation))
+        let ci = CIImage(cgImage: cg).oriented(forExifOrientation: Int32(clamping: orientation))
         return CIContext().createCGImage(ci, from: ci.extent)
     }
 
