@@ -26,8 +26,10 @@ enum ExifIndexer {
               let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         else { return info }
 
-        info.pixelWidth = props[kCGImagePropertyPixelWidth] as? Int
-        info.pixelHeight = props[kCGImagePropertyPixelHeight] as? Int
+        // Via NSNumber.intValue: a plain `as? Int` returns nil for a
+        // float-backed CFNumber, silently dropping the dimension.
+        info.pixelWidth = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue
+        info.pixelHeight = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue
 
         if let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
             info.cameraMake = tiff[kCGImagePropertyTIFFMake] as? String

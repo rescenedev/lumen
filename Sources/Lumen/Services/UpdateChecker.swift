@@ -52,8 +52,13 @@ enum UpdateChecker {
 
     /// Numeric, component-wise version comparison ("0.10.0" > "0.9.0").
     static func isNewer(_ candidate: String, than current: String) -> Bool {
-        let a = candidate.split(separator: ".").map { Int($0) ?? 0 }
-        let b = current.split(separator: ".").map { Int($0) ?? 0 }
+        // Take each component's leading digits so a pre-release suffix doesn't
+        // zero out the number ("1.2.3-beta" → [1,2,3], not [1,2,0]).
+        func parts(_ v: String) -> [Int] {
+            v.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        }
+        let a = parts(candidate)
+        let b = parts(current)
         for i in 0..<max(a.count, b.count) {
             let x = i < a.count ? a[i] : 0
             let y = i < b.count ? b[i] : 0

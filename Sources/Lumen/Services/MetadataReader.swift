@@ -60,10 +60,12 @@ enum MetadataReader {
     /// Extract EXIF/TIFF/GPS fields from a CGImageSource property dictionary.
     static func parse(_ props: [CFString: Any]) -> ImageMetadata {
         var meta = ImageMetadata()
-        meta.pixelWidth = props[kCGImagePropertyPixelWidth] as? Int
-        meta.pixelHeight = props[kCGImagePropertyPixelHeight] as? Int
+        // Via NSNumber: `as? Int` returns nil for a float-backed CFNumber
+        // (e.g. a DPI of 96.5), silently dropping the value.
+        meta.pixelWidth = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue
+        meta.pixelHeight = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue
         meta.colorModel = props[kCGImagePropertyColorModel] as? String
-        if let dpi = props[kCGImagePropertyDPIWidth] as? Int { meta.dpi = dpi }
+        if let dpi = (props[kCGImagePropertyDPIWidth] as? NSNumber)?.intValue { meta.dpi = dpi }
 
         if let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
             meta.cameraMake = tiff[kCGImagePropertyTIFFMake] as? String
