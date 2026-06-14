@@ -1476,6 +1476,7 @@ final class AppModel {
     /// Set briefly when an indexing pass finishes, so the status bar can confirm
     /// "Indexed N photos" before clearing. `exifReadyCount` is the photos covered.
     private(set) var exifIndexJustFinished = false
+    @ObservationIgnored private var exifJustFinishedClearTask: Task<Void, Never>?
     private(set) var exifReadyCount = 0
 
     /// Index EXIF for any photos that don't have it yet — called on demand when
@@ -1577,9 +1578,13 @@ final class AppModel {
             // Briefly confirm the index is ready, then clear the status indicator.
             exifReadyCount = exif.count
             exifIndexJustFinished = true
-            Task {
+            // Cancel any prior clear task so overlapping passes don't clear the
+            // confirmation out of order (an earlier timer firing during a later
+            // pass would hide it prematurely).
+            exifJustFinishedClearTask?.cancel()
+            exifJustFinishedClearTask = Task {
                 try? await Task.sleep(for: .seconds(5))
-                exifIndexJustFinished = false
+                if !Task.isCancelled { exifIndexJustFinished = false }
             }
         }
     }

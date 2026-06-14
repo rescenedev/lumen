@@ -43,9 +43,13 @@ enum ExifIndexer {
 
         if let gps = props[kCGImagePropertyGPSDictionary] as? [CFString: Any],
            let lat = gps[kCGImagePropertyGPSLatitude] as? Double,
-           let lon = gps[kCGImagePropertyGPSLongitude] as? Double {
-            let latRef = (gps[kCGImagePropertyGPSLatitudeRef] as? String) ?? "N"
-            let lonRef = (gps[kCGImagePropertyGPSLongitudeRef] as? String) ?? "E"
+           let lon = gps[kCGImagePropertyGPSLongitude] as? Double,
+           // The ref tags are stored as positive magnitudes' signs; EXIF always
+           // pairs them with the coordinate. If a ref is missing we can't know
+           // the hemisphere — skip rather than guess N/E and mis-place a
+           // Southern/Western photo.
+           let latRef = gps[kCGImagePropertyGPSLatitudeRef] as? String,
+           let lonRef = gps[kCGImagePropertyGPSLongitudeRef] as? String {
             info.latitude = latRef == "S" ? -lat : lat
             info.longitude = lonRef == "W" ? -lon : lon
         }
