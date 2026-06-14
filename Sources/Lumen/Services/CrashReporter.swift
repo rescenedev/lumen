@@ -144,11 +144,16 @@ enum CrashReporter {
     }
 
     private static func pruneOldReports() {
-        let files = ((try? FileManager.default.contentsOfDirectory(
+        let all = ((try? FileManager.default.contentsOfDirectory(
             at: reportsDirectory, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.lastPathComponent.hasPrefix("crash-") }
-            .sorted { $0.lastPathComponent > $1.lastPathComponent }
-        for stale in files.dropFirst(maxKeptReports) {
+        // Prune handled and unhandled reports SEPARATELY, each capped at the
+        // limit. A single shared cap let a burst of already-seen (.handled)
+        // reports evict fresh unhandled (.crash) reports the user never saw.
+        let byNewest: (URL, URL) -> Bool = { $0.lastPathComponent > $1.lastPathComponent }
+        let handled = all.filter { $0.pathExtension == "handled" }.sorted(by: byNewest)
+        let unhandled = all.filter { $0.pathExtension == "crash" }.sorted(by: byNewest)
+        for stale in handled.dropFirst(maxKeptReports) + unhandled.dropFirst(maxKeptReports) {
             try? FileManager.default.removeItem(at: stale)
         }
     }
