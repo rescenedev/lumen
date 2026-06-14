@@ -121,7 +121,7 @@ final class PhotoGridCellView: NSView {
     /// The photo square (origin bottom-left, caption band below).
     private var photoRect: NSRect {
         let s = bounds.width
-        let capH = bounds.height - s
+        let capH = max(0, bounds.height - s)   // clamp: height can be < width mid-resize
         let thumbRect = NSRect(x: 1, y: capH + 1, width: s - 2, height: s - 2)
         let inset: CGFloat = selected ? 6 : 0
         return thumbRect.insetBy(dx: inset, dy: inset)
@@ -154,7 +154,7 @@ final class PhotoGridCellView: NSView {
     /// Base content (renders BELOW the image layer): accent frame + placeholder.
     override func draw(_ dirtyRect: NSRect) {
         let s = bounds.width
-        let capH = bounds.height - s
+        let capH = max(0, bounds.height - s)   // clamp: height can be < width mid-resize
         let thumbRect = NSRect(x: 1, y: capH + 1, width: s - 2, height: s - 2)
 
         if selected {
@@ -178,7 +178,7 @@ final class PhotoGridCellView: NSView {
     /// Overlay content (renders ABOVE the image layer): dim, badges, caption.
     fileprivate func drawOverlays() {
         let s = bounds.width
-        let capH = bounds.height - s
+        let capH = max(0, bounds.height - s)   // clamp: height can be < width mid-resize
         let rect = photoRect
         let clip = NSBezierPath(roundedRect: rect, xRadius: photoRadius, yRadius: photoRadius)
 
