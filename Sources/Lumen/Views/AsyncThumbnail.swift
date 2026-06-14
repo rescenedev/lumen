@@ -43,6 +43,9 @@ struct AsyncThumbnail: View {
     }
 
     private func load() async {
+        // url changed (task id) — clear any stale error from the previous photo
+        // so its warning icon doesn't linger over the new one.
+        failed = false
         if let hit = ThumbnailCache.shared.cached(for: url, maxPixel: maxPixel) {
             image = hit
             return

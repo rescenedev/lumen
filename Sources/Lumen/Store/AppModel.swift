@@ -405,7 +405,9 @@ final class AppModel {
         let changing = photos.filter { isFavorite($0) != value }
         store.update(paths: changing.map { $0.url.path },
                      logAs: (.favorite, value ? "Favorited" : "Unfavorited")) { $0.favorite = value }
-        favoritesCount += (value ? 1 : -1) * changing.count   // incremental — no full rescan
+        // Incremental — no full rescan. Clamp at 0: the count is derived and can
+        // drift if a favorited photo wasn't in the index at last recompute.
+        favoritesCount = max(0, favoritesCount + (value ? 1 : -1) * changing.count)
         bumpMeta()
     }
 
@@ -444,7 +446,7 @@ final class AppModel {
         let changing = photos.filter { self.label($0) != label }
         for photo in changing {
             let old = self.label(photo)
-            if old != .none { labelCounts[old, default: 0] -= 1 }
+            if old != .none { labelCounts[old] = max(0, (labelCounts[old] ?? 0) - 1) }
             if label != .none { labelCounts[label, default: 0] += 1 }
         }
         store.update(paths: changing.map { $0.url.path },
