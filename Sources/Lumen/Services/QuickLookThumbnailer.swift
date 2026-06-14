@@ -7,6 +7,10 @@ import QuickLookThumbnailing
 enum QuickLookThumbnailer {
     /// Synchronous thumbnail generation. Call only on a background queue.
     static func thumbnail(for url: URL, maxPixel: Int) -> NSImage? {
+        // Enforce the "background only" contract: the 15s semaphore wait below
+        // would freeze the UI if this were ever called on the main thread.
+        // (No-op in release; traps in debug to catch misuse early.)
+        dispatchPrecondition(condition: .notOnQueue(.main))
         let request = QLThumbnailGenerator.Request(
             fileAt: url,
             size: CGSize(width: maxPixel, height: maxPixel),

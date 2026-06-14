@@ -32,6 +32,9 @@ enum DuplicateFinder {
         defer { try? handle.close() }
         var hasher = SHA256()
         while true {
+            // Allow a long NAS hash to be cancelled (e.g. the user leaves the
+            // duplicates view) instead of reading the whole file regardless.
+            if Task.isCancelled { return nil }
             let chunk = (try? handle.read(upToCount: 1 << 20)) ?? Data()
             if chunk.isEmpty { break }
             hasher.update(data: chunk)

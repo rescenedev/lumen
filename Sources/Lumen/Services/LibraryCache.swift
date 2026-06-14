@@ -4,7 +4,9 @@ import Foundation
 /// instantly on the next launch (then reconciles with disk in the background).
 /// This matters most for large libraries on slow/network volumes (NAS).
 enum LibraryCache {
-    private static var dir: URL { AppDirectories.lumenSupport() }
+    // Created once on first access — not a computed property, so cache reads and
+    // writes don't issue a createDirectory syscall every time.
+    private static let dir: URL = AppDirectories.lumenSupport()
     private static var photosURL: URL { dir.appendingPathComponent("library-cache.plist") }
     private static var photosBinURL: URL { dir.appendingPathComponent("library-cache.bin") }
     private static var exifURL: URL { dir.appendingPathComponent("exif-cache.plist") }

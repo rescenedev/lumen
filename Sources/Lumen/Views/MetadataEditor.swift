@@ -146,7 +146,10 @@ struct FlowLayout: Layout {
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
-        return CGSize(width: maxWidth == .infinity ? x : maxWidth, height: y + rowHeight)
+        // Unconstrained: report the natural single-row width without the
+        // trailing spacing added after the last chip.
+        return CGSize(width: maxWidth == .infinity ? max(0, x - spacing) : maxWidth,
+                      height: y + rowHeight)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
