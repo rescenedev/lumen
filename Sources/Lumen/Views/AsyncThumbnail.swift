@@ -51,6 +51,8 @@ struct AsyncThumbnail: View {
             return
         }
         let loaded = await ThumbnailCache.shared.thumbnail(for: url, maxPixel: maxPixel, mtime: mtime)
+        // Bail if the url changed while loading — don't apply a stale thumbnail.
+        guard !Task.isCancelled else { return }
         if let loaded {
             image = loaded
         } else {
