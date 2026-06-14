@@ -9,4 +9,10 @@ struct FolderNode: Identifiable, Hashable {
     var children: [FolderNode]?
 
     var id: URL { url }
+
+    // Hash by url (the node identity) only. The synthesized hash would recurse
+    // through the entire `children` subtree — O(subtree) per node on a large
+    // tree. `==` stays synthesized (structural); equal nodes share a url, so
+    // their hashes remain consistent.
+    func hash(into hasher: inout Hasher) { hasher.combine(url) }
 }
