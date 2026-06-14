@@ -27,9 +27,16 @@ enum SortOrder: String, CaseIterable, Identifiable {
         case .dateOldest:
             return photos.sorted { ($0.creationDate ?? .distantFuture) < ($1.creationDate ?? .distantFuture) }
         case .nameAZ:
-            return photos.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedAscending }
+            return photos.sorted {
+                let c = $0.filename.localizedStandardCompare($1.filename)
+                // Tie-break on full path so equal filenames sort deterministically.
+                return c == .orderedSame ? $0.url.path < $1.url.path : c == .orderedAscending
+            }
         case .nameZA:
-            return photos.sorted { $0.filename.localizedStandardCompare($1.filename) == .orderedDescending }
+            return photos.sorted {
+                let c = $0.filename.localizedStandardCompare($1.filename)
+                return c == .orderedSame ? $0.url.path < $1.url.path : c == .orderedDescending
+            }
         case .sizeLargest:
             return photos.sorted { $0.byteSize > $1.byteSize }
         case .sizeSmallest:
