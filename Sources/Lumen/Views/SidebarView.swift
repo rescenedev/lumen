@@ -1,5 +1,28 @@
 import SwiftUI
 
+/// Pure decision for what a sidebar folder-row click does to the tree's
+/// expansion set. Extracted so it's unit-testable without AppKit.
+///
+/// A click is **expand-only**: it reveals a collapsed folder but never collapses
+/// one. Collapsing is the disclosure chevron's and the ← key's job. This is what
+/// makes the click robust — a duplicate mouse-down or a late native disclosure
+/// toggle can re-run this with the folder already open, and it stays open
+/// instead of flipping shut (the old toggle behaviour caused open-then-collapse).
+enum FolderTreeExpansion {
+    /// - Parameters:
+    ///   - current: the live expansion set when the deferred decision runs.
+    ///   - before: the set captured the instant the click landed.
+    ///   - clicked: the folder the selection resolved to.
+    /// - Returns: a new set (never mutates the input). Unchanged when the set
+    ///   shifted since the click (a chevron toggle — leave the native control
+    ///   alone) or the folder is already expanded.
+    static func expandedAfterFolderClick(current: Set<URL>, before: Set<URL>,
+                                         clicked: URL) -> Set<URL> {
+        guard current == before, !current.contains(clicked) else { return current }
+        return current.union([clicked])
+    }
+}
+
 /// Left sidebar: library shortcuts, smart collections, albums, tags, color
 /// labels, and folders.
 struct SidebarView: View {
@@ -29,9 +52,10 @@ struct SidebarView: View {
         // sees its key events and row-level gestures lose most clicks
         // (measured: 1 in 4 delivered). Behavior, Finder-style:
         //   • click on a folder row: the List selects it natively; the monitor
-        //     then toggles its children — so clicking an expanded folder while
-        //     browsing elsewhere folds it, and re-clicking re-opens it
-        //   • the disclosure chevron keeps its native toggle (excluded here)
+        //     then *expands* its children (expand-only — never folds, so a stray
+        //     second event can't collapse what the click just opened)
+        //   • the disclosure chevron keeps its native toggle — that, and ←, are
+        //     how a folder collapses
         //   • ↑/↓ only move the selection (no auto-expand); → reveals the
         //     selected folder's children, ← folds them
         .onAppear {
@@ -93,11 +117,11 @@ struct SidebarView: View {
         return nil   // consumed — the focus must stay on the sidebar
     }
 
-    /// A click on a sidebar outline row toggles the clicked folder's children.
+    /// A click on a sidebar outline row expands the clicked folder's children.
     /// The List's native selection runs first (the event is never consumed,
     /// and the deferred block runs after the table's tracking loop completes);
-    /// once it lands, the selected folder IS the clicked row, so toggling the
-    /// selection is toggling the click target. Chevron clicks are left to the
+    /// once it lands, the selected folder IS the clicked row, so expanding the
+    /// selection is expanding the click target. Chevron clicks are left to the
     /// outline's own toggle — detected by the expansion state having already
     /// changed when the deferred block runs.
     private func handleSidebarMouseDown(_ event: NSEvent) -> NSEvent? {
@@ -128,18 +152,17 @@ struct SidebarView: View {
         let before = expandedFolders
         // Small delay, not a bare async hop: the List pushes the click's
         // selection through its own deferred binding update, and racing it
-        // made the first cross-selection click's toggle land before the
-        // selection (observed). 50ms is imperceptible and safely after it.
+        // made the first cross-selection click land before the selection
+        // (observed). 50ms is imperceptible and safely after it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            guard case .folder(let url) = model.selectedSidebar,
-                  expandedFolders == before   // chevron clicks toggle natively — don't double-toggle
-            else { return }
-            withAnimation {
-                if expandedFolders.contains(url) {
-                    expandedFolders.remove(url)
-                } else {
-                    expandedFolders.insert(url)
-                }
+            guard case .folder(let url) = model.selectedSidebar else { return }
+            // Expand-only — see FolderTreeExpansion. A click reveals a folder
+            // but never folds it (chevron / ← do that), so a stray second event
+            // can't collapse what the click just opened.
+            let next = FolderTreeExpansion.expandedAfterFolderClick(
+                current: expandedFolders, before: before, clicked: url)
+            if next != expandedFolders {
+                withAnimation { expandedFolders = next }
             }
         }
         return event
