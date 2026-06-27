@@ -2489,7 +2489,12 @@ final class AppModel {
         // (Must run AFTER the cached exif install or it would re-index everything.)
         ensureExifIndex()
 
-        let available = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        // Per-root existence check off the main actor: fileExists on a stalled but
+        // mounted SMB share blocks until the OS timeout (seconds), which on the
+        // launch path would beachball the first frames.
+        let available = await Task.detached(priority: .utility) {
+            urls.filter { FileManager.default.fileExists(atPath: $0.path) }
+        }.value
         if !available.isEmpty { await reconcile(roots: available) }
 
         ensureExifIndex()   // catch any photos reconcile newly added

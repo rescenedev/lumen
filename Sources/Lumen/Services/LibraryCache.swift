@@ -14,6 +14,7 @@ enum LibraryCache {
     private static var photosURL: URL { baseDir.appendingPathComponent("library-cache.plist") }
     private static var photosBinURL: URL { baseDir.appendingPathComponent("library-cache.bin") }
     private static var exifURL: URL { baseDir.appendingPathComponent("exif-cache.plist") }
+    private static var exifBinURL: URL { baseDir.appendingPathComponent("exif-cache.bin") }
     private static var mtimesURL: URL { baseDir.appendingPathComponent("folder-mtimes.plist") }
 
     // MARK: Photos
@@ -162,16 +163,95 @@ enum LibraryCache {
 
     // MARK: EXIF index
 
+    // Binary EXIF index ("LXE1"). PropertyListDecoder/Codable measured ~680ms at
+    // 67k and churns the allocator in the first seconds after launch; this
+    // hand-rolled format mirrors the photo cache (LMC1). Layout: magic u32, count
+    // u64. Per entry: pathLen u32 + utf8, flags u8 (bit per present optional), then
+    // present values in field order — Int as i64, String as u32 len + utf8, Date &
+    // Double as f64 (timeIntervalSinceReferenceDate for Date).
+    private static let exifBinMagic: UInt32 = 0x4C58_4531   // "LXE1"
+
     static func loadExif() -> [String: ExifInfo]? {
-        guard let data = try? Data(contentsOf: exifURL) else { return nil }
-        return try? PropertyListDecoder().decode([String: ExifInfo].self, from: data)
+        if let data = try? Data(contentsOf: exifBinURL), let decoded = decodeExifBinary(data) { return decoded }
+        // Legacy plist fallback (first launch after update) — migrate to binary.
+        guard let data = try? Data(contentsOf: exifURL),
+              let decoded = try? PropertyListDecoder().decode([String: ExifInfo].self, from: data) else { return nil }
+        saveExif(decoded)
+        return decoded
     }
 
     static func saveExif(_ index: [String: ExifInfo]) {
-        let encoder = PropertyListEncoder()
-        encoder.outputFormat = .binary
-        guard let data = try? encoder.encode(index) else { return }
-        try? data.write(to: exifURL, options: .atomic)
+        guard (try? encodeExifBinary(index).write(to: exifBinURL, options: .atomic)) != nil else { return }
+        // Remove the stale legacy plist so an older build can't read an outdated
+        // index — only after the binary verifiably landed.
+        try? FileManager.default.removeItem(at: exifURL)
+    }
+
+    /// Pure encoder/decoder pair (no disk) — also the unit-test seam.
+    static func encodeExifBinary(_ index: [String: ExifInfo]) -> Data {
+        var out = Data()
+        out.reserveCapacity(index.count * 64 + 12)
+        func append<T>(_ value: T) { withUnsafeBytes(of: value) { out.append(contentsOf: $0) } }
+        func appendString(_ s: String) { let u = Array(s.utf8); append(UInt32(u.count)); out.append(contentsOf: u) }
+        append(exifBinMagic)
+        append(UInt64(index.count))
+        for (path, info) in index {
+            appendString(path)
+            var flags: UInt8 = 0
+            if info.pixelWidth != nil  { flags |= 1 << 0 }
+            if info.pixelHeight != nil { flags |= 1 << 1 }
+            if info.cameraMake != nil  { flags |= 1 << 2 }
+            if info.cameraModel != nil { flags |= 1 << 3 }
+            if info.dateTaken != nil   { flags |= 1 << 4 }
+            if info.latitude != nil    { flags |= 1 << 5 }
+            if info.longitude != nil   { flags |= 1 << 6 }
+            append(flags)
+            if let v = info.pixelWidth  { append(Int64(v)) }
+            if let v = info.pixelHeight { append(Int64(v)) }
+            if let v = info.cameraMake  { appendString(v) }
+            if let v = info.cameraModel { appendString(v) }
+            if let v = info.dateTaken   { append(v.timeIntervalSinceReferenceDate) }
+            if let v = info.latitude    { append(v) }
+            if let v = info.longitude   { append(v) }
+        }
+        return out
+    }
+
+    static func decodeExifBinary(_ data: Data) -> [String: ExifInfo]? {
+        return data.withUnsafeBytes { (buf: UnsafeRawBufferPointer) -> [String: ExifInfo]? in
+            var offset = 0
+            func read<T>(_ type: T.Type) -> T? {
+                guard offset + MemoryLayout<T>.size <= buf.count else { return nil }
+                defer { offset += MemoryLayout<T>.size }
+                return buf.loadUnaligned(fromByteOffset: offset, as: type)
+            }
+            func readString() -> String? {
+                guard let len = read(UInt32.self).map(Int.init), offset + len <= buf.count else { return nil }
+                let s = String(decoding: buf[offset..<(offset + len)], as: UTF8.self)
+                offset += len
+                return s
+            }
+            guard read(UInt32.self) == exifBinMagic, let count = read(UInt64.self),
+                  // Min entry is 5 bytes (4-byte pathLen + 1-byte flags), so a
+                  // corrupt count can't trap Int() or over-reserve.
+                  count <= UInt64(max(0, buf.count - 12) / 5)
+            else { return nil }
+            var out: [String: ExifInfo] = [:]
+            out.reserveCapacity(Int(count))
+            for _ in 0..<count {
+                guard let path = readString(), let flags = read(UInt8.self) else { return nil }
+                var info = ExifInfo()
+                if flags & (1 << 0) != 0 { guard let v = read(Int64.self) else { return nil }; info.pixelWidth = Int(v) }
+                if flags & (1 << 1) != 0 { guard let v = read(Int64.self) else { return nil }; info.pixelHeight = Int(v) }
+                if flags & (1 << 2) != 0 { guard let v = readString() else { return nil }; info.cameraMake = v }
+                if flags & (1 << 3) != 0 { guard let v = readString() else { return nil }; info.cameraModel = v }
+                if flags & (1 << 4) != 0 { guard let v = read(Double.self) else { return nil }; info.dateTaken = Date(timeIntervalSinceReferenceDate: v) }
+                if flags & (1 << 5) != 0 { guard let v = read(Double.self) else { return nil }; info.latitude = v }
+                if flags & (1 << 6) != 0 { guard let v = read(Double.self) else { return nil }; info.longitude = v }
+                out[path] = info
+            }
+            return out
+        }
     }
 
     // MARK: Folder modification times
@@ -194,7 +274,7 @@ enum LibraryCache {
         // earlier can't land after the clear and resurrect the cache the user
         // just wiped (it would reappear on next launch). Snapshot the URLs now;
         // the deletion runs after any in-flight/queued save.
-        let urls = [photosURL, photosBinURL, exifURL, mtimesURL]
+        let urls = [photosURL, photosBinURL, exifURL, exifBinURL, mtimesURL]
         saveQueue.async {
             for url in urls { try? FileManager.default.removeItem(at: url) }
         }

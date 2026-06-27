@@ -35,4 +35,26 @@ func perfAuditFixTests() {
                    "output must be unchanged from the previous .formatted() rendering")
         checkEqual(Format.dateString(nil), "—", "nil renders as an em dash")
     }
+
+    // The EXIF index cache moved from PropertyListDecoder/Codable (~680ms at 67k)
+    // to a hand-rolled binary format, like the photo cache. It must round-trip every
+    // field exactly and reject corrupt/truncated data.
+    test("exifBinaryRoundTripPreservesEveryField") {
+        let index: [String: ExifInfo] = [
+            "/Volumes/nas/a.jpg": ExifInfo(pixelWidth: 4000, pixelHeight: 3000,
+                cameraMake: "SONY", cameraModel: "ILCE-7CM2",
+                dateTaken: Fixtures.date("2024-01-02T03:04:05Z"), latitude: 37.5, longitude: 127.0),
+            "/Users/x/사진 (1).heic": ExifInfo(),   // every field nil
+            "/c.png": ExifInfo(pixelWidth: 100, pixelHeight: nil, cameraMake: nil,
+                cameraModel: "X100", dateTaken: nil, latitude: nil, longitude: 1.5),
+        ]
+        let decoded = LibraryCache.decodeExifBinary(LibraryCache.encodeExifBinary(index))
+        checkEqual(decoded, index, "exif binary must round-trip every field exactly")
+    }
+
+    test("exifBinaryRejectsGarbageAndTruncation") {
+        checkNil(LibraryCache.decodeExifBinary(Data([0x00, 0x01, 0x02])), "garbage rejected")
+        let valid = LibraryCache.encodeExifBinary(["/a.jpg": ExifInfo(pixelWidth: 1, longitude: 2.0)])
+        checkNil(LibraryCache.decodeExifBinary(valid.prefix(valid.count - 2)), "truncated rejected")
+    }
 }

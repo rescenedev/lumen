@@ -349,7 +349,10 @@ final class ThumbnailCache {
     /// Decode cached JPEG data at the requested tier. Full tier decodes as-is;
     /// smaller tiers downsample (orientation was already baked at encode time).
     private static func decode(_ data: Data, maxPixel: Int) -> NSImage? {
-        if maxPixel >= gridMaxPixel { return NSImage(data: data) }
+        // ALL tiers (incl. the default 512 grid tier) decode the bitmap NOW via
+        // shouldCacheImmediately, on this off-main lane. Previously the full tier
+        // returned NSImage(data:), which defers the JPEG decode to AppKit's first
+        // draw — i.e. on the main thread during scroll (~0.5-1.5ms per fresh cell).
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
             return NSImage(data: data)
