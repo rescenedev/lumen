@@ -810,7 +810,7 @@ final class AppModel {
     /// for a search measured 380-430ms — as costly as the sort it preceded).
     var visiblePhotos: [Photo] {
         let key = visibleSignature
-        if let hit = visibleCacheMap[key] { lastVisible = hit; return hit }
+        if let hit = visibleCacheMap[key] { lastVisible = hit; cancelSupersededSort(currentKey: key); return hit }
 
         let base = scoped(sourcePhotos)
         let sorter = currentSorter()
@@ -844,6 +844,7 @@ final class AppModel {
             let sorted = sorter(gathered)
             cacheVisible(key, sorted)
             lastVisible = sorted
+            cancelSupersededSort(currentKey: key)
             return sorted
         }
 
@@ -880,6 +881,11 @@ final class AppModel {
                 // main actor after the detached work — the writes below are
                 // main-actor-confined (no data race) without an explicit hop.
                 guard let self else { return }
+                // Superseded (a navigation to a cache-hit/small scope cancelled us):
+                // bail before touching state. The detached CPU work already ran, but
+                // we skip the now-pointless cache/spinner writes — and the late
+                // guards below would no-op anyway.
+                if Task.isCancelled { return }
                 if let builtCams, self.indexVersion == indexVersionSnapshot {
                     self.lowerCameraCache = builtCams
                     self.lowerCameraKey = indexVersionSnapshot
@@ -898,6 +904,19 @@ final class AppModel {
             }
         }
         return lastVisible
+    }
+
+    /// A large-scope sort started for a PREVIOUS scope is now superseded: we're
+    /// serving a cache hit or a synchronously-computed small scope for `currentKey`.
+    /// Cancel it and drop its spinner so it doesn't linger over already-settled
+    /// content (the task's late-landing guards already stop it applying stale data).
+    /// Writing the observed `isSortingVisible` here happens at most once per orphan
+    /// episode (the guard makes it idempotent), so it can't loop view updates.
+    private func cancelSupersededSort(currentKey: Int) {
+        guard sortInFlightKey != -1, sortInFlightKey != currentKey else { return }
+        sortTask?.cancel()
+        sortInFlightKey = -1
+        isSortingVisible = false
     }
 
     // Library statistics (folders, recently-added, on-this-day) — depends only
@@ -1058,12 +1077,26 @@ final class AppModel {
         return groups
     }
 
-    /// Photos that have GPS coordinates, for the map.
+    @ObservationIgnored private var geotaggedCache: [(photo: Photo, latitude: Double, longitude: Double)] = []
+    @ObservationIgnored private var geotaggedCacheKey: (Int, Int, Int)?
+    /// Photos that have GPS coordinates, for the map. Cached on
+    /// (visibleSignature, indexVersion, visibleResultRevision): the map body reads
+    /// this (and its .count/.isEmpty) several times per evaluation, and uncached it
+    /// was an O(visible) string-alloc + EXIF lookup over the whole 60k scope each
+    /// time. `let snapshot = exif` is read unconditionally so SwiftUI re-evaluates
+    /// when the EXIF index changes (which also bumps indexVersion → cache miss).
     var geotaggedPhotos: [(photo: Photo, latitude: Double, longitude: Double)] {
-        visiblePhotos.compactMap { photo in
-            guard let info = exif[photo.url.path], let lat = info.latitude, let lon = info.longitude else { return nil }
+        let photos = visiblePhotos
+        let snapshot = exif
+        let key = (visibleSignature, indexVersion, visibleResultRevision)
+        if let cached = geotaggedCacheKey, cached == key { return geotaggedCache }
+        let result = photos.compactMap { photo -> (photo: Photo, latitude: Double, longitude: Double)? in
+            guard let info = snapshot[photo.url.path], let lat = info.latitude, let lon = info.longitude else { return nil }
             return (photo, lat, lon)
         }
+        geotaggedCache = result
+        geotaggedCacheKey = key
+        return result
     }
 
     // MARK: - Photos-library map (computed off-main; assets carry location in PhotoKit)
@@ -1078,19 +1111,39 @@ final class AppModel {
     private(set) var assetMapTruncated = false
     @ObservationIgnored private var assetMapKey = -1
 
+    /// Re-fires the map's location scan when the scope changes OR an off-main sort
+    /// settles (a result lands without changing `visibleSignature`, only the
+    /// revision). Observable — `PhotoMapView` keys its `.task` on this so the map
+    /// isn't left scanning a stale list.
+    var assetMapScanToken: Int {
+        var hasher = Hasher()
+        hasher.combine(visibleSignature)
+        hasher.combine(isSortingVisible)
+        return hasher.finalize()
+    }
+
     /// Scan the current Photos scope's geotagged assets on a background thread and
     /// stream pins to the map in batches, so the map shows immediately and fills
     /// in progressively (reading 70k `PHAsset.location`s on the main thread froze
     /// the app). Capped at `assetMapPinLimit`.
     func ensureAssetMapPins() {
         guard committedSidebar.isPhotosLibrarySource else { return }
-        let key = visibleSignature
+        let photos = visiblePhotos
+        // If reading visiblePhotos found (or just kicked) an off-main sort for this
+        // scope, `photos` is the stale previous list — skip; PhotoMapView re-fires
+        // this when the sort settles (assetMapScanToken changes).
+        guard sortInFlightKey != visibleSignature else { return }
+        // Fold visibleResultRevision into the key so a sort landing under the same
+        // signature re-scans against the FINAL list (mirrors monthGroups).
+        var hasher = Hasher()
+        hasher.combine(visibleSignature)
+        hasher.combine(visibleResultRevision)
+        let key = hasher.finalize()
         guard assetMapKey != key else { return }
         assetMapKey = key
         isLoadingAssetMap = true
         assetMapPins = []
         assetMapTruncated = false
-        let photos = visiblePhotos
         let limit = Self.assetMapPinLimit
         // Rebind weak→strong once: referencing a captured weak VAR from the
         // inner MainActor closures is a Swift 6 sendability error. AppModel
@@ -1147,12 +1200,15 @@ final class AppModel {
     @ObservationIgnored private var selectedPhotosCache: [Photo] = []
     // Optional sentinel: nil can never collide with a real key (a fixed tuple
     // sentinel could, in principle, match a real signature).
-    @ObservationIgnored private var selectedPhotosCacheKey: (Int, Int, Int, Int)?
+    @ObservationIgnored private var selectedPhotosCacheKey: (Int, Int, Int, Int, Int)?
     var selectedPhotos: [Photo] {
         // visibleSignature is part of the key because huge selections take
         // their ORDER from visiblePhotos — a sort/filter change after ⌘A must
         // not serve a stale ordering to order-sensitive batch actions (rename).
-        let key = (selectionRevision, libraryVersion, assetsVersion, visibleSignature)
+        // visibleResultRevision too: an off-main sort lands without changing the
+        // signature, so without it the cache would keep serving the pre-sort order
+        // (same reason monthGroups keys on it).
+        let key = (selectionRevision, libraryVersion, assetsVersion, visibleSignature, visibleResultRevision)
         if let cached = selectedPhotosCacheKey, cached == key { return selectedPhotosCache }
         let result = computeSelectedPhotos()
         selectedPhotosCache = result
@@ -2163,9 +2219,13 @@ final class AppModel {
             else if let index = viewerIndex { viewerIndex = min(index, viewerPhotos.count - 1) }
         }
 
-        let remaining = visiblePhotos
-        if let index = firstIndex, !remaining.isEmpty {
-            selectOnly(remaining[min(index, remaining.count - 1)])
+        // Pick the survivor from the list currently ON SCREEN minus the trashed
+        // entries — NOT from a fresh visiblePhotos read. For a >4000 scope the
+        // library-version bump above makes visiblePhotos kick an off-main sort and
+        // return the stale pre-delete list (still containing the deleted photos),
+        // so selecting from it would land on a just-deleted id.
+        if let survivor = Self.nearestSurvivor(in: lastVisible, excluding: trashed, at: firstIndex) {
+            selectOnly(survivor)
         } else {
             clearSelection()
         }
@@ -2178,6 +2238,18 @@ final class AppModel {
                 self?.undoDeletion(undo)
             }
         }
+    }
+
+    /// The photo to select after deleting `removed` from the on-screen list
+    /// `onScreen`: the survivor nearest the deleted position, in display order.
+    /// Returns nil (→ clear selection) when no anchor index is given or nothing
+    /// survives. Pure (no I/O) so it's the unit-test seam, and it derives survivors
+    /// SYNCHRONOUSLY — never from `visiblePhotos`, which is stale during the
+    /// off-main re-sort that a delete triggers on a large scope.
+    nonisolated static func nearestSurvivor(in onScreen: [Photo], excluding removed: Set<URL>, at index: Int?) -> Photo? {
+        let remaining = onScreen.filter { !removed.contains($0.url) }
+        guard let index, !remaining.isEmpty else { return nil }
+        return remaining[min(max(index, 0), remaining.count - 1)]
     }
 
     /// Reverse a just-confirmed deletion: move staged files back to their

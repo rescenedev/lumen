@@ -17,15 +17,20 @@ final class MetadataStore {
     private var reportedWriteFailure = false
 
     /// All writes go through here so a failure is logged and surfaced (once).
-    private func write(_ updates: (Database) throws -> Void) {
+    /// Returns whether the write committed, so callers that must not act on a
+    /// failed write (e.g. the legacy migration deleting its only source) can tell.
+    @discardableResult
+    private func write(_ updates: (Database) throws -> Void) -> Bool {
         do {
             try db.write(updates)
+            return true
         } catch {
             NSLog("Lumen: metadata write failed: \(error)")
             if !reportedWriteFailure {
                 reportedWriteFailure = true
                 onFirstWriteFailure?()
             }
+            return false
         }
     }
 
@@ -131,8 +136,8 @@ final class MetadataStore {
                     ? (try? String(data: JSONEncoder().encode(before), encoding: .utf8)) ?? "{}"
                     : ""   // too big to keep — recorded but not revertible
                 try db.execute(sql: """
-                    INSERT INTO op_log (ts, kind, summary, payload, undone) VALUES (?, ?, ?, ?, 0)
-                    """, arguments: [Date().timeIntervalSince1970, log.kind.rawValue, log.summary, payload])
+                    INSERT INTO op_log (ts, kind, summary, payload, affected, undone) VALUES (?, ?, ?, ?, ?, 0)
+                    """, arguments: [Date().timeIntervalSince1970, log.kind.rawValue, log.summary, payload, count])
                 logID = db.lastInsertedRowID
             }
         }
@@ -143,19 +148,20 @@ final class MetadataStore {
 
     func recentOperations(limit: Int = 200) -> [OperationLogEntry] {
         (try? db.read { db -> [OperationLogEntry] in
+            // Read the affected count from its own column — never decode the
+            // payload here (a batch op stores up to 5000 PhotoMeta; decoding them
+            // all just to count would hang the main thread on history open).
             let rows = try Row.fetchAll(db, sql: """
-                SELECT id, ts, kind, summary, payload, undone FROM op_log
+                SELECT id, ts, kind, summary, affected, undone FROM op_log
                 ORDER BY id DESC LIMIT ?
                 """, arguments: [limit])
             return rows.map { row in
-                let payload: String = row["payload"]
-                let count = Self.payloadCount(payload)
-                return OperationLogEntry(
+                OperationLogEntry(
                     id: row["id"],
                     date: Date(timeIntervalSince1970: row["ts"]),
                     kind: OperationLogEntry.Kind(rawValue: row["kind"]) ?? .other,
                     summary: row["summary"],
-                    affectedCount: count,
+                    affectedCount: row["affected"],
                     undone: (row["undone"] as Int) != 0)
             }
         }) ?? []
@@ -211,12 +217,6 @@ final class MetadataStore {
 
     func clearOperationHistory() {
         write { try $0.execute(sql: "DELETE FROM op_log") }
-    }
-
-    private static func payloadCount(_ payload: String) -> Int {
-        guard !payload.isEmpty, let data = payload.data(using: .utf8),
-              let dict = try? JSONDecoder().decode([String: PhotoMeta?].self, from: data) else { return 0 }
-        return dict.count
     }
 
     func allTags() -> [(tag: String, count: Int)] {
@@ -417,24 +417,39 @@ final class MetadataStore {
     // MARK: - One-time migration from the old JSON store
 
     private func migrateLegacyJSONIfNeeded() {
-        guard itemsCache.isEmpty, albumsCache.isEmpty else { return }
         let url = AppDirectories.applicationSupport().appendingPathComponent("Lumen/library.json")
-        guard let data = try? Data(contentsOf: url) else { return }
+        migrateLegacy(from: url)
+    }
+
+    /// Migrate a legacy `library.json` into SQLite. The file is renamed to `.bak`
+    /// ONLY after the DB write verifiably commits — on failure (full disk, corrupt
+    /// or read-only DB) it is left in place so the next launch retries instead of
+    /// losing the user's only copy of favorites/ratings/labels/albums. The decoded
+    /// metadata stays in the in-memory mirror for this session either way. Returns
+    /// true when a migration ran and committed. (`from:` is a test seam; the live
+    /// path passes the real Application Support URL.)
+    @discardableResult
+    func migrateLegacy(from url: URL) -> Bool {
+        guard itemsCache.isEmpty, albumsCache.isEmpty else { return false }
+        guard let data = try? Data(contentsOf: url) else { return false }
 
         struct Payload: Codable { var items: [String: PhotoMeta] = [:]; var albums: [Album] = [] }
-        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return }
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return false }
 
         for (path, meta) in payload.items where !meta.isEmpty {
             itemsCache[path] = meta
         }
         albumsCache = payload.albums
-        persistAll()
+        guard persistAll() else { return false }   // write failed — keep library.json for a retry
 
-        // Keep the old file as a backup rather than deleting it.
+        // Keep the old file as a backup rather than deleting it — now that the
+        // migration has verifiably committed to the DB.
         try? FileManager.default.moveItem(at: url, to: url.appendingPathExtension("bak"))
+        return true
     }
 
-    private func persistAll() {
+    @discardableResult
+    private func persistAll() -> Bool {
         write { db in
             for (path, meta) in itemsCache {
                 let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8) ?? "[]") ?? "[]"

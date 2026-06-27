@@ -7,10 +7,14 @@ enum LibraryCache {
     // Created once on first access — not a computed property, so cache reads and
     // writes don't issue a createDirectory syscall every time.
     private static let dir: URL = AppDirectories.lumenSupport()
-    private static var photosURL: URL { dir.appendingPathComponent("library-cache.plist") }
-    private static var photosBinURL: URL { dir.appendingPathComponent("library-cache.bin") }
-    private static var exifURL: URL { dir.appendingPathComponent("exif-cache.plist") }
-    private static var mtimesURL: URL { dir.appendingPathComponent("folder-mtimes.plist") }
+    /// Test seam: redirect the cache directory so disk tests never touch the real
+    /// user cache. nil = the real Application Support location.
+    static var directoryOverride: URL?
+    private static var baseDir: URL { directoryOverride ?? dir }
+    private static var photosURL: URL { baseDir.appendingPathComponent("library-cache.plist") }
+    private static var photosBinURL: URL { baseDir.appendingPathComponent("library-cache.bin") }
+    private static var exifURL: URL { baseDir.appendingPathComponent("exif-cache.plist") }
+    private static var mtimesURL: URL { baseDir.appendingPathComponent("folder-mtimes.plist") }
 
     // MARK: Photos
 
@@ -57,6 +61,12 @@ enum LibraryCache {
     /// scheduled earlier (e.g. the one-time plist→binary migration) can never
     /// land after — and silently revert — a newer library state.
     private static let saveQueue = DispatchQueue(label: "lumen.librarycache.save", qos: .utility)
+
+    /// Test seam: block until all queued cache writes/deletes have run.
+    static func flushForTesting() { saveQueue.sync {} }
+    /// Test seam: submit a block onto the save queue (used to hold the queue busy
+    /// so an ordering race can be reproduced deterministically).
+    static func runOnSaveQueueForTesting(_ block: @escaping () -> Void) { saveQueue.async(execute: block) }
 
     static func savePhotos(_ photos: [Photo]) {
         // Persist in the launch sort order (date, newest first): launch always
@@ -180,9 +190,13 @@ enum LibraryCache {
     }
 
     static func clear() {
-        try? FileManager.default.removeItem(at: photosURL)
-        try? FileManager.default.removeItem(at: photosBinURL)
-        try? FileManager.default.removeItem(at: exifURL)
-        try? FileManager.default.removeItem(at: mtimesURL)
+        // Delete on the SAME serial queue the saves use, so a save scheduled
+        // earlier can't land after the clear and resurrect the cache the user
+        // just wiped (it would reappear on next launch). Snapshot the URLs now;
+        // the deletion runs after any in-flight/queued save.
+        let urls = [photosURL, photosBinURL, exifURL, mtimesURL]
+        saveQueue.async {
+            for url in urls { try? FileManager.default.removeItem(at: url) }
+        }
     }
 }

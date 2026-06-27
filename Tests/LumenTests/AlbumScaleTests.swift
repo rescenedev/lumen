@@ -111,7 +111,12 @@ func albumScaleTests() {
         let big1 = store2.recentOperations()
         checkEqual(big1.count, 1)
         check(!store2.canUndo(big1[0].id), "oversized action must not be undoable")
-        checkEqual(big1[0].affectedCount, 0, "oversized payload isn't stored")
+        // The affected count is recorded in its own column at insert time, so an
+        // oversized op still reports its real size even though its payload isn't
+        // kept for undo (previously it showed 0 — the count was derived from the
+        // dropped payload).
+        checkEqual(big1[0].affectedCount, MetadataStore.maxLoggedPaths + 1,
+                   "oversized op still reports its real affected count")
     }
 
     test("removeFromAlbumAtScaleIsFastAndCorrect") {
