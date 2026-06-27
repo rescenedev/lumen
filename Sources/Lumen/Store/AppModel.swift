@@ -1078,12 +1078,17 @@ final class AppModel {
             return cached.groups
         }
         let cal = Calendar.current
-        let grouped = Dictionary(grouping: photos) { photo -> Date in
-            let date = photo.creationDate ?? .distantPast
-            return cal.date(from: cal.dateComponents([.year, .month], from: date)) ?? .distantPast
+        // Group by an integer year*100+month key: ONE Calendar.dateComponents per
+        // photo (the title's date is reconstructed once per group), halving the
+        // per-photo ICU cost vs the previous dateComponents + date(from:) pair.
+        // The Int key sorts chronologically, matching the old Date sort.
+        let grouped = Dictionary(grouping: photos) { photo -> Int in
+            let c = cal.dateComponents([.year, .month], from: photo.creationDate ?? .distantPast)
+            return (c.year ?? 0) * 100 + (c.month ?? 0)
         }
-        let groups = grouped.keys.sorted(by: >).map { month in
-            (title: Self.monthFormatter.string(from: month), photos: grouped[month] ?? [])
+        let groups = grouped.keys.sorted(by: >).map { ym -> (title: String, photos: [Photo]) in
+            let date = cal.date(from: DateComponents(year: ym / 100, month: ym % 100)) ?? .distantPast
+            return (title: Self.monthFormatter.string(from: date), photos: grouped[ym] ?? [])
         }
         monthGroupsCache = (key, visibleResultRevision, groups)
         return groups
@@ -1742,8 +1747,16 @@ final class AppModel {
 
     /// Folder watcher callback.
     private func rescanRoots() {
-        let available = rootFolders.filter { FileManager.default.fileExists(atPath: $0.path) }
-        Task { await reconcile(roots: available) }
+        // Stat the roots off the main actor: an FS change on a stalled-but-mounted
+        // SMB share would otherwise block the main thread on fileExists until the
+        // OS timeout (seconds) every time the watcher fires.
+        let roots = rootFolders
+        Task { [weak self] in
+            let available = await Task.detached(priority: .utility) {
+                roots.filter { FileManager.default.fileExists(atPath: $0.path) }
+            }.value
+            await self?.reconcile(roots: available)
+        }
     }
 
     func clearLibrary() {
