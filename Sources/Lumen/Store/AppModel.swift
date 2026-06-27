@@ -479,7 +479,18 @@ final class AppModel {
         bumpMeta()
     }
 
-    func allTags() -> [(tag: String, count: Int)] { store.allTags() }
+    @ObservationIgnored private var allTagsCache: [(tag: String, count: Int)] = []
+    @ObservationIgnored private var allTagsCacheKey = -1
+    /// Tag list + counts for the sidebar. Cached on metaRevision (an observed
+    /// property, so reading it keeps SidebarView reactive) — store.allTags() scans
+    /// the whole metadata mirror and sorts, and SidebarView.tagsSection calls this
+    /// on every body evaluation, not just when a tag actually changes.
+    func allTags() -> [(tag: String, count: Int)] {
+        if allTagsCacheKey == metaRevision { return allTagsCache }
+        allTagsCache = store.allTags()
+        allTagsCacheKey = metaRevision
+        return allTagsCache
+    }
 
     /// Kick off background warming of the on-disk thumbnail cache for every
     /// photo, so navigating to any folder is instant even on a NAS. The scope

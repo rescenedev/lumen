@@ -21,7 +21,11 @@ enum Format {
 
     static func dateString(_ date: Date?) -> String {
         guard let date else { return "—" }
-        return date.formatted(date: .abbreviated, time: .shortened)
+        // Reuse the cached DateFormatter (.medium/.short renders identically to
+        // .abbreviated/.shortened). Date.formatted() builds a fresh FormatStyle
+        // per call — ~10-50x slower, and the table date column calls this per
+        // visible row on every scroll frame.
+        return Format.date.string(from: date)
     }
 
     static func dimensions(_ width: Int?, _ height: Int?) -> String {

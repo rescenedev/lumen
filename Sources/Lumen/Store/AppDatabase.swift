@@ -99,6 +99,12 @@ final class AppDatabase {
                                arguments: [obj.count, row["id"]])
             }
         }
+        migrator.registerMigration("v5-album-photo-path-index") { db in
+            // album_photo's PK is (album_id, path), so path-only lookups (used by
+            // rename/forget on every file move/delete) can't use it and full-scan
+            // the table. A dedicated path index makes those O(log n).
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_album_photo_path ON album_photo(path);")
+        }
         try migrator.migrate(queue)
     }
 }
