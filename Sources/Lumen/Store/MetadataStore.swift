@@ -93,6 +93,7 @@ final class MetadataStore {
         var upserts: [(path: String, meta: PhotoMeta, tags: String)] = []
         var deletes: [String] = []
         var before: [String: PhotoMeta?] = [:]   // nil = no meta existed
+        let encoder = JSONEncoder()              // one encoder for the whole batch
         for path in paths {
             let prior = itemsCache[path]
             var meta = prior ?? PhotoMeta()
@@ -106,7 +107,7 @@ final class MetadataStore {
                 deletes.append(path)
             } else {
                 itemsCache[path] = meta
-                let tags = (try? String(data: JSONEncoder().encode(meta.tags), encoding: .utf8)) ?? "[]"
+                let tags = (try? String(data: encoder.encode(meta.tags), encoding: .utf8)) ?? "[]"
                 upserts.append((path, meta, tags))
             }
         }
@@ -385,6 +386,7 @@ final class MetadataStore {
     // MARK: - Loading
 
     private func load() {
+        let decoder = JSONDecoder()   // reused across rows, not allocated per row
         try? db.read { db in
             let metaRows = try Row.fetchAll(db, sql: "SELECT path, favorite, rating, label, tags, rejected FROM photo_meta")
             for row in metaRows {
@@ -394,9 +396,10 @@ final class MetadataStore {
                 meta.rating = row["rating"]
                 meta.label = ColorLabel(rawValue: row["label"]) ?? .none
                 meta.rejected = ((row["rejected"] as Int?) ?? 0) != 0
-                if let tagsJSON: String = row["tags"],
+                // Skip the empty-tags sentinel — the common case — without decoding.
+                if let tagsJSON: String = row["tags"], tagsJSON != "[]",
                    let data = tagsJSON.data(using: .utf8),
-                   let tags = try? JSONDecoder().decode([String].self, from: data) {
+                   let tags = try? decoder.decode([String].self, from: data) {
                     meta.tags = tags
                 }
                 itemsCache[path] = meta
