@@ -24,4 +24,15 @@ func perfAuditFixTests() {
         checkEqual(reloaded.recentOperations().first?.affectedCount, 4,
                    "affected count survives a reload (read from the column)")
     }
+
+    // Format.dateString now uses the cached DateFormatter (per-row on table scroll)
+    // and must render identically to the previous Date.formatted() call.
+    test("dateStringUsesCachedFormatterWithUnchangedOutput") {
+        let d = Fixtures.date("2026-05-09T15:13:00Z")
+        checkEqual(Format.dateString(d), Format.date.string(from: d),
+                   "dateString must use the cached medium/short DateFormatter")
+        checkEqual(Format.dateString(d), d.formatted(date: .abbreviated, time: .shortened),
+                   "output must be unchanged from the previous .formatted() rendering")
+        checkEqual(Format.dateString(nil), "—", "nil renders as an em dash")
+    }
 }

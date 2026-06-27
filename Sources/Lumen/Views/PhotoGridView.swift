@@ -87,12 +87,13 @@ struct PhotoGridView: View {
     }
 
     private func cell(_ photo: Photo) -> some View {
-        ThumbnailCell(
+        let m = model.meta(photo)   // one lookup instead of three per cell
+        return ThumbnailCell(
             photo: photo,
             isSelected: model.selection.contains(photo.id),
-            isFavorite: model.isFavorite(photo),
-            rating: model.rating(photo),
-            label: model.label(photo),
+            isFavorite: m.favorite,
+            rating: m.rating,
+            label: m.label,
             size: model.thumbnailSize
         )
         .equatable()

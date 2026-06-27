@@ -189,12 +189,13 @@ struct PhotoCollectionView: NSViewRepresentable {
                 ?? PhotoCollectionItem(nibName: nil, bundle: nil)
             guard photos.indices.contains(indexPath.item) else { return item }
             let photo = photos[indexPath.item]
+            let m = model.meta(photo)   // one path-alloc + dict lookup, not four
             item.configure(photo: photo, size: CGFloat(model.thumbnailSize),
                            selected: model.selection.contains(photo.id),
                            selectionActive: model.selection.count > 1,
-                           favorite: model.isFavorite(photo),
-                           rating: model.rating(photo), label: model.label(photo),
-                           rejected: model.isRejected(photo))
+                           favorite: m.favorite,
+                           rating: m.rating, label: m.label,
+                           rejected: m.rejected)
             return item
         }
 
@@ -224,9 +225,10 @@ struct PhotoCollectionView: NSViewRepresentable {
                 guard photos.indices.contains(ip.item),
                       let item = cv.item(at: ip) as? PhotoCollectionItem else { continue }
                 let photo = photos[ip.item]
-                item.updateBadges(favorite: model.isFavorite(photo),
-                                  rating: model.rating(photo), label: model.label(photo),
-                                  rejected: model.isRejected(photo))
+                let m = model.meta(photo)
+                item.updateBadges(favorite: m.favorite,
+                                  rating: m.rating, label: m.label,
+                                  rejected: m.rejected)
             }
         }
 
