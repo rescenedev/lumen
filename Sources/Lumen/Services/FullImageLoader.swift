@@ -8,7 +8,11 @@ final class FullImageLoader {
     static let shared = FullImageLoader()
 
     private let cache = NSCache<NSString, NSImage>()
+    // Foreground (the photo being viewed) and prefetch (neighbours) use SEPARATE
+    // lanes so the image the user is staring at never queues behind a neighbour's
+    // multi-hundred-ms NAS decode. Prefetch runs at a lower QoS.
     private let queue = DispatchQueue(label: "lumen.fullimage", qos: .userInitiated)
+    private let prefetchQueue = DispatchQueue(label: "lumen.fullimage.prefetch", qos: .utility)
 
     private init() {
         // ~128 MB — holds a few 4096px images (current + neighbours), evicting oldest.
@@ -45,7 +49,7 @@ final class FullImageLoader {
         for url in urls where url.scheme != Photo.assetScheme {   // asset paging warms via PhotoKit on view
             let key = url.path as NSString
             if cache.object(forKey: key) != nil { continue }
-            queue.async { [weak self] in
+            prefetchQueue.async { [weak self] in
                 guard let self, self.cache.object(forKey: key) == nil else { return }
                 if let image = Self.decode(url: url) {
                     self.cache.setObject(image, forKey: key, cost: self.cost(of: image))

@@ -39,23 +39,39 @@ struct ClusteredPhotoMap: NSViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate {
         private let onOpen: (Photo) -> Void
         private var didFit = false
+        // The URL set currently on the map, kept in sync incrementally. Lets us
+        // (a) skip the whole diff when nothing changed (e.g. a banner-only
+        // re-render) and (b) compute additions against the previous set instead
+        // of rebuilding a Set from the live annotations every call.
+        private var syncedURLs: Set<URL> = []
+
         init(onOpen: @escaping (Photo) -> Void) { self.onOpen = onOpen }
 
         /// Add/remove annotations to match `pins` (cheap diff so streaming updates
         /// don't rebuild the whole map).
         func sync(map: MKMapView, pins: [(photo: Photo, latitude: Double, longitude: Double)]) {
-            let existing = map.annotations.compactMap { $0 as? PhotoAnnotation }
-            let existingKeys = Set(existing.map { $0.photo.url })
             let newKeys = Set(pins.map { $0.photo.url })
+            // Set== short-circuits on a count mismatch (O(1) during streaming, when
+            // the count grows each batch); only an unchanged set pays the full O(n)
+            // compare, and then we skip all annotation churn.
+            if newKeys == syncedURLs {
+                if !didFit, !map.annotations.isEmpty {
+                    didFit = true
+                    map.showAnnotations(map.annotations, animated: false)
+                }
+                return
+            }
 
-            let toRemove = existing.filter { !newKeys.contains($0.photo.url) }
+            let toRemove = map.annotations.compactMap { $0 as? PhotoAnnotation }
+                .filter { !newKeys.contains($0.photo.url) }
             if !toRemove.isEmpty { map.removeAnnotations(toRemove) }
 
             let toAdd = pins
-                .filter { !existingKeys.contains($0.photo.url) }
+                .filter { !syncedURLs.contains($0.photo.url) }
                 .map { PhotoAnnotation(photo: $0.photo,
                                        coordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)) }
             if !toAdd.isEmpty { map.addAnnotations(toAdd) }
+            syncedURLs = newKeys
 
             // Frame the points once, after the first batch arrives.
             if !didFit, !map.annotations.isEmpty {
