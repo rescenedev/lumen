@@ -98,12 +98,20 @@ final class ThumbnailCache {
     /// `mtime` is the scan-time modification date used in the disk-cache key.
     /// Passing it avoids a per-thumbnail stat (a NAS roundtrip); nil falls back
     /// to statting the file.
+    ///
+    /// Returns a cancellable Operation for the realized-cell display lane (nil for
+    /// a cache hit or a Photos asset). The prefetch lane was already cancellable
+    /// via `itemOps`; the on-demand lane was not, so a fast scroll left stale NAS
+    /// decodes head-of-line blocking the cells the user lands on. The cell cancels
+    /// this on reuse. `completion` is ALWAYS called (nil on cancel/failure), so the
+    /// `async` wrapper below can never leak its continuation.
+    @discardableResult
     func thumbnail(for url: URL, maxPixel: Int, mtime: TimeInterval? = nil,
-                   completion: @escaping (NSImage?) -> Void) {
+                   completion: @escaping (NSImage?) -> Void) -> Operation? {
         let key = memKey(url, maxPixel)
         if let hit = memory.object(forKey: key) {
             completion(hit)
-            return
+            return nil
         }
         // Photos-library assets have no file to decode — route to PhotoKit.
         // (Asset thumbnails aren't written to the disk cache; PhotoKit caches.)
@@ -113,12 +121,21 @@ final class ThumbnailCache {
                 if let self, let image { self.memory.setObject(image, forKey: key, cost: self.cost(of: image)) }
                 await MainActor.run { completion(image) }
             }
-            return
+            return nil
         }
-        decodeQueue.addOperation { [weak self] in
-            let image = self?.loadAndCache(url: url, maxPixel: maxPixel, mtime: mtime, key: key)
+        let op = BlockOperation()
+        op.addExecutionBlock { [weak self, weak op] in
+            // Cancelled while still queued (cell scrolled away): skip the multi-MB
+            // NAS read entirely, but still resume the caller with nil.
+            guard let self, op?.isCancelled == false else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            let image = self.loadAndCache(url: url, maxPixel: maxPixel, mtime: mtime, key: key)
             DispatchQueue.main.async { completion(image) }
         }
+        decodeQueue.addOperation(op)
+        return op
     }
 
     func thumbnail(for url: URL, maxPixel: Int, mtime: TimeInterval? = nil) async -> NSImage? {

@@ -275,6 +275,7 @@ final class PhotoCollectionItem: NSCollectionViewItem {
 
     private let cell = PhotoGridCellView()
     private var loadToken = 0
+    private var thumbnailOp: Operation?   // cancellable on-demand decode for this cell
 
     override func loadView() { view = cell }
 
@@ -293,6 +294,8 @@ final class PhotoCollectionItem: NSCollectionViewItem {
 
         loadToken += 1
         let token = loadToken
+        thumbnailOp?.cancel()   // supersede any in-flight decode from the prior photo
+        thumbnailOp = nil
         let maxPixel = ThumbnailCache.tier(forPointSize: size)
         if let cached = ThumbnailCache.shared.cached(for: photo.url, maxPixel: maxPixel) {
             cell.image = cached
@@ -303,7 +306,7 @@ final class PhotoCollectionItem: NSCollectionViewItem {
             if let nearby = ThumbnailCache.shared.cached(for: photo.url, maxPixel: other) {
                 cell.image = nearby
             }
-            ThumbnailCache.shared.thumbnail(for: photo.url, maxPixel: maxPixel,
+            thumbnailOp = ThumbnailCache.shared.thumbnail(for: photo.url, maxPixel: maxPixel,
                                             mtime: photo.cacheMtime) { [weak self] img in
                 guard let self, self.loadToken == token else { return }
                 if let img {
@@ -343,6 +346,8 @@ final class PhotoCollectionItem: NSCollectionViewItem {
     override func prepareForReuse() {
         super.prepareForReuse()
         loadToken += 1
+        thumbnailOp?.cancel()   // scrolled away — don't let its stale NAS decode hog the queue
+        thumbnailOp = nil
         cell.image = nil
     }
 
