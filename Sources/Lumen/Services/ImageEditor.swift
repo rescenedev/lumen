@@ -102,7 +102,7 @@ enum ImageEditor {
         }
 
         if caption != nil || logo != nil { cg = watermarked(cg, caption: caption, logo: logo) }
-        return write(cg, to: dest, quality: quality)
+        return write(cg, to: dest, quality: quality, metadata: sourceMetadata(for: source))
     }
 
     /// Burn an optional logo and/or caption onto `cg` (used by the single-photo
@@ -272,8 +272,11 @@ enum ImageEditor {
         encodableExtensions.contains(source.pathExtension.lowercased())
     }
 
-    /// Encode keeping a lossless container for png/tiff/heic, else JPEG.
-    private static func write(_ cg: CGImage, to dest: URL, quality: CGFloat) -> Bool {
+    /// Encode keeping a lossless container for png/tiff/heic, else JPEG. `metadata`
+    /// (EXIF/GPS/TIFF/IPTC from the source) is carried forward so an edit doesn't
+    /// silently strip capture date, location, and camera info.
+    private static func write(_ cg: CGImage, to dest: URL, quality: CGFloat,
+                              metadata: [CFString: Any]? = nil) -> Bool {
         let ext = dest.pathExtension.lowercased()
         let utType: UTType
         switch ext {
@@ -284,8 +287,36 @@ enum ImageEditor {
         }
         guard let out = CGImageDestinationCreateWithURL(dest as CFURL, utType.identifier as CFString, 1, nil)
         else { return false }
-        CGImageDestinationAddImage(out, cg, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        var props: [CFString: Any] = metadata ?? [:]
+        props[kCGImageDestinationLossyCompressionQuality] = quality
+        CGImageDestinationAddImage(out, cg, props as CFDictionary)
         return CGImageDestinationFinalize(out)
+    }
+
+    /// The EXIF/GPS/TIFF/IPTC metadata of `url`, suitable as the properties dict
+    /// for `CGImageDestinationAddImage`. Orientation is forced upright (edits bake
+    /// it into the pixels) and the EXIF/TIFF pixel-dimension/orientation fields —
+    /// stale after crop/resize — are dropped. Returns nil when there's nothing to
+    /// carry forward. Shared with `Exporter.exportResized`.
+    static func sourceMetadata(for url: URL) -> [CFString: Any]? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let all = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any]
+        else { return nil }
+        var out: [CFString: Any] = [:]
+        if var exif = all[kCGImagePropertyExifDictionary] as? [CFString: Any] {
+            exif.removeValue(forKey: kCGImagePropertyExifPixelXDimension)
+            exif.removeValue(forKey: kCGImagePropertyExifPixelYDimension)
+            out[kCGImagePropertyExifDictionary] = exif
+        }
+        if let gps = all[kCGImagePropertyGPSDictionary] { out[kCGImagePropertyGPSDictionary] = gps }
+        if var tiff = all[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+            tiff.removeValue(forKey: kCGImagePropertyTIFFOrientation)
+            out[kCGImagePropertyTIFFDictionary] = tiff
+        }
+        if let iptc = all[kCGImagePropertyIPTCDictionary] { out[kCGImagePropertyIPTCDictionary] = iptc }
+        guard !out.isEmpty else { return nil }
+        out[kCGImagePropertyOrientation] = 1   // pixels are already upright
+        return out
     }
 
     // MARK: - Caption / watermark

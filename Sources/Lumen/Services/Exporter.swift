@@ -30,7 +30,11 @@ enum Exporter {
             let dest = uniqueDestination(directory, filename: "\(baseName).jpg")
             guard let out = CGImageDestinationCreateWithURL(dest as CFURL, UTType.jpeg.identifier as CFString, 1, nil)
             else { continue }
-            CGImageDestinationAddImage(out, cg, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+            // Carry capture date / GPS / camera info forward (the thumbnail is
+            // already oriented, so metadata orientation is reset to upright).
+            var props: [CFString: Any] = ImageEditor.sourceMetadata(for: photo.url) ?? [:]
+            props[kCGImageDestinationLossyCompressionQuality] = 0.85
+            CGImageDestinationAddImage(out, cg, props as CFDictionary)
             if CGImageDestinationFinalize(out) { exported += 1 }
         }
         return exported

@@ -41,5 +41,8 @@ windowReaderDedupeTests()
 crashPrunePerCategoryTests()
 searchDebounceAndAckTests()
 folderClickExpansionTests()
+dataSafetyAuditFixTests()
+asyncSortCacheFixTests()
+perfAuditFixTests()
 
 exit(Harness.finish())

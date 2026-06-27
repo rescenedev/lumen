@@ -68,9 +68,19 @@ enum IncrementalScanner {
                 }
             } else {
                 // Changed (or first time): full listing with file metadata prefetched.
-                let entries = (try? fm.contentsOfDirectory(
+                let listing = try? fm.contentsOfDirectory(
                     at: dir, includingPropertiesForKeys: Array(fileKeys) + [.isDirectoryKey],
-                    options: [.skipsHiddenFiles])) ?? []
+                    options: [.skipsHiddenFiles])
+                guard let entries = listing else {
+                    // Listing failed (e.g. a transient NAS hiccup) while the folder is
+                    // still reachable. Mirror the unchanged branch: keep the cached
+                    // photos rather than pruning the whole folder. A failed dir-mtime
+                    // read lands us here (not the unchanged branch), so this is the
+                    // common transient-failure path — substituting [] would silently
+                    // drop the folder's photos and EXIF until the next good scan.
+                    photos.append(contentsOf: cachedByFolder[dir.path] ?? [])
+                    return
+                }
                 for entry in entries {
                     let values = try? entry.resourceValues(forKeys: fileKeys.union([.isDirectoryKey]))
                     if values?.isDirectory == true {

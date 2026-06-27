@@ -8,25 +8,21 @@ import MapKit
 struct PhotoMapView: View {
     @Environment(AppModel.self) private var model
 
-    private struct Pin: Identifiable {
-        let id: URL
-        let photo: Photo
-        let coordinate: CLLocationCoordinate2D
-    }
-
     private var isPhotosScope: Bool { model.committedSidebar.isPhotosLibrarySource }
     private var isLoading: Bool { isPhotosScope ? model.isLoadingAssetMap : model.isIndexingExif }
 
-    private var pins: [Pin] {
-        let source = isPhotosScope ? model.assetMapPins : model.geotaggedPhotos
-        return source.map {
-            Pin(id: $0.photo.url, photo: $0.photo,
-                coordinate: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude))
-        }
-    }
+    // Count/emptiness only — the map itself renders model.assetMapPins /
+    // model.geotaggedPhotos directly, so we never build an intermediate [Pin]
+    // array (which previously re-allocated the whole 60k set just to read .count).
+    private var locationCount: Int { isPhotosScope ? model.assetMapPins.count : model.geotaggedPhotos.count }
+    private var hasLocations: Bool { isPhotosScope ? !model.assetMapPins.isEmpty : !model.geotaggedPhotos.isEmpty }
 
     var body: some View {
-        content.onAppear {
+        // Keyed on assetMapScanToken (scope + sort-settle), not onAppear: the view
+        // isn't recreated when navigating between scopes, and a large scope's sort
+        // lands without changing the signature — both must re-run the scan, or the
+        // map stays stuck on the previous/empty pin set.
+        content.task(id: model.assetMapScanToken) {
             if isPhotosScope {
                 model.ensureAssetMapPins()          // background scan, streams pins
             } else {
@@ -41,9 +37,9 @@ struct PhotoMapView: View {
             // Show the map immediately; pins appear (and cluster) as found.
             mapView
                 .overlay(alignment: .top) { banner }
-        } else if isLoading && pins.isEmpty {
+        } else if isLoading && !hasLocations {
             ProgressView("Reading photo locations…")
-        } else if pins.isEmpty {
+        } else if !hasLocations {
             ContentUnavailableView("No Locations", systemImage: "mappin.slash",
                 description: Text("None of these photos contain GPS information."))
         } else {
@@ -61,8 +57,8 @@ struct PhotoMapView: View {
     @ViewBuilder
     private var banner: some View {
         let text: String? = {
-            if isLoading { return "Finding locations… \(pins.count)" }
-            if pins.isEmpty { return "No geotagged photos here" }
+            if isLoading { return "Finding locations… \(locationCount)" }
+            if !hasLocations { return "No geotagged photos here" }
             if model.assetMapTruncated { return "Showing first \(AppModel.assetMapPinLimit) locations" }
             return nil
         }()

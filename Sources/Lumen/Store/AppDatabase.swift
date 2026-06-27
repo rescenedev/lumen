@@ -84,6 +84,21 @@ final class AppDatabase {
                 );
                 """)
         }
+        migrator.registerMigration("v4-oplog-affected") { db in
+            // Record the affected-photo count in its own column so the history view
+            // never has to JSON-decode the (up to 5000-entry) payload just to count
+            // it. Backfill existing rows once by counting top-level JSON keys —
+            // without materializing PhotoMeta — so old entries keep their counts.
+            try db.execute(sql: "ALTER TABLE op_log ADD COLUMN affected INTEGER NOT NULL DEFAULT 0;")
+            let rows = try Row.fetchAll(db, sql: "SELECT id, payload FROM op_log")
+            for row in rows {
+                let payload: String = row["payload"]
+                guard !payload.isEmpty, let data = payload.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                try db.execute(sql: "UPDATE op_log SET affected = ? WHERE id = ?",
+                               arguments: [obj.count, row["id"]])
+            }
+        }
         try migrator.migrate(queue)
     }
 }
