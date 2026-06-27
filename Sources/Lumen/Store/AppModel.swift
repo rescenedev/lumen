@@ -248,6 +248,7 @@ final class AppModel {
                           modificationDate: rv?.contentModificationDate)
         if !allPhotos.contains(where: { $0.url == url }) {
             allPhotos = allPhotos + [photo]
+            refreshDerivedCachesOffMain()
             persistLibraryCache()            // off-main; FSEvents watcher reconciles folder state
         }
         if committedSidebar.isPhotosLibrarySource { selectedSidebar = .allPhotos }
@@ -1305,6 +1306,30 @@ final class AppModel {
         lowerNameKey = libraryVersion
     }
 
+    @ObservationIgnored private var derivedRefreshTask: Task<Void, Never>?
+    /// After a direct edit mutates `allPhotos` (bumping libraryVersion), recompute
+    /// the heavy derived caches (stats + DerivedIndexes) OFF the main actor and
+    /// install them — so the next sidebar render / folder click / search keystroke
+    /// is a cache hit instead of a ~100-150ms main-thread rebuild. reconcile() and
+    /// installLoadedLibrary() already do this on their paths; the direct-edit
+    /// handlers (scan/add, remove/rename root, delete, undo-delete, reveal) did not,
+    /// so every edit was followed by a stall on the next interaction. Coalesces
+    /// rapid edits (culling): a newer edit cancels the in-flight refresh so only the
+    /// latest result installs.
+    private func refreshDerivedCachesOffMain() {
+        derivedRefreshTask?.cancel()
+        let snapshot = allPhotos
+        let version = libraryVersion
+        derivedRefreshTask = Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                (stats: Self.computeStats(snapshot), indexes: Self.computeDerivedIndexes(snapshot))
+            }.value
+            guard !Task.isCancelled, let self, self.libraryVersion == version else { return }
+            self.installStats(result.stats)
+            self.installDerivedIndexes(result.indexes)
+        }
+    }
+
     // Photos grouped by their immediate folder, so folder scope is O(result)
     // instead of an O(library) prefix scan on every folder click.
     @ObservationIgnored private var folderIndexCache: [String: [Photo]] = [:]
@@ -1392,6 +1417,7 @@ final class AppModel {
         persistRecentFolders()
         watcher?.watch(rootFolders.filter { FileManager.default.fileExists(atPath: $0.path) })
         recomputeMetaCounts()
+        refreshDerivedCachesOffMain()
         persistLibraryCache()
         isScanning = false
 
@@ -1931,6 +1957,7 @@ final class AppModel {
             selectedSidebar = .allPhotos
         }
         recomputeMetaCounts()
+        refreshDerivedCachesOffMain()
         persistRecentFolders()
         persistLibraryCache()
         persistExifCache()
@@ -1996,6 +2023,7 @@ final class AppModel {
         }
 
         recomputeMetaCounts()
+        refreshDerivedCachesOffMain()
         persistLibraryCache()
         persistExifCache()
         watcher?.watch(rootFolders.filter { FileManager.default.fileExists(atPath: $0.path) })
@@ -2221,6 +2249,7 @@ final class AppModel {
         exif = prunedExif
         duplicatePaths = prunedDups
         recomputeMetaCounts()
+        refreshDerivedCachesOffMain()
         bumpMeta()
         persistLibraryCache()   // save the post-delete library so a relaunch can't reload the trashed files
 
@@ -2316,6 +2345,7 @@ final class AppModel {
         }
         exif = mergedExif
         recomputeMetaCounts()
+        refreshDerivedCachesOffMain()
         bumpMeta()
         persistLibraryCache()
         showToast(failed > 0
