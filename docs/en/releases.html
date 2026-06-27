@@ -106,9 +106,24 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.0">
+    <div class="release-head">
+      <h2>0.5.0</h2><span class="date">June 27, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Major performance pass · stronger data safety</h3>
+    <ul>
+      <li><b>No more hitches after editing, deleting, or culling.</b> Favoriting/rating/deleting no longer stalls the sidebar, folders, or search (derived data is recomputed off the main thread). Deleting photos one by one stays smooth.</li>
+      <li><b>Smoother scrolling.</b> Thumbnail decoding moved off the main thread, and a fast first sweep over a NAS no longer lets off-screen cells' decodes block the cells you actually land on.</li>
+      <li><b>Faster viewer paging.</b> The photo you're looking at no longer waits behind neighbour pre-loads.</li>
+      <li><b>Search, map and camera filters are ready ~0.5s sooner</b> after launch (the EXIF index now uses a fast binary cache).</li>
+      <li><b>Stronger data safety.</b> Fixed duplicate-finder false positives (which risked deleting a unique photo), folders vanishing on a transient NAS hiccup, and a cleared library reappearing on relaunch. Edits and exports now preserve capture date and location (EXIF/GPS).</li>
+      <li><b>Large-library correctness.</b> After a sort settles, map pins, selection order, and post-delete selection no longer show stale state.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.4.1">
     <div class="release-head">
-      <h2>0.4.1</h2><span class="date">June 14, 2026</span><span class="tag">Latest</span>
+      <h2>0.4.1</h2><span class="date">June 14, 2026</span>
     </div>
     <h3>Grid reflow · album speed · small polish</h3>
     <ul>
