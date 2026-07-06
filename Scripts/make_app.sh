@@ -23,8 +23,10 @@ cp "$BUILD_DIR/$APP_NAME" "$CONTENTS/MacOS/$APP_NAME"
 cp "$ROOT/Scripts/Info.plist" "$CONTENTS/Info.plist"
 
 # LumenKit's processed resources (String Catalog → toast localization).
-# Bundle.module resolves this bundle from Contents/Resources at runtime —
-# without it the app aborts on the first localized string.
+# Bundle.lumen (Utils/LumenBundle.swift) resolves this bundle from
+# Contents/Resources at runtime; if it's missing the app falls back to
+# default-language strings instead of crashing. (Never use the generated
+# Bundle.module — it doesn't look in Contents/Resources and fatalErrors.)
 cp -R "$BUILD_DIR/Lumen_LumenKit.bundle" "$CONTENTS/Resources/"
 
 # --- App icon -------------------------------------------------------------

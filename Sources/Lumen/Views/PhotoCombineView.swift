@@ -223,7 +223,7 @@ struct PhotoCombineView: View {
             }.value
             busy = false
             if ok { model.didCombine(output: dest); dismiss() }
-            else { model.showToast(String(localized: "Couldn’t merge the photos.", bundle: .module)) }
+            else { model.showToast(String(localized: "Couldn’t merge the photos.", bundle: .lumen)) }
         }
     }
 }

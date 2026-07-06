@@ -44,5 +44,6 @@ folderClickExpansionTests()
 dataSafetyAuditFixTests()
 asyncSortCacheFixTests()
 perfAuditFixTests()
+bundleLocatorTests()
 
 exit(Harness.finish())

@@ -61,7 +61,7 @@ struct PhotoBrowserView: View {
                 Button("Homebrew로 업데이트") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(UpdateInfo.brewUpgradeCommand, forType: .string)
-                    model.showToast(String(localized: "Upgrade command copied: \(UpdateInfo.brewUpgradeCommand)", bundle: .module))
+                    model.showToast(String(localized: "Upgrade command copied: \(UpdateInfo.brewUpgradeCommand)", bundle: .lumen))
                 }
             } else {
                 Button("다운로드") { NSWorkspace.shared.open(update.releaseURL) }

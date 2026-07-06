@@ -178,7 +178,7 @@ final class AppModel {
                 availableUpdate = info
                 updateBannerDismissed = false
             } else if force {
-                showToast(String(localized: "You’re on the latest version (\(UpdateChecker.currentVersion)).", bundle: .module))
+                showToast(String(localized: "You’re on the latest version (\(UpdateChecker.currentVersion)).", bundle: .lumen))
             }
         }
     }
@@ -191,7 +191,7 @@ final class AppModel {
     /// have no editable file, so they're skipped.
     func startEdit(_ photo: Photo) {
         guard !photo.isAsset else {
-            showToast(String(localized: "Apple Photos items can’t be edited (file photos only).", bundle: .module))
+            showToast(String(localized: "Apple Photos items can’t be edited (file photos only).", bundle: .lumen))
             return
         }
         editTarget = photo
@@ -205,7 +205,7 @@ final class AppModel {
     func startCombine(_ photos: [Photo]) {
         let files = photos.filter { !$0.isAsset }
         guard files.count >= 2 else {
-            showToast(String(localized: "Select 2 or more file photos to merge.", bundle: .module))
+            showToast(String(localized: "Select 2 or more file photos to merge.", bundle: .lumen))
             return
         }
         combineTargets = files
@@ -215,7 +215,7 @@ final class AppModel {
     func didCombine(output: URL) {
         revealNewFile(output)
         let location = "\(output.deletingLastPathComponent().lastPathComponent)/\(output.lastPathComponent)"
-        showToast(String(localized: "Merged image saved · \(location)", bundle: .module))
+        showToast(String(localized: "Merged image saved · \(location)", bundle: .lumen))
     }
 
     // Batch resize/canvas → export many photos at once (non-destructive copies).
@@ -225,7 +225,7 @@ final class AppModel {
     func startBatchResize(_ photos: [Photo]) {
         let files = photos.filter { !$0.isAsset }
         guard !files.isEmpty else {
-            showToast(String(localized: "Select file photos to resize (Apple Photos excluded).", bundle: .module))
+            showToast(String(localized: "Select file photos to resize (Apple Photos excluded).", bundle: .lumen))
             return
         }
         batchTargets = files
@@ -233,7 +233,7 @@ final class AppModel {
     }
 
     func didBatchResize(count: Int, folder: URL) {
-        showToast(String(localized: "Exported \(count) photos · \(folder.lastPathComponent)", bundle: .module))
+        showToast(String(localized: "Exported \(count) photos · \(folder.lastPathComponent)", bundle: .lumen))
         NSWorkspace.shared.activateFileViewerSelecting([folder])
     }
 
@@ -264,10 +264,10 @@ final class AppModel {
             ThumbnailCache.shared.clear()
             FullImageLoader.shared.clear()
             allPhotos = allPhotos            // bump libraryVersion → grid reloads
-            showToast(String(localized: "Original replaced with the edit · \(source.lastPathComponent)", bundle: .module))
+            showToast(String(localized: "Original replaced with the edit · \(source.lastPathComponent)", bundle: .lumen))
         } else {
             revealNewFile(output)            // add + select + scroll to the new copy
-            showToast(String(localized: "Edit saved · \(output.lastPathComponent)", bundle: .module))
+            showToast(String(localized: "Edit saved · \(output.lastPathComponent)", bundle: .lumen))
         }
     }
 
@@ -335,7 +335,7 @@ final class AppModel {
         albums = store.albums
         store.onFirstWriteFailure = { [weak self] in
             Task { @MainActor in
-                self?.showToast(String(localized: "Couldn’t save metadata changes — check disk space (favorites/albums may not persist).", bundle: .module))
+                self?.showToast(String(localized: "Couldn’t save metadata changes — check disk space (favorites/albums may not persist).", bundle: .lumen))
             }
         }
         loadSettings()
@@ -385,7 +385,7 @@ final class AppModel {
         albums = store.albums
         recomputeMetaCounts()
         bumpMeta()
-        showToast(String(localized: "Reverted 1 action", bundle: .module))
+        showToast(String(localized: "Reverted 1 action", bundle: .lumen))
     }
 
     func clearOperationHistory() { store.clearOperationHistory() }
@@ -1886,7 +1886,7 @@ final class AppModel {
                 let ok = Exporter.zip(photos, to: url)
                 await MainActor.run {
                     if ok { self.didExport(count: photos.count, of: photos.count, to: url) }
-                    else { self.showToast(String(localized: "Couldn’t create the zip archive.", bundle: .module)) }
+                    else { self.showToast(String(localized: "Couldn’t create the zip archive.", bundle: .lumen)) }
                 }
             }
         }
@@ -1894,9 +1894,9 @@ final class AppModel {
 
     private func didExport(count: Int, of total: Int, to destination: URL) {
         if count < total {
-            showToast(String(localized: "Exported \(count) of \(total) photos · \(destination.lastPathComponent)", bundle: .module))
+            showToast(String(localized: "Exported \(count) of \(total) photos · \(destination.lastPathComponent)", bundle: .lumen))
         } else {
-            showToast(String(localized: "Exported \(count) photos · \(destination.lastPathComponent)", bundle: .module))
+            showToast(String(localized: "Exported \(count) photos · \(destination.lastPathComponent)", bundle: .lumen))
         }
     }
 
@@ -2086,7 +2086,7 @@ final class AppModel {
 
     private func finishRename(pairs: [(from: String, to: String)], failed: Int) {
         if failed > 0 {
-            showToast(String(localized: "Couldn’t rename \(failed) items (name in use or permission issue).", bundle: .module))
+            showToast(String(localized: "Couldn’t rename \(failed) items (name in use or permission issue).", bundle: .lumen))
         }
         guard !pairs.isEmpty else { return }
         store.rename(pairs: pairs)
@@ -2233,7 +2233,7 @@ final class AppModel {
         var batch = DeletionUndoBatch()
         batch.moves = moves
         if failed > 0 {
-            showToast(String(localized: "Couldn’t delete \(failed) items (check permissions/connection).", bundle: .module))
+            showToast(String(localized: "Couldn’t delete \(failed) items (check permissions/connection).", bundle: .lumen))
         }
         guard !trashed.isEmpty else { return }
 
@@ -2285,8 +2285,8 @@ final class AppModel {
 
         if !batch.moves.isEmpty {
             let undo = batch
-            showToast(String(localized: "\(batch.moves.count) photos deleted", bundle: .module),
-                      actionLabel: String(localized: "Undo", bundle: .module),
+            showToast(String(localized: "\(batch.moves.count) photos deleted", bundle: .lumen),
+                      actionLabel: String(localized: "Undo", bundle: .lumen),
                       duration: 10) { [weak self] in
                 self?.undoDeletion(undo)
             }
@@ -2336,7 +2336,7 @@ final class AppModel {
     private func finishUndoDeletion(batch: DeletionUndoBatch, restoredPaths: Set<String>, failed: Int) {
         guard !restoredPaths.isEmpty else {
             if failed > 0 {
-                showToast(String(localized: "Couldn’t undo (files moved or permission issue).", bundle: .module))
+                showToast(String(localized: "Couldn’t undo (files moved or permission issue).", bundle: .lumen))
             }
             return
         }
@@ -2362,8 +2362,8 @@ final class AppModel {
         bumpMeta()
         persistLibraryCache()
         showToast(failed > 0
-            ? String(localized: "\(restoredPaths.count) photos restored · \(failed) failed", bundle: .module)
-            : String(localized: "\(restoredPaths.count) photos restored", bundle: .module))
+            ? String(localized: "\(restoredPaths.count) photos restored · \(failed) failed", bundle: .lumen)
+            : String(localized: "\(restoredPaths.count) photos restored", bundle: .lumen))
     }
 
     // MARK: - Persistence
