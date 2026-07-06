@@ -1,6 +1,6 @@
 cask "lumen-photos" do
   version "0.5.1"
-  sha256 "4135cfdb5feb5e02bd598d69eb8b90af24d7386893e02af963c4117a8ced69e0"
+  sha256 "4018170a15eaa89ce09dca7ebb64627c9f8ed9877668e384f7f8f5d4bdacc69b"
 
   url "https://github.com/rescenedev/lumen/releases/download/v#{version}/Lumen-#{version}.zip"
   name "Lumen"
@@ -13,10 +13,4 @@ cask "lumen-photos" do
     url :url
     strategy :github_latest
   end
-
-  caveats <<~EOS
-    Lumen is ad-hoc signed (not notarized). If macOS blocks it on first launch,
-    either right-click the app and choose Open, or clear the quarantine flag:
-      xattr -dr com.apple.quarantine "/Applications/Lumen.app"
-  EOS
 end
