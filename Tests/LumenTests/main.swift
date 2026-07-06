@@ -45,5 +45,6 @@ dataSafetyAuditFixTests()
 asyncSortCacheFixTests()
 perfAuditFixTests()
 bundleLocatorTests()
+imageEditorOrientationTests()
 
 exit(Harness.finish())

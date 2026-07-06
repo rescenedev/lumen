@@ -162,11 +162,31 @@ enum ImageEditor {
     /// CGImage with EXIF orientation baked in (so it's upright and crop coords map
     /// directly to what the user sees).
     static func orientedCGImage(_ url: URL) -> CGImage? {
-        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any]
-        let orientation = (props?[kCGImagePropertyOrientation] as? UInt32) ?? 1
-        guard orientation != 1 else { return cg }
+        let orientation = (props?[kCGImagePropertyOrientation] as? NSNumber)?.uint32Value ?? 1
+        guard orientation != 1 else { return CGImageSourceCreateImageAtIndex(src, 0, nil) }
+
+        // Bake the orientation during the decode itself (thumbnail-with-transform
+        // at native size) instead of decoding upright and rendering a second
+        // full-resolution copy through CIContext — that doubled peak memory on
+        // the save path, enough to abort on low-RAM Macs with 100MP+ sources.
+        let w = (props?[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? 0
+        let h = (props?[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue ?? 0
+        if max(w, h) > 0 {
+            let opts: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: max(w, h)
+            ]
+            if let baked = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) {
+                return baked
+            }
+        }
+        // Fallback (no pixel dimensions in the header, or thumbnail decode
+        // failed): the previous decode-then-rotate path.
+        guard let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
         let ci = CIImage(cgImage: cg).oriented(forExifOrientation: Int32(clamping: orientation))
         return CIContext().createCGImage(ci, from: ci.extent)
     }
