@@ -1,6 +1,6 @@
 cask "lumen-photos" do
-  version "0.5.0"
-  sha256 "6da53a0d474eee0848407f903f8cc94a0e85eeda2c000260b5466e44d2f9c4f8"
+  version "0.5.1"
+  sha256 "4135cfdb5feb5e02bd598d69eb8b90af24d7386893e02af963c4117a8ced69e0"
 
   url "https://github.com/rescenedev/lumen/releases/download/v#{version}/Lumen-#{version}.zip"
   name "Lumen"

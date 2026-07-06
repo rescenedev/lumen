@@ -106,9 +106,19 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.1">
+    <div class="release-head">
+      <h2>0.5.1</h2><span class="date">July 6, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Hotfix: crash when showing a notification</h3>
+    <ul>
+      <li><b>Fixed a critical crash the moment the first in-app toast appeared</b> (export finished, update check, and similar). 0.5.0's localized-resource lookup only worked on the development machine and always failed on user machines. Resources are now resolved from the right location, and if they're ever missing the app falls back to default English text instead of aborting. Thanks to the crash reports that pinpointed this (#5, #6).</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.0">
     <div class="release-head">
-      <h2>0.5.0</h2><span class="date">June 27, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.0</h2><span class="date">June 27, 2026</span>
     </div>
     <h3>Major performance pass · stronger data safety</h3>
     <ul>
