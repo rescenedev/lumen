@@ -7,8 +7,28 @@
 <meta name="description" content="로컬·NAS·Apple Photos를 한 앱에서. 6만 장 넘는 라이브러리도 휙휙 넘기는 네이티브 macOS 사진 뷰어 & 매니저. 비파괴 편집·되돌릴 수 있는 삭제, 사진은 기기를 떠나지 않습니다.">
 <meta property="og:title" content="Lumen — 대용량 사진 라이브러리를 위한 macOS 뷰어">
 <meta property="og:description" content="로컬·NAS·Apple Photos를 한 앱에서. 사진은 기기를 떠나지 않습니다.">
-<meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
+<meta property="og:image" content="https://rescenedev.github.io/lumen/screenshots/grid.png">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://rescenedev.github.io/lumen/">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lumen — 대용량 사진 라이브러리를 위한 macOS 뷰어">
+<meta name="twitter:description" content="로컬·NAS·Apple Photos를 한 앱에서. 사진은 기기를 떠나지 않습니다.">
+<meta name="twitter:image" content="https://rescenedev.github.io/lumen/screenshots/grid.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Lumen",
+  "operatingSystem": "macOS 14+",
+  "applicationCategory": "MultimediaApplication",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "downloadUrl": "https://github.com/rescenedev/lumen/releases/latest",
+  "softwareVersion": "0.5.1",
+  "license": "https://opensource.org/licenses/MIT",
+  "description": "로컬·NAS·Apple Photos를 한 앱에서 보는 대용량 라이브러리용 네이티브 macOS 사진 뷰어 & 매니저"
+}
+</script>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="alternate" hreflang="ko" href="https://rescenedev.github.io/lumen/index.html">
 <link rel="alternate" hreflang="en" href="https://rescenedev.github.io/lumen/en/index.html">
@@ -63,7 +83,11 @@
       radial-gradient(620px 360px at 14% 18%,rgba(255,111,174,.14),transparent 72%);}
   .hero>*{position:relative;z-index:1}
   .pill{display:inline-block;font-size:13px;color:#cdd6ff;border:1px solid var(--border);
-    background:rgba(255,255,255,.04);padding:6px 14px;border-radius:999px;margin-bottom:24px}
+    background:rgba(255,255,255,.04);padding:6px 14px;border-radius:999px;margin-bottom:24px;
+    transition:border-color .15s,background .15s}
+  a.pill:hover{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.07)}
+  .pill .vtag{color:#fff;font-weight:700;background:var(--grad);border-radius:999px;
+    padding:2px 9px;margin-right:9px;font-size:12px}
   h1{font-size:68px;font-weight:850;letter-spacing:-.035em;line-height:1.04}
   .sub{font-size:21px;color:var(--muted);margin:18px auto 0;max-width:660px}
   .cta{margin-top:30px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
@@ -74,28 +98,11 @@
   .btn-ghost{background:var(--panel-2)}
   .micro{margin-top:14px;font-size:13px;color:var(--faint)}
 
-  /* App window mockup */
+  /* Hero screenshot */
   .shot{margin:54px auto 0;max-width:980px;position:relative}
   .shot::after{content:"";position:absolute;left:8%;right:8%;bottom:-30px;height:60px;
     background:radial-gradient(closest-side,rgba(91,134,255,.5),transparent);filter:blur(26px);z-index:-1}
   .screen{width:100%;display:block;border-radius:12px;box-shadow:0 40px 90px rgba(0,0,0,.6),0 4px 18px rgba(0,0,0,.4)}
-  .win{border-radius:16px;overflow:hidden;border:1px solid var(--border);
-    box-shadow:0 40px 90px rgba(0,0,0,.6),0 4px 18px rgba(0,0,0,.4);background:var(--bg2)}
-  .titlebar{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#0e121c;border-bottom:1px solid var(--border)}
-  .dot{width:12px;height:12px;border-radius:50%}
-  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
-  .titlebar .t{margin-left:10px;font-size:12px;color:var(--faint)}
-  .app{display:grid;grid-template-columns:188px 1fr;min-height:430px}
-  .side{background:#0c0f18;border-right:1px solid var(--border);padding:14px 10px;font-size:12.5px}
-  .side .h{color:var(--faint);font-size:11px;letter-spacing:.04em;margin:14px 8px 6px;text-transform:uppercase}
-  .side .row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;color:var(--muted)}
-  .side .row.active{background:linear-gradient(120deg,rgba(91,134,255,.9),rgba(154,92,255,.9));color:#fff}
-  .side .row .ic{width:15px;text-align:center}
-  .side .row .n{margin-left:auto;color:var(--faint);font-size:11px}
-  .side .row.active .n{color:rgba(255,255,255,.7)}
-  .board{padding:14px;display:grid;grid-template-columns:repeat(5,1fr);grid-auto-rows:1fr;gap:9px;background:#0a0d15}
-  .tile{aspect-ratio:1;border-radius:9px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.05)}
-  .tile::after{content:"";position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.14),transparent 60%)}
 
   /* Sections */
   section{padding:92px 0;position:relative}
@@ -122,8 +129,6 @@
   .feat li::before{content:"✓";color:var(--blue);font-weight:800;position:absolute;left:0;top:0}
   .feat-media{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:18px;
     box-shadow:0 24px 60px rgba(0,0,0,.4);min-height:240px}
-  .mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-  .mini-grid .tile{aspect-ratio:1}
   .map-mock{height:230px;border-radius:12px;position:relative;overflow:hidden;
     background:radial-gradient(120px 120px at 30% 40%,rgba(91,134,255,.25),transparent),
                radial-gradient(160px 160px at 70% 65%,rgba(154,92,255,.22),transparent),#0c1020}
@@ -173,7 +178,6 @@
   .note{margin:16px auto 0;max-width:600px;background:var(--panel);border:1px solid var(--border);
     border-radius:12px;padding:15px 18px;color:var(--muted);font-size:14px;text-align:left}
   .note code{background:#0b0e16;padding:2px 7px;border-radius:6px;color:#cdd6f4;font-family:"SF Mono",ui-monospace,Menlo,monospace}
-  .install.compact{margin-top:12px}
 
   footer{text-align:center;padding:54px 24px;color:var(--muted);border-top:1px solid var(--border);font-size:14px}
   footer a{color:#aab6ff}
@@ -213,13 +217,13 @@
 </nav>
 
 <header class="hero" id="top">
-  <span class="pill">macOS 14+ · 네이티브 · 비파괴</span>
+  <a class="pill" href="releases.html"><span class="vtag">v0.5.1</span>Apple 공증 빌드 — 이제 바로 실행됩니다 →</a>
   <h1 class="grad-text">사진 수만 장,<br>한 곳에서 가볍게.</h1>
   <p class="sub">로컬 · NAS · Apple Photos를 하나의 빠른 네이티브 앱에서.<br>67,000장 라이브러리로 검증된 macOS 사진 뷰어 &amp; 매니저.</p>
   <div class="cta">
     <a class="btn btn-primary" href="#download">다운로드</a>
   </div>
-  <p class="micro">Apple Silicon · Intel · 오픈소스(MIT)</p>
+  <p class="micro">macOS 14+ · Apple Silicon &amp; Intel · 네이티브 · 오픈소스(MIT)</p>
 
   <div class="shot reveal">
     <img class="screen" src="screenshots/grid.png" alt="Lumen 그리드 — 대용량 사진 라이브러리">
@@ -334,7 +338,7 @@
     <div class="why">
       <div class="card reveal"><div class="badge">🛡️</div><h3>실수해도 되돌릴 수 있게</h3><p>모든 삭제에 <b>10초 되돌리기</b>. NAS처럼 휴지통이 없는 볼륨도 영구 삭제 대신 <code>.LumenTrash</code>로 <b>30일</b> 보관. 원본 파일은 어떤 기능도 변경하지 않습니다.</p></div>
       <div class="card reveal"><div class="badge">🧱</div><h3>무너지지 않게</h3><p>메모리 누수 <b>0</b> · 캐시 상한으로 OOM 방지. 0바이트·손상 파일, <b>심링크 루프</b>, 유니코드·초장문 파일명까지 안전하게 처리합니다.</p></div>
-      <div class="card reveal"><div class="badge">✅</div><h3>말이 아니라 테스트로</h3><p><b>111개 자동화 테스트</b>로 매 변경을 검증하고, 실제 6.7만 장 NAS 라이브러리에서 매일 씁니다. 메타데이터 저장이 실패하면 조용히 넘어가지 않고 바로 알려줍니다.</p></div>
+      <div class="card reveal"><div class="badge">✅</div><h3>말이 아니라 테스트로</h3><p><b>312개 자동화 테스트</b>로 매 변경을 검증하고, 실제 6.7만 장 NAS 라이브러리에서 매일 씁니다. 메타데이터 저장이 실패하면 조용히 넘어가지 않고 바로 알려줍니다.</p></div>
     </div>
   </div>
 </section>
@@ -366,15 +370,11 @@ brew trust --cask rescenedev/tap/lumen-photos
 brew install --cask lumen-photos</code>
     </div>
     <div class="note reveal">
-      현재는 노타라이즈되지 않은 빌드라 첫 실행 시 Gatekeeper가 막을 수 있습니다.
-      아래 명령으로 격리 속성을 제거하거나(권장), <b>시스템 설정 → 개인정보 보호 및 보안</b>
-      맨 아래의 "확인 없이 열기"로 허용해 주세요:
-    </div>
-    <div class="install compact reveal">
-      <button class="copy" onclick="copyXattr(event)">복사</button>
-      <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code>
+      <b style="color:#7ee0a3">✓ Developer ID 서명 + Apple 공증 완료</b> (v0.5.1부터) —
+      우회 절차 없이 다운로드 후 바로 실행됩니다.
     </div>
     <div class="note reveal">
+      Homebrew 없이: <a href="https://github.com/rescenedev/lumen/releases/latest" style="color:#aab6ff">최신 zip 직접 다운로드</a> ·
       소스로 빌드: <code>git clone</code> 후 <code>./Scripts/make_app.sh</code> — Xcode 불필요, Command Line Tools만.
     </div>
   </div>
@@ -405,18 +405,6 @@ brew install --cask lumen-photos</code>
 </footer>
 
 <script>
-  // Stylish placeholder tiles (gradient swatches — no personal photos)
-  const hues = [[91,134,255],[154,92,255],[255,111,174],[80,200,180],[255,176,90],[120,160,255],[210,120,255],[90,180,255]];
-  function tile(){
-    const a=hues[Math.floor(Math.random()*hues.length)], b=hues[Math.floor(Math.random()*hues.length)];
-    const ang=Math.floor(Math.random()*360);
-    const d=document.createElement('div'); d.className='tile';
-    d.style.background=`linear-gradient(${ang}deg, rgb(${a.join(',')}), rgb(${b.join(',')}))`;
-    return d;
-  }
-  function fill(id,n){const el=document.getElementById(id); if(!el)return; for(let i=0;i<n;i++)el.appendChild(tile());}
-  fill('board',20); fill('mini',8); fill('mini2',8);
-
   // Scroll reveal
   const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.12});
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
@@ -424,10 +412,6 @@ brew install --cask lumen-photos</code>
   function flashCopied(btn){const t=btn.textContent;btn.textContent='복사됨 ✓';setTimeout(()=>btn.textContent=t,1500);}
   function copyInstall(e){
     navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew trust --cask rescenedev/tap/lumen-photos\nbrew install --cask lumen-photos");
-    flashCopied(e.currentTarget);
-  }
-  function copyXattr(e){
-    navigator.clipboard.writeText('xattr -dr com.apple.quarantine "/Applications/Lumen.app"');
     flashCopied(e.currentTarget);
   }
 </script>

@@ -7,8 +7,28 @@
 <meta name="description" content="Local, NAS, and Apple Photos in one app. A native macOS photo viewer & manager that flies through 60,000+ photo libraries — non-destructive edits, undoable deletes, and your photos never leave your Mac.">
 <meta property="og:title" content="Lumen — macOS Photo Viewer for Large Libraries">
 <meta property="og:description" content="Local, NAS, and Apple Photos in one app. Your photos never leave your Mac.">
-<meta property="og:image" content="https://rescenedev.github.io/lumen/icon.png">
+<meta property="og:image" content="https://rescenedev.github.io/lumen/screenshots/grid.png">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://rescenedev.github.io/lumen/en/">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lumen — macOS Photo Viewer for Large Libraries">
+<meta name="twitter:description" content="Local, NAS, and Apple Photos in one app. Your photos never leave your Mac.">
+<meta name="twitter:image" content="https://rescenedev.github.io/lumen/screenshots/grid.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Lumen",
+  "operatingSystem": "macOS 14+",
+  "applicationCategory": "MultimediaApplication",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "downloadUrl": "https://github.com/rescenedev/lumen/releases/latest",
+  "softwareVersion": "0.5.1",
+  "license": "https://opensource.org/licenses/MIT",
+  "description": "A native macOS photo viewer & manager for large libraries — local folders, NAS, and Apple Photos in one app"
+}
+</script>
 <link rel="icon" type="image/png" href="../favicon.png">
 <link rel="alternate" hreflang="ko" href="https://rescenedev.github.io/lumen/index.html">
 <link rel="alternate" hreflang="en" href="https://rescenedev.github.io/lumen/en/index.html">
@@ -61,7 +81,11 @@
       radial-gradient(620px 360px at 14% 18%,rgba(255,111,174,.14),transparent 72%);}
   .hero>*{position:relative;z-index:1}
   .pill{display:inline-block;font-size:13px;color:#cdd6ff;border:1px solid var(--border);
-    background:rgba(255,255,255,.04);padding:6px 14px;border-radius:999px;margin-bottom:24px}
+    background:rgba(255,255,255,.04);padding:6px 14px;border-radius:999px;margin-bottom:24px;
+    transition:border-color .15s,background .15s}
+  a.pill:hover{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.07)}
+  .pill .vtag{color:#fff;font-weight:700;background:var(--grad);border-radius:999px;
+    padding:2px 9px;margin-right:9px;font-size:12px}
   h1{font-size:68px;font-weight:850;letter-spacing:-.035em;line-height:1.04}
   .sub{font-size:21px;color:var(--muted);margin:18px auto 0;max-width:660px}
   .cta{margin-top:30px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
@@ -72,28 +96,11 @@
   .btn-ghost{background:var(--panel-2)}
   .micro{margin-top:14px;font-size:13px;color:var(--faint)}
 
-  /* App window mockup */
+  /* Hero screenshot */
   .shot{margin:54px auto 0;max-width:980px;position:relative}
   .shot::after{content:"";position:absolute;left:8%;right:8%;bottom:-30px;height:60px;
     background:radial-gradient(closest-side,rgba(91,134,255,.5),transparent);filter:blur(26px);z-index:-1}
   .screen{width:100%;display:block;border-radius:12px;box-shadow:0 40px 90px rgba(0,0,0,.6),0 4px 18px rgba(0,0,0,.4)}
-  .win{border-radius:16px;overflow:hidden;border:1px solid var(--border);
-    box-shadow:0 40px 90px rgba(0,0,0,.6),0 4px 18px rgba(0,0,0,.4);background:var(--bg2)}
-  .titlebar{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#0e121c;border-bottom:1px solid var(--border)}
-  .dot{width:12px;height:12px;border-radius:50%}
-  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
-  .titlebar .t{margin-left:10px;font-size:12px;color:var(--faint)}
-  .app{display:grid;grid-template-columns:188px 1fr;min-height:430px}
-  .side{background:#0c0f18;border-right:1px solid var(--border);padding:14px 10px;font-size:12.5px}
-  .side .h{color:var(--faint);font-size:11px;letter-spacing:.04em;margin:14px 8px 6px;text-transform:uppercase}
-  .side .row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;color:var(--muted)}
-  .side .row.active{background:linear-gradient(120deg,rgba(91,134,255,.9),rgba(154,92,255,.9));color:#fff}
-  .side .row .ic{width:15px;text-align:center}
-  .side .row .n{margin-left:auto;color:var(--faint);font-size:11px}
-  .side .row.active .n{color:rgba(255,255,255,.7)}
-  .board{padding:14px;display:grid;grid-template-columns:repeat(5,1fr);grid-auto-rows:1fr;gap:9px;background:#0a0d15}
-  .tile{aspect-ratio:1;border-radius:9px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.05)}
-  .tile::after{content:"";position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.14),transparent 60%)}
 
   /* Sections */
   section{padding:92px 0;position:relative}
@@ -120,8 +127,6 @@
   .feat li::before{content:"✓";color:var(--blue);font-weight:800;position:absolute;left:0;top:0}
   .feat-media{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:18px;
     box-shadow:0 24px 60px rgba(0,0,0,.4);min-height:240px}
-  .mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-  .mini-grid .tile{aspect-ratio:1}
   .map-mock{height:230px;border-radius:12px;position:relative;overflow:hidden;
     background:radial-gradient(120px 120px at 30% 40%,rgba(91,134,255,.25),transparent),
                radial-gradient(160px 160px at 70% 65%,rgba(154,92,255,.22),transparent),#0c1020}
@@ -170,7 +175,6 @@
   .note{margin:16px auto 0;max-width:600px;background:var(--panel);border:1px solid var(--border);
     border-radius:12px;padding:15px 18px;color:var(--muted);font-size:14px;text-align:left}
   .note code{background:#0b0e16;padding:2px 7px;border-radius:6px;color:#cdd6f4;font-family:"SF Mono",ui-monospace,Menlo,monospace}
-  .install.compact{margin-top:12px}
 
   footer{text-align:center;padding:54px 24px;color:var(--muted);border-top:1px solid var(--border);font-size:14px}
   footer a{color:#aab6ff}
@@ -210,13 +214,13 @@
 </nav>
 
 <header class="hero" id="top">
-  <span class="pill">macOS 14+ · Native · Non-destructive</span>
+  <a class="pill" href="releases.html"><span class="vtag">v0.5.1</span>Now notarized by Apple — launches right away →</a>
   <h1 class="grad-text">Tens of thousands<br>of photos. One fast app.</h1>
   <p class="sub">Local · NAS · Apple Photos in one fast, native app.<br>Proven daily on a 67,000-photo library.</p>
   <div class="cta">
     <a class="btn btn-primary" href="#download">Download</a>
   </div>
-  <p class="micro">Apple Silicon · Intel · Open Source (MIT)</p>
+  <p class="micro">macOS 14+ · Apple Silicon &amp; Intel · Native · Open Source (MIT)</p>
 
   <div class="shot reveal">
     <img class="screen" src="../screenshots/grid.png" alt="Lumen grid — large photo library">
@@ -331,7 +335,7 @@
     <div class="why">
       <div class="card reveal"><div class="badge">🛡️</div><h3>Mistakes are reversible</h3><p>Every delete gets a <b>10-second Undo</b>. On a NAS or any volume with no Trash, files move to <code>.LumenTrash</code> for <b>30 days</b> instead of vanishing. No feature ever modifies your original files.</p></div>
       <div class="card reveal"><div class="badge">🧱</div><h3>It doesn't fall over</h3><p><b>Zero</b> memory leaks · cache limits prevent OOM. Zero-byte and corrupt files, <b>symlink loops</b>, unicode and very long filenames are all handled safely.</p></div>
-      <div class="card reveal"><div class="badge">✅</div><h3>Tested, not promised</h3><p><b>111 automated tests</b> gate every change, and it runs daily on a real 67k-photo NAS library. If a metadata write fails, it tells you instead of silently dropping it.</p></div>
+      <div class="card reveal"><div class="badge">✅</div><h3>Tested, not promised</h3><p><b>312 automated tests</b> gate every change, and it runs daily on a real 67k-photo NAS library. If a metadata write fails, it tells you instead of silently dropping it.</p></div>
     </div>
   </div>
 </section>
@@ -363,15 +367,11 @@ brew trust --cask rescenedev/tap/lumen-photos
 brew install --cask lumen-photos</code>
     </div>
     <div class="note reveal">
-      This build is not yet notarized, so Gatekeeper may block the first launch.
-      Remove the quarantine flag with the command below (recommended), or allow the app
-      under <b>System Settings → Privacy &amp; Security</b> ("Open Anyway"):
-    </div>
-    <div class="install compact reveal">
-      <button class="copy" onclick="copyXattr(event)">Copy</button>
-      <code>xattr -dr com.apple.quarantine "/Applications/Lumen.app"</code>
+      <b style="color:#7ee0a3">✓ Developer ID signed + notarized by Apple</b> (since v0.5.1) —
+      no workarounds, it launches right after download.
     </div>
     <div class="note reveal">
+      No Homebrew? <a href="https://github.com/rescenedev/lumen/releases/latest" style="color:#aab6ff">Download the latest zip</a> ·
       Build from source: <code>git clone</code> the repo, then run <code>./Scripts/make_app.sh</code> — no Xcode needed, just Command Line Tools.
     </div>
   </div>
@@ -402,27 +402,12 @@ brew install --cask lumen-photos</code>
 </footer>
 
 <script>
-  const hues = [[91,134,255],[154,92,255],[255,111,174],[80,200,180],[255,176,90],[120,160,255],[210,120,255],[90,180,255]];
-  function tile(){
-    const a=hues[Math.floor(Math.random()*hues.length)], b=hues[Math.floor(Math.random()*hues.length)];
-    const ang=Math.floor(Math.random()*360);
-    const d=document.createElement('div'); d.className='tile';
-    d.style.background=`linear-gradient(${ang}deg, rgb(${a.join(',')}), rgb(${b.join(',')}))`;
-    return d;
-  }
-  function fill(id,n){const el=document.getElementById(id); if(!el)return; for(let i=0;i<n;i++)el.appendChild(tile());}
-  fill('board',20); fill('mini',8); fill('mini2',8);
-
   const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.12});
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 
   function flashCopied(btn){const t=btn.textContent;btn.textContent='Copied ✓';setTimeout(()=>btn.textContent=t,1500);}
   function copyInstall(e){
     navigator.clipboard.writeText("brew tap rescenedev/tap\nbrew trust --cask rescenedev/tap/lumen-photos\nbrew install --cask lumen-photos");
-    flashCopied(e.currentTarget);
-  }
-  function copyXattr(e){
-    navigator.clipboard.writeText('xattr -dr com.apple.quarantine "/Applications/Lumen.app"');
     flashCopied(e.currentTarget);
   }
 </script>
