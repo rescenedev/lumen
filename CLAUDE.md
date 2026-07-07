@@ -9,6 +9,12 @@ Pure SwiftPM — there is no Xcode project. Requires macOS 14+.
 - Tests: `./Scripts/test.sh` — custom zero-dependency harness.
   Do NOT use `swift test`; the LumenTests target is an *executable*, not an XCTest bundle.
 - Release app bundle: `bash Scripts/make_app.sh` → `dist/Lumen.app`
+- Publish a release: `bash Scripts/release.sh [notes.md]` with `DEVELOPER_ID` and
+  `NOTARY_PROFILE` exported — NEVER release by hand-running individual steps.
+  The script signs, notarizes, packages zip + `Lumen.dmg` (the landing page's
+  permanent download link requires the DMG asset in every release), updates the
+  cask in repo + tap, and verifies with brew. Bump `Scripts/Info.plist` and
+  commit release notes first.
 
 ## Layout
 
