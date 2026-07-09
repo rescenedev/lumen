@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.2">
+    <div class="release-head">
+      <h2>0.5.2</h2><span class="date">July 9, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Disconnected-drive guard · faster loading while the cache rebuilds</h3>
+    <ul>
+      <li><b>When a NAS or USB volume disconnects, its folders gray out in the sidebar and can't be clicked.</b> Your photos and organization are preserved, and everything comes back automatically when the drive reconnects.</li>
+      <li><b>Visible photos load much faster while the thumbnail cache rebuilds</b> (after moving a library or clearing caches): background caching now fully yields until on-screen decodes finish, and duplicate reads of the same original (up to 3× I/O) are gone.</li>
+      <li><b>Editing rotated photos uses half the memory on save</b> — large panoramas are safe to edit on low-RAM Macs.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.1">
     <div class="release-head">
-      <h2>0.5.1</h2><span class="date">July 6, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.1</h2><span class="date">July 6, 2026</span>
     </div>
     <h3>Hotfix: crash when showing a notification</h3>
     <ul>

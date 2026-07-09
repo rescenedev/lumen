@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.2">
+    <div class="release-head">
+      <h2>0.5.2</h2><span class="date">2026년 7월 9일</span><span class="tag">최신</span>
+    </div>
+    <h3>끊긴 드라이브 표시 · 캐시 재생성 중 로딩 개선</h3>
+    <ul>
+      <li><b>NAS·USB가 끊기면 사이드바에서 해당 폴더가 회색으로 표시되고 클릭이 막힙니다.</b> 사진과 정리 데이터는 그대로 보존되며, 드라이브를 다시 연결하면 자동으로 되살아납니다.</li>
+      <li><b>썸네일 캐시를 처음부터 다시 만드는 동안(라이브러리 이동·캐시 삭제 후) 보이는 사진이 훨씬 빨리 뜹니다.</b> 백그라운드 캐싱이 지금 보는 사진의 디코드가 끝날 때까지 완전히 양보하고, 같은 원본을 여러 경로가 중복으로 읽던 낭비(최대 3배 I/O)를 제거했습니다.</li>
+      <li><b>회전 촬영된 사진의 편집 저장 시 메모리 사용량 절반</b> — 대형 파노라마 편집이 저사양 Mac에서도 안전해집니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.1">
     <div class="release-head">
-      <h2>0.5.1</h2><span class="date">2026년 7월 6일</span><span class="tag">최신</span>
+      <h2>0.5.1</h2><span class="date">2026년 7월 6일</span>
     </div>
     <h3>긴급 수정: 알림 표시 시 앱 종료</h3>
     <ul>
