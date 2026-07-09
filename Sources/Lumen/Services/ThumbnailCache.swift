@@ -134,6 +134,10 @@ final class ThumbnailCache {
             let image = self.loadAndCache(url: url, maxPixel: maxPixel, mtime: mtime, key: key)
             DispatchQueue.main.async { completion(image) }
         }
+        // Display decodes suspend warming for their whole lifetime (not a fixed
+        // window) so a cold visible fill never fights warming for disk I/O.
+        browsingGate.begin()
+        op.completionBlock = { [weak self] in self?.browsingGate.end() }
         decodeQueue.addOperation(op)
         return op
     }
@@ -164,6 +168,8 @@ final class ThumbnailCache {
                 guard let self, op?.isCancelled == false else { return }
                 _ = self.loadAndCache(url: entry.url, maxPixel: maxPixel, mtime: entry.mtime, key: key)
             }
+            browsingGate.begin()
+            op.completionBlock = { [weak self] in self?.browsingGate.end() }
             prefetchQueue.addOperation(op)
         }
     }
@@ -185,9 +191,11 @@ final class ThumbnailCache {
                 guard let self, op?.isCancelled == false else { return }
                 _ = self.loadAndCache(url: entry.url, maxPixel: maxPixel, mtime: entry.mtime, key: key)
             }
+            browsingGate.begin()
             op.completionBlock = { [weak self] in
                 guard let self else { return }
                 self.itemOpsLock.lock(); self.itemOps[key] = nil; self.itemOpsLock.unlock()
+                self.browsingGate.end()
             }
             itemOps[key] = op
             itemOpsLock.unlock()
@@ -259,47 +267,87 @@ final class ThumbnailCache {
             let counter = Counter(total)
             DispatchQueue.main.async { progress(total, todo.first?.url.deletingLastPathComponent().lastPathComponent) }
 
-            for entry in todo {
-                let disk = self.diskURL(entry.url, maxPixel, mtime: entry.mtime)
-                let op = BlockOperation()
-                op.queuePriority = .low
-                op.addExecutionBlock { [weak self, weak op] in
-                    guard let self, op?.isCancelled == false,
-                          self.warmGeneration.value == generation   // a newer warm pass owns the queue now
-                    else { return }
-                    if self.trickleMode {   // window closed — idle pace, sleep is 0% CPU
-                        Thread.sleep(forTimeInterval: self.trickleDelay)
-                        guard op?.isCancelled == false else { return }
+            // Enqueue in bounded chunks: a cold warm of ~66k photos used to hold
+            // ~66k BlockOperations (closures + contexts) resident for hours. Each
+            // chunk enqueues the next when its last operation completes.
+            let chunks = Self.warmChunkRanges(total: total, chunkSize: Self.warmChunkSize)
+            func enqueueChunk(_ index: Int) {
+                guard self.warmGeneration.value == generation, index < chunks.count else { return }
+                let pending = Counter(chunks[index].count)
+                for entry in todo[chunks[index]] {
+                    let disk = self.diskURL(entry.url, maxPixel, mtime: entry.mtime)
+                    let op = BlockOperation()
+                    op.queuePriority = .low
+                    op.addExecutionBlock { [weak self, weak op] in
+                        guard let self, op?.isCancelled == false,
+                              self.warmGeneration.value == generation   // a newer warm pass owns the queue now
+                        else { return }
+                        if self.trickleMode {   // window closed — idle pace, sleep is 0% CPU
+                            Thread.sleep(forTimeInterval: self.trickleDelay)
+                            guard op?.isCancelled == false else { return }
+                        }
+                        if !FileManager.default.fileExists(atPath: disk.path) {
+                            // Dedupe against the display/prefetch lanes: if one of
+                            // them is decoding this file right now, wait it out and
+                            // re-check instead of issuing a duplicate NAS read.
+                            let owned = self.decodeGate.acquireOrWait(entry.url.path)
+                            defer { if owned { self.decodeGate.release(entry.url.path) } }
+                            if !FileManager.default.fileExists(atPath: disk.path) {
+                                var image = Self.downsample(url: entry.url, maxPixel: maxPixel)
+                                if image == nil { image = QuickLookThumbnailer.thumbnail(for: entry.url, maxPixel: maxPixel) }
+                                if let image { self.writeDisk(image, to: disk) }   // disk only — don't evict memory
+                            }
+                        }
+                        let (left, push) = counter.tick()
+                        if push || left == 0 {
+                            let folder = entry.url.deletingLastPathComponent().lastPathComponent
+                            DispatchQueue.main.async { progress(left, left == 0 ? nil : folder) }
+                        }
                     }
-                    if !FileManager.default.fileExists(atPath: disk.path) {
-                        var image = Self.downsample(url: entry.url, maxPixel: maxPixel)
-                        if image == nil { image = QuickLookThumbnailer.thumbnail(for: entry.url, maxPixel: maxPixel) }
-                        if let image { self.writeDisk(image, to: disk) }   // disk only — don't evict memory
+                    op.completionBlock = {
+                        // Fires for cancelled ops too, so the chain can't stall;
+                        // the generation guard above stops a dead pass instead.
+                        let (left, _) = pending.tick()
+                        if left == 0 {
+                            DispatchQueue.global(qos: .utility).async { enqueueChunk(index + 1) }
+                        }
                     }
-                    let (left, push) = counter.tick()
-                    if push || left == 0 {
-                        let folder = entry.url.deletingLastPathComponent().lastPathComponent
-                        DispatchQueue.main.async { progress(left, left == 0 ? nil : folder) }
-                    }
+                    guard self.warmGeneration.value == generation else { return }   // superseded mid-enqueue
+                    self.warmQueue.addOperation(op)
                 }
-                guard self.warmGeneration.value == generation else { return }   // superseded mid-enqueue
-                self.warmQueue.addOperation(op)
             }
+            enqueueChunk(0)
         }
     }
 
-    func cancelWarming() { warmQueue.cancelAllOperations() }
+    /// Warm-queue chunk size: enough depth that the 3 warm lanes never starve
+    /// between chunk hand-offs, small enough that resident operations stay
+    /// bounded (~400 instead of the whole library).
+    private static let warmChunkSize = 400
 
-    // Pause warming briefly while the user is actively browsing, so the folder
-    // they're looking at gets the full decode throughput. Resumes after idle.
-    private var resumeWork: DispatchWorkItem?
-    func yieldWarmingToBrowsing() {
-        warmQueue.isSuspended = true
-        resumeWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.warmQueue.isSuspended = false }
-        resumeWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+    /// Chunk boundaries for a warm pass — pure helper, unit-tested.
+    static func warmChunkRanges(total: Int, chunkSize: Int) -> [Range<Int>] {
+        guard total > 0 else { return [] }
+        guard chunkSize > 0 else { return [0..<total] }
+        return stride(from: 0, to: total, by: chunkSize).map { $0..<min($0 + chunkSize, total) }
     }
+
+    func cancelWarming() {
+        _ = warmGeneration.bump()   // kills the chunk chain, not just queued ops
+        warmQueue.cancelAllOperations()
+    }
+
+    // Warming yields to browsing for the entire time user-facing decodes are
+    // in flight (display + viewport prefetch lanes), plus a trailing grace —
+    // a fixed pause used to expire mid-fill on a cold cache and let warming
+    // steal disk/NAS I/O back from the photos the user is looking at.
+    private lazy var browsingGate = BrowsingActivityGate { [weak self] suspended in
+        self?.warmQueue.isSuspended = suspended
+    }
+
+    /// "User opened a folder" nudge (kept for callers that have no matching
+    /// end); bracketed decode work keeps the suspension alive on its own.
+    func yieldWarmingToBrowsing() { browsingGate.touch() }
 
     /// Thread-safe countdown with a time-throttled "should I publish?" flag.
     /// Also doubles as a plain atomic counter (`bump`/`value`) for generations.
@@ -326,11 +374,20 @@ final class ThumbnailCache {
     /// The disk cache always stores `gridMaxPixel`; a smaller requested tier is
     /// derived from the cached JPEG (local, cheap) so the NAS original is only
     /// ever decoded once per photo.
+    /// One decode of any given original at a time, across all three lanes
+    /// (display, viewport prefetch, warming). Losers wait for the owner, then
+    /// serve themselves from the memory/disk cache the owner just filled —
+    /// instead of issuing a duplicate multi-MB NAS/USB read.
+    private let decodeGate = DecodeGate()
+
     @discardableResult
     private func loadAndCache(url: URL, maxPixel: Int, mtime: TimeInterval?, key: NSString) -> NSImage? {
         // Never run the file/QuickLook decode path on a Photos-library asset — it
         // would return the generic document icon. Assets only load via PhotoKit.
         if url.scheme == Photo.assetScheme { return nil }
+        let owned = decodeGate.acquireOrWait(url.path)
+        defer { if owned { decodeGate.release(url.path) } }
+        if !owned, let hit = memory.object(forKey: key) { return hit }   // owner filled memory
         let disk = diskURL(url, Self.gridMaxPixel, mtime: mtime ?? statMtime(url))
         if let data = try? Data(contentsOf: disk), let image = Self.decode(data, maxPixel: maxPixel) {
             memory.setObject(image, forKey: key, cost: cost(of: image))

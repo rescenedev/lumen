@@ -46,5 +46,6 @@ asyncSortCacheFixTests()
 perfAuditFixTests()
 bundleLocatorTests()
 imageEditorOrientationTests()
+thumbnailCoordinationTests()
 
 exit(Harness.finish())
