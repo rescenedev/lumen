@@ -514,6 +514,23 @@ final class AppModel {
         ThumbnailCache.shared.warmDiskCache(entries) { [weak self] remaining, folder in
             self?.warming.update(remaining: remaining, folder: folder)
         }
+        sweepStaleThumbnailsIfDue(entries)
+    }
+
+    /// Garbage-collect disk-cache thumbnails the library can no longer
+    /// reference (orphaned by a volume move or re-copied files — gigabytes
+    /// after a 60k-photo move). Throttled to once a day; photos under offline
+    /// roots are still in `entries`, so their cache survives a disconnect.
+    private static let thumbnailSweepKey = "lumen.lastThumbnailSweep"
+    private func sweepStaleThumbnailsIfDue(_ entries: [(url: URL, mtime: TimeInterval)]) {
+        let files = entries.filter { $0.url.scheme != Photo.assetScheme }
+        guard !files.isEmpty else { return }   // never sweep against an empty library
+        let last = UserDefaults.standard.double(forKey: Self.thumbnailSweepKey)
+        guard Date().timeIntervalSince1970 - last > 86_400 else { return }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.thumbnailSweepKey)
+        Task.detached(priority: .background) {
+            ThumbnailCache.shared.sweepStaleDiskEntries(validEntries: files)
+        }
     }
 
     /// Full recompute of the favorite/label counts — only on library changes

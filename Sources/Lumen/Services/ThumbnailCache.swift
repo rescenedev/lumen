@@ -73,10 +73,15 @@ final class ThumbnailCache {
         "\(url.path)|\(maxPixel)" as NSString
     }
 
+    /// The disk-cache filename (sans extension) for one photo — pure, so the
+    /// stale-entry sweep can compute the CURRENT library's valid-name set.
+    static func diskName(path: String, maxPixel: Int, mtime: TimeInterval) -> String {
+        let raw = "\(path)|\(maxPixel)|\(Int(mtime))"
+        return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
     private func diskURL(_ url: URL, _ maxPixel: Int, mtime: TimeInterval) -> URL {
-        let raw = "\(url.path)|\(maxPixel)|\(Int(mtime))"
-        let digest = SHA256.hash(data: Data(raw.utf8))
-        let name = digest.map { String(format: "%02x", $0) }.joined()
+        let name = Self.diskName(path: url.path, maxPixel: maxPixel, mtime: mtime)
         // Shard into 256 subdirs by the first 2 hex chars so no single directory
         // ever holds tens of thousands of files.
         let shard = String(name.prefix(2))
@@ -478,6 +483,49 @@ final class ThumbnailCache {
             return nil
         }
         return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+
+    // MARK: - Stale-entry GC
+
+    /// Delete disk-cache entries the current library can no longer reference.
+    /// Filenames are opaque SHA256(path|tier|mtime) hashes, so entries orphaned
+    /// by a library move (new volume → new paths) or re-copied files (new
+    /// mtimes) are unreachable forever — gigabytes after a 60k-photo move.
+    /// `valid` is the name set derived from the live photo list; entries
+    /// younger than `minAge` are kept even when unknown, because photos added
+    /// AFTER the valid-set snapshot write names the snapshot can't contain.
+    /// Returns the number of files deleted.
+    @discardableResult
+    static func sweepStale(in dir: URL, valid: Set<String>,
+                           olderThan minAge: TimeInterval, now: Date = Date()) -> Int {
+        let fm = FileManager.default
+        guard let shards = try? fm.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return 0 }
+        var deleted = 0
+        for shard in shards {
+            guard let files = try? fm.contentsOfDirectory(
+                at: shard, includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]) else { continue }
+            for file in files where file.pathExtension == "jpg" {
+                let name = file.deletingPathExtension().lastPathComponent
+                guard !valid.contains(name) else { continue }
+                let mtime = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
+                    .contentModificationDate ?? now
+                guard now.timeIntervalSince(mtime) > minAge else { continue }
+                if (try? fm.removeItem(at: file)) != nil { deleted += 1 }
+            }
+        }
+        return deleted
+    }
+
+    /// Instance entry point: sweep this cache's directory against the live
+    /// library's entries. Runs synchronously — call from a background task.
+    @discardableResult
+    func sweepStaleDiskEntries(validEntries: [Entry], olderThan minAge: TimeInterval = 86_400) -> Int {
+        let valid = Set(validEntries.map {
+            Self.diskName(path: $0.url.path, maxPixel: Self.gridMaxPixel, mtime: $0.mtime)
+        })
+        return Self.sweepStale(in: diskDir, valid: valid, olderThan: minAge)
     }
 
     func clear() {
