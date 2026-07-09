@@ -47,5 +47,6 @@ perfAuditFixTests()
 bundleLocatorTests()
 imageEditorOrientationTests()
 thumbnailCoordinationTests()
+offlineDriveGuardTests()
 
 exit(Harness.finish())

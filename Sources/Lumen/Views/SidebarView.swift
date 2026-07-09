@@ -305,8 +305,12 @@ struct SidebarView: View {
                     // Pre-sorted + cached in the model — re-sorting here ran on
                     // every sidebar body evaluation.
                     ForEach(model.photoFolders, id: \.self) { url in
-                        row(.folder(url), url.lastPathComponent, .secondary, count: folderCounts[url] ?? 0)
-                            .contextMenu { FolderContextMenu(url: url) }
+                        let offline = model.isUnderOfflineRoot(url)
+                        FolderRowLabel(name: url.lastPathComponent,
+                                       count: folderCounts[url] ?? 0, offline: offline)
+                            .tag(SidebarItem.folder(url))
+                            .selectionDisabled(offline)
+                            .contextMenu { if !offline { FolderContextMenu(url: url) } }
                     }
                 }
             } header: {
@@ -380,17 +384,42 @@ private struct FolderTreeNode: View {
     }
 
     private var label: some View {
+        let offline = model.isUnderOfflineRoot(node.url)
+        return FolderRowLabel(name: node.name, count: node.count, offline: offline)
+            .tag(SidebarItem.folder(node.url))
+            .selectionDisabled(offline)
+            .contextMenu { if !offline { FolderContextMenu(url: node.url) } }
+    }
+}
+
+/// Folder row shared by the tree and flat presentations. When the folder's
+/// volume is disconnected the row grays out, swaps its count for a
+/// disconnected-drive badge, and (via `selectionDisabled` at the call sites)
+/// refuses selection until the volume mounts again.
+private struct FolderRowLabel: View {
+    let name: String
+    let count: Int
+    let offline: Bool
+
+    var body: some View {
         Label {
             HStack {
-                Text(node.name).lineLimit(1)
+                Text(name).lineLimit(1)
+                    .foregroundStyle(offline ? Color.secondary.opacity(0.55) : Color.primary)
                 Spacer()
-                Text("\(node.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                if offline {
+                    Image(systemName: "externaldrive.badge.xmark")
+                        .imageScale(.small)
+                        .foregroundStyle(Color.secondary.opacity(0.55))
+                } else {
+                    Text("\(count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
             }
         } icon: {
-            Image(systemName: "folder").foregroundStyle(.secondary)
+            Image(systemName: "folder")
+                .foregroundStyle(offline ? Color.secondary.opacity(0.4) : Color.secondary)
         }
-        .tag(SidebarItem.folder(node.url))
-        .contextMenu { FolderContextMenu(url: node.url) }
+        .help(offline ? "Drive not connected — the folder comes back when the volume mounts" : "")
     }
 }
 

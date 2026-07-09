@@ -345,6 +345,8 @@ final class AppModel {
         }
         watcher = FolderWatcher { [weak self] in self?.rescanRoots() }
         reopenRecentFolders()
+        refreshOfflineRoots()
+        observeVolumeMounts()
         // Demo/screenshot hook: auto-open a folder on launch (no effect normally).
         if let demo = ProcessInfo.processInfo.environment["LUMEN_OPEN_FOLDER"] {
             importURLs([URL(fileURLWithPath: demo)])
@@ -1440,6 +1442,80 @@ final class AppModel {
             return local == false
         }
         return root.path.hasPrefix("/Volumes/")
+    }
+
+    // MARK: - Disconnected-drive guard
+
+    /// Roots whose volume (NAS/USB) is currently unmounted. The sidebar grays
+    /// these out and blocks selection; a mount notification clears them and
+    /// triggers a rescan so the content reappears on its own.
+    var offlineRoots: Set<URL> = []
+
+    /// Which of `roots` are disconnected: the directory is missing AND the path
+    /// shape says "removable/network volume" (a missing home-folder root was
+    /// deleted, not unplugged — the vanished-local path handles that).
+    /// `exists` is injectable for tests; production stats the filesystem.
+    nonisolated static func computeOfflineRoots(
+        _ roots: [URL],
+        exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> Set<URL> {
+        // Pure path-shape classification (no filesystem probe): once `exists`
+        // already said the directory is missing, a resourceValues stat would
+        // throw anyway — and mixing a real probe behind an injected `exists`
+        // makes the result depend on the test machine's mounts.
+        Set(roots.filter { !exists($0) && $0.path.hasPrefix("/Volumes/") })
+    }
+
+    /// True when `url` is one of `roots` or lives under one (path-component
+    /// boundary — /Volumes/nas2 is NOT under /Volumes/nas).
+    nonisolated static func url(_ url: URL, isUnderAny roots: Set<URL>) -> Bool {
+        guard !roots.isEmpty else { return false }
+        let path = url.path
+        return roots.contains { root in
+            let rootPath = root.path
+            return path == rootPath || path.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
+        }
+    }
+
+    /// Row-level check used by the sidebar (folder rows under an offline root
+    /// gray out and refuse selection).
+    func isUnderOfflineRoot(_ url: URL) -> Bool { Self.url(url, isUnderAny: offlineRoots) }
+
+    /// Recompute `offlineRoots` off the main thread (statting a wedged SMB
+    /// mount can block for seconds) and install the result on the main actor.
+    /// If the selection points into a root that just went offline, fall back
+    /// to All Photos so the browser never shows a dead scope.
+    func refreshOfflineRoots() {
+        let roots = rootFolders
+        Task.detached(priority: .utility) { [weak self] in
+            let offline = AppModel.computeOfflineRoots(roots)
+            await MainActor.run { [weak self] in
+                guard let self, self.offlineRoots != offline else { return }
+                self.offlineRoots = offline
+                if case .folder(let url) = self.selectedSidebar, Self.url(url, isUnderAny: offline) {
+                    self.selectedSidebar = .allPhotos
+                }
+            }
+        }
+    }
+
+    /// A volume mounted or unmounted. Refresh the offline set, then rescan:
+    /// reconcile preserves photos under offline roots and re-attaches the
+    /// folder watcher to every reachable root (a remounted volume needs both).
+    private func volumesDidChange() {
+        refreshOfflineRoots()
+        rescanRoots()
+    }
+
+    /// NSWorkspace mount/unmount observation — registered once from init.
+    /// Process-lifetime observers by design (same reasoning as BUG-061/073).
+    private func observeVolumeMounts() {
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.volumesDidChange() }
+            }
+        }
     }
 
     /// Everything reconcile needs to apply, computed off the main thread —
