@@ -70,7 +70,9 @@ bash Scripts/make_dmg.sh
 echo "==> Updating cask…"
 sed -i '' -e "s/^  version \".*\"/  version \"$VERSION\"/" \
           -e "s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/lumen-photos.rb
-git diff --stat Casks/lumen-photos.rb
+# Keep the landing pages' JSON-LD version stamp in sync (forgotten twice by hand).
+sed -i '' "s/\"softwareVersion\": \"[0-9.]*\"/\"softwareVersion\": \"$VERSION\"/" docs/index.html docs/en/index.html
+git diff --stat Casks/lumen-photos.rb docs/index.html docs/en/index.html
 
 if $DRY_RUN; then
     git checkout -- Casks/lumen-photos.rb
@@ -79,7 +81,7 @@ if $DRY_RUN; then
     exit 0
 fi
 
-git add Casks/lumen-photos.rb
+git add Casks/lumen-photos.rb docs/index.html docs/en/index.html
 git commit -m "chore: release $VERSION (cask sha)"
 git push origin HEAD
 
