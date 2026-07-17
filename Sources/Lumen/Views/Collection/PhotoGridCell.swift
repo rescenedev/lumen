@@ -306,8 +306,16 @@ final class PhotoCollectionItem: NSCollectionViewItem {
             if let nearby = ThumbnailCache.shared.cached(for: photo.url, maxPixel: other) {
                 cell.image = nearby
             }
-            thumbnailOp = ThumbnailCache.shared.thumbnail(for: photo.url, maxPixel: maxPixel,
-                                            mtime: photo.cacheMtime) { [weak self] img in
+            thumbnailOp = ThumbnailCache.shared.thumbnail(
+                for: photo.url, maxPixel: maxPixel, mtime: photo.cacheMtime,
+                preview: { [weak self] quick in
+                    // Embedded low-res preview — instant first paint on a cold
+                    // cache. Never paints over a real image (the nearby-tier
+                    // fallback above is sharper than the preview).
+                    guard let self, self.loadToken == token, self.cell.image == nil else { return }
+                    self.cell.image = quick
+                    self.cell.refresh()
+                }) { [weak self] img in
                 guard let self, self.loadToken == token else { return }
                 if let img {
                     self.cell.image = img

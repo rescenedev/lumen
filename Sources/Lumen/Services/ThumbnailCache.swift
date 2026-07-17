@@ -40,10 +40,58 @@ final class ThumbnailCache {
     private init() {
         // Cap by bytes, not count, so memory use is bounded regardless of size.
         memory.totalCostLimit = 180 * 1024 * 1024   // ~180 MB (disk cache backs the rest)
-        let base = AppDirectories.caches()
-        diskDir = base.appendingPathComponent("Lumen/Thumbnails", isDirectory: true)
+        // Application Support, NOT ~/Library/Caches: macOS (and cleaner apps)
+        // purge Caches under storage pressure, and rebuilding 60k+ thumbnails
+        // over a NAS/HDD takes hours — this store is expensive derived data,
+        // not a cheaply-regenerated cache. (Observed twice on the reference
+        // machine: the whole warm was wiped and restarted from zero.)
+        diskDir = AppDirectories.lumenSupport().appendingPathComponent("Thumbnails", isDirectory: true)
+        Self.relocateLegacyStore(
+            from: AppDirectories.caches().appendingPathComponent("Lumen/Thumbnails", isDirectory: true),
+            to: diskDir)
         try? FileManager.default.createDirectory(at: diskDir, withIntermediateDirectories: true)
+        // Derived data — keep it out of Time Machine backups.
+        var noBackup = URLResourceValues()
+        noBackup.isExcludedFromBackup = true
+        var dir = diskDir
+        try? dir.setResourceValues(noBackup)
         migrateFlatCacheIfNeeded()
+    }
+
+    /// One-time move of the legacy ~/Library/Caches store into the new
+    /// location. The common case (new store absent) is a single O(1) rename;
+    /// if both exist (builds interleaved), the slower per-file merge runs off
+    /// the calling thread. Present-day misses during that window just re-decode.
+    static func relocateLegacyStore(from old: URL, to new: URL) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: old.path) else { return }
+        if !fm.fileExists(atPath: new.path) {
+            try? fm.createDirectory(at: new.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if (try? fm.moveItem(at: old, to: new)) != nil { return }
+        }
+        DispatchQueue.global(qos: .utility).async { mergeLegacyStore(from: old, to: new) }
+    }
+
+    /// Per-file merge for the both-stores-exist case: entries already in the
+    /// new store win (they're fresher); everything else moves over. The legacy
+    /// directory is removed at the end.
+    static func mergeLegacyStore(from old: URL, to new: URL) {
+        let fm = FileManager.default
+        let shards = (try? fm.contentsOfDirectory(at: old, includingPropertiesForKeys: nil,
+                                                  options: [.skipsHiddenFiles])) ?? []
+        for shard in shards {
+            let files = (try? fm.contentsOfDirectory(at: shard, includingPropertiesForKeys: nil,
+                                                     options: [.skipsHiddenFiles])) ?? []
+            let newShard = new.appendingPathComponent(shard.lastPathComponent, isDirectory: true)
+            try? fm.createDirectory(at: newShard, withIntermediateDirectories: true)
+            for file in files {
+                let target = newShard.appendingPathComponent(file.lastPathComponent)
+                if !fm.fileExists(atPath: target.path) {
+                    try? fm.moveItem(at: file, to: target)
+                }
+            }
+        }
+        try? fm.removeItem(at: old)
     }
 
     /// Older builds wrote all thumbnails flat into one directory. MOVE those
@@ -110,8 +158,38 @@ final class ThumbnailCache {
     /// decodes head-of-line blocking the cells the user lands on. The cell cancels
     /// this on reuse. `completion` is ALWAYS called (nil on cancel/failure), so the
     /// `async` wrapper below can never leak its continuation.
+    /// Fast-first-paint lane: reads a photo's EMBEDDED thumbnail (a few-KB
+    /// header read, no full decode) so a cold cell shows a slightly-soft image
+    /// immediately while the sharp tier decodes behind it. Cheap ops, so the
+    /// lane is wide and never touches the warm/decode gates.
+    private let previewQueue: OperationQueue = {
+        let q = OperationQueue()
+        q.maxConcurrentOperationCount = 4
+        q.qualityOfService = .userInitiated
+        return q
+    }()
+
+    /// The embedded (EXIF/HEIF) preview only — returns nil rather than ever
+    /// falling back to a full-image decode; the caller's slow lane does that.
+    static func embeddedThumbnail(url: URL, maxPixel: Int) -> NSImage? {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: false,
+            kCGImageSourceCreateThumbnailFromImageIfAbsent: false,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    }
+
+    /// `preview`, when provided, may fire once on the main thread with the
+    /// embedded low-res thumbnail BEFORE `completion` — never after it.
     @discardableResult
     func thumbnail(for url: URL, maxPixel: Int, mtime: TimeInterval? = nil,
+                   preview: ((NSImage) -> Void)? = nil,
                    completion: @escaping (NSImage?) -> Void) -> Operation? {
         let key = memKey(url, maxPixel)
         if let hit = memory.object(forKey: key) {
@@ -128,16 +206,35 @@ final class ThumbnailCache {
             }
             return nil
         }
+        // Main-thread confined: set by the final delivery, checked by the
+        // preview delivery, so a late preview can never paint over the sharp
+        // final image.
+        var finished = false
+        let deliver: (NSImage?) -> Void = { image in
+            finished = true
+            completion(image)
+        }
+        if let preview, let mtime {
+            previewQueue.addOperation { [weak self] in
+                guard let self else { return }
+                // The disk cache serves the sharp tier in milliseconds — a
+                // preview only helps when the slow original decode is coming.
+                let disk = self.diskURL(url, Self.gridMaxPixel, mtime: mtime)
+                guard !FileManager.default.fileExists(atPath: disk.path),
+                      let quick = Self.embeddedThumbnail(url: url, maxPixel: maxPixel) else { return }
+                DispatchQueue.main.async { if !finished { preview(quick) } }
+            }
+        }
         let op = BlockOperation()
         op.addExecutionBlock { [weak self, weak op] in
             // Cancelled while still queued (cell scrolled away): skip the multi-MB
             // NAS read entirely, but still resume the caller with nil.
             guard let self, op?.isCancelled == false else {
-                DispatchQueue.main.async { completion(nil) }
+                DispatchQueue.main.async { deliver(nil) }
                 return
             }
             let image = self.loadAndCache(url: url, maxPixel: maxPixel, mtime: mtime, key: key)
-            DispatchQueue.main.async { completion(image) }
+            DispatchQueue.main.async { deliver(image) }
         }
         // Display decodes suspend warming for their whole lifetime (not a fixed
         // window) so a cold visible fill never fights warming for disk I/O.

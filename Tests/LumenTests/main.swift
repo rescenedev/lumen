@@ -49,5 +49,6 @@ imageEditorOrientationTests()
 thumbnailCoordinationTests()
 offlineDriveGuardTests()
 thumbnailSweepTests()
+thumbnailPreviewAndStoreTests()
 
 exit(Harness.finish())
