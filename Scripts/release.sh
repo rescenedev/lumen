@@ -75,7 +75,7 @@ sed -i '' "s/\"softwareVersion\": \"[0-9.]*\"/\"softwareVersion\": \"$VERSION\"/
 git diff --stat Casks/lumen-photos.rb docs/index.html docs/en/index.html
 
 if $DRY_RUN; then
-    git checkout -- Casks/lumen-photos.rb
+    git checkout -- Casks/lumen-photos.rb docs/index.html docs/en/index.html
     echo
     echo "✅ Dry run complete — artifacts built ($ZIP, dist/Lumen.dmg), nothing published."
     exit 0
