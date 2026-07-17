@@ -298,28 +298,21 @@
       <div class="stat reveal"><div class="num">2-tier</div><div class="lbl">memory + disk cache (survives relaunch)</div></div>
     </div>
     <div class="bench reveal">
-      <p class="bench-env">Measured on a real library — <b>67,676 photos</b> · <b>638 folders</b> · Synology NAS (SMB) · Apple Silicon.
-      These are not synthetic benchmarks: every number comes from automated runs against this library.</p>
+      <p class="bench-env">Measured on the real library — <b>66,849 photos</b> · <b>632 folders</b> · external USB storage · Apple Silicon · v0.5.3.
+      Not synthetic benchmarks: numbers come from an in-app instrumentation probe.</p>
       <table class="bench-table">
         <tr><th>Test</th><th>Result</th></tr>
-        <tr><td>Launch → grid fully populated with thumbnails</td><td><b>1–2 frames</b> after the window appears (no loading screen)</td></tr>
-        <tr><td>Library cache decode (67,676 photos)</td><td><b>~100 ms</b></td></tr>
-        <tr><td>Opening folders — all 644 folders &amp; albums in sequence</td><td>mean <b>1 ms</b> · p95 3 ms · max 9 ms</td></tr>
-        <tr><td>First folder click right after launch</td><td><b>~4 ms</b></td></tr>
-        <tr><td>Click a photo → info panel update</td><td><b>~3 ms</b></td></tr>
-        <tr><td>Select All (⌘A, 67,676 photos)</td><td><b>~0.2 s</b></td></tr>
-        <tr><td>Search — filter + sort across 67k</td><td><b>0</b> main-thread blocking (runs in background)</td></tr>
-        <tr><td>Bulk add to album (10k into a 20k album)</td><td><b>~0.2 s</b></td></tr>
-        <tr><td>Bulk remove from album (10k of 20k)</td><td><b>17 ms</b></td></tr>
-        <tr><td>Bulk favorite/rate (20k photos)</td><td><b>~0.4 s</b> (single transaction)</td></tr>
-        <tr><td>Thumbnail-size slider · window resize</td><td>no stalls (GPU-scaled)</td></tr>
+        <tr><td>App launch → photo list ready</td><td><b>~0.47 s</b> (no loading screen — the grid is just there)</td></tr>
+        <tr><td>Folder open — all 632 folders swept</td><td>avg <b>0.6 ms</b> · p95 1.1 ms · max 1.3 ms</td></tr>
+        <tr><td>Select all (⌘A, 66,849 photos)</td><td><b>~20 ms</b></td></tr>
+        <tr><td>Search — filter+sort 66.8k photos</td><td>main-thread blocking: <b>0</b> (processed in background)</td></tr>
+        <tr><td>Thumbnail size / window resize</td><td>No stalls (GPU scaling)</td></tr>
         <tr><td>App size</td><td><b>10 MB</b> installed · 3.5 MB download</td></tr>
-        <tr><td>Memory (browsing the 67k library)</td><td><b>~240 MB</b> · ~380 MB after full-size viewing (bounded by cache limits)</td></tr>
-        <tr><td>CPU</td><td><b>0.0%</b> idle · 16–27% while continuously scrolling a 58k folder</td></tr>
-        <tr><td>Heap analysis (leaks/heap)</td><td><b>0</b> memory leaks in app code</td></tr>
+        <tr><td>Memory (66.8k library, idle)</td><td><b>~394 MB</b> · returns within seconds after scroll bursts (bounded by cache caps)</td></tr>
+        <tr><td>CPU</td><td>Idle <b>0.0%</b></td></tr>
       </table>
-      <p class="bench-note">Method: 120 Hz main-thread hitch monitor + frame-by-frame screen capture + profiler sampling, as of v0.4.0.
-      The whole process is documented in the <a href="releases.html">release notes</a>.</p>
+      <p class="bench-note">Methodology: in-app instrumentation probe (full folder sweep, main-thread cost timing) + process sampling, as of v0.5.3.
+      The process is documented in the <a href="releases.html">release notes</a>.</p>
     </div>
     <p class="ssub reveal" style="margin-top:34px;font-size:14.5px">
       Memoized lists · folder index · debounced navigation · background thumbnail warming · lazy EXIF indexing · progressive image loading

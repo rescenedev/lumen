@@ -50,5 +50,6 @@ thumbnailCoordinationTests()
 offlineDriveGuardTests()
 thumbnailSweepTests()
 thumbnailPreviewAndStoreTests()
+perfProbeTests()
 
 exit(Harness.finish())

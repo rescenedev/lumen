@@ -6,5 +6,10 @@ import SwiftUI
 /// link against the code (executable targets aren't linkable).
 public func runLumenApp() {
     CrashReporter.install()
+    // Touching the probe here anchors its launch timestamp at process entry
+    // (nil and inert unless LUMEN_PERF_REPORT is set).
+    if PerfProbe.shared != nil {
+        NSLog("Lumen: perf probe armed")
+    }
     LumenApp.main()
 }

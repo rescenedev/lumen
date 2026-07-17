@@ -48,6 +48,20 @@ final class AppModel {
     }
     @ObservationIgnored private var sidebarCommitWork: DispatchWorkItem?
 
+    /// Perf-probe/test seam: commit a sidebar selection synchronously
+    /// (bypassing the 120ms click debounce) and force the visible-list
+    /// recompute, returning the synchronous main-thread cost in seconds —
+    /// the "folder open" number a user feels as the click-to-grid delay.
+    @discardableResult
+    func probeCommit(_ item: SidebarItem) -> TimeInterval {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        selectedSidebar = item
+        sidebarCommitWork?.cancel()
+        committedSidebar = item
+        _ = visiblePhotos
+        return CFAbsoluteTimeGetCurrent() - t0
+    }
+
     private func scheduleSidebarCommit() {
         // Cancel BEFORE the equality guard: clicking A → B → back to A within
         // the 120ms window must kill the pending B commit, or the grid shows B
@@ -2582,6 +2596,7 @@ final class AppModel {
             }
         }
         isLoadingLibrary = false   // grid is on screen from here
+        PerfProbe.shared?.markLibraryReady(self)
     }
 
     private func finishLibraryStartup(cachedExif: [String: ExifInfo]?, urls: [URL]) async {
