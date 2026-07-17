@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.3">
+    <div class="release-head">
+      <h2>0.5.3</h2><span class="date">2026년 7월 17일</span><span class="tag">최신</span>
+    </div>
+    <h3>썸네일 캐시가 다시는 리셋되지 않습니다 · 빈 칸 대신 즉시 표시</h3>
+    <ul>
+      <li><b>썸네일 저장소를 macOS가 지우지 못하는 위치로 옮겼습니다.</b> 저장공간이 부족하거나 정리 앱을 쓰면 시스템이 캐시 폴더를 통째로 비워 수만 장 썸네일을 처음부터 다시 만들던 문제의 근본 해결입니다. 기존 캐시는 자동으로 이전됩니다.</li>
+      <li><b>캐시가 없는 사진도 빈 회색 칸 대신 바로 보입니다.</b> 사진에 내장된 미리보기를 먼저 그리고(파일 헤더만 읽음), 선명한 썸네일이 준비되면 교체합니다 — 아이폰 HEIC에서 특히 체감이 큽니다.</li>
+      <li><b>라이브러리를 다른 드라이브로 옮긴 뒤 남는 옛 캐시 찌꺼기(수 GB)를 하루 한 번 자동 정리</b>합니다. 새로 만든 캐시·끊긴 드라이브의 캐시는 건드리지 않습니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.2">
     <div class="release-head">
-      <h2>0.5.2</h2><span class="date">2026년 7월 9일</span><span class="tag">최신</span>
+      <h2>0.5.2</h2><span class="date">2026년 7월 9일</span>
     </div>
     <h3>끊긴 드라이브 표시 · 캐시 재생성 중 로딩 개선</h3>
     <ul>

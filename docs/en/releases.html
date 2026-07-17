@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.3">
+    <div class="release-head">
+      <h2>0.5.3</h2><span class="date">July 17, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>The thumbnail cache never resets again · instant paint instead of empty cells</h3>
+    <ul>
+      <li><b>The thumbnail store moved where macOS can't purge it.</b> Under storage pressure (or with cleaner apps) the system wiped the cache folder wholesale, forcing tens of thousands of thumbnails to rebuild from scratch. Existing caches migrate automatically.</li>
+      <li><b>Uncached photos paint immediately instead of sitting as empty gray cells.</b> The photo's embedded preview draws first (a header-only read), then the sharp thumbnail swaps in — biggest on iPhone HEICs.</li>
+      <li><b>Old cache orphans left after moving a library to another drive (gigabytes) are garbage-collected once a day.</b> Fresh entries and disconnected-drive caches are never touched.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.2">
     <div class="release-head">
-      <h2>0.5.2</h2><span class="date">July 9, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.2</h2><span class="date">July 9, 2026</span>
     </div>
     <h3>Disconnected-drive guard · faster loading while the cache rebuilds</h3>
     <ul>
