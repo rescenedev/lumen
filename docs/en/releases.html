@@ -106,9 +106,20 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.4">
+    <div class="release-head">
+      <h2>0.5.4</h2><span class="date">July 18, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Favorites, tags, and labels open instantly</h3>
+    <ul>
+      <li><b>Removed the ~0.1s stall when entering Favorites · On This Day · Labels · Tags · Albums · Duplicates on large libraries.</b> The membership scan moved off the main thread, so entry is instant and rapid favorite/rating edits while culling no longer hitch — measured 94ms → 0.09ms.</li>
+      <li><b>Built-in instrumentation probe</b> (dev-only, fully inert normally) now verifies performance on every release; the landing-page benchmarks come from its real-library measurements.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.3">
     <div class="release-head">
-      <h2>0.5.3</h2><span class="date">July 17, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.3</h2><span class="date">July 17, 2026</span>
     </div>
     <h3>The thumbnail cache never resets again · instant paint instead of empty cells</h3>
     <ul>
