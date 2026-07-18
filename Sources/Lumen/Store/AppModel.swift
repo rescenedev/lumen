@@ -641,36 +641,80 @@ final class AppModel {
     /// order (which is already sorted) except for album scope, which can use
     /// its own manual order.
     private func scoped(_ photos: [Photo]) -> [Photo] {
-        switch committedSidebar {
+        let scope = committedSidebar
+        var albumPaths: [String]?
+        if case .album(let id) = scope {
+            albumPaths = albums.first(where: { $0.id == id })?.photoPaths
+        }
+        return Self.scopePass(photos, scope: scope,
+                              metaByPath: Self.scopeNeedsMeta(scope) ? store.items : [:],
+                              duplicatePaths: duplicatePaths,
+                              albumPaths: albumPaths,
+                              byFolder: directPhotosByFolder)
+    }
+
+    /// Whether the scope's membership test reads per-photo metadata (the pass
+    /// then needs the metadata mirror snapshot).
+    nonisolated static func scopeNeedsMeta(_ scope: SidebarItem) -> Bool {
+        switch scope {
+        case .favorites, .label, .tag: return true
+        default: return false
+        }
+    }
+
+    /// Whether the scope pass costs O(photos) with per-photo work — these are
+    /// the scopes that froze the main thread when entered on a large library
+    /// (Favorites measured 94ms at 66.8k photos) and must run off-main there.
+    /// Folder is excluded: it walks the folder index, not the photo list.
+    nonisolated static func scopeIsExpensive(_ scope: SidebarItem) -> Bool {
+        switch scope {
+        case .favorites, .recentlyAdded, .onThisDay, .duplicates, .label, .tag, .album:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// The scope membership pass as a pure function over value snapshots, so
+    /// large libraries can run it OFF the main thread together with the sort.
+    /// `albumPaths` is the resolved album membership (nil = album gone → []).
+    nonisolated static func scopePass(
+        _ photos: [Photo], scope: SidebarItem,
+        metaByPath: [String: PhotoMeta],
+        duplicatePaths: Set<String>,
+        albumPaths: [String]?,
+        byFolder: [String: [Photo]],
+        now: Date = Date(),
+        calendar: Calendar = Calendar.current
+    ) -> [Photo] {
+        switch scope {
         case .allPhotos, .photosLibrary, .photosAlbum:
             return photos
         case .favorites:
-            return photos.filter { isFavorite($0) }
+            return photos.filter { metaByPath[$0.url.path]?.favorite ?? false }
         case .recentlyAdded:
-            let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
+            let cutoff = now.addingTimeInterval(-30 * 24 * 3600)
             return photos.filter { ($0.creationDate ?? .distantPast) >= cutoff }
         case .onThisDay:
-            let cal = Calendar.current
-            let today = cal.dateComponents([.month, .day], from: Date())
+            let today = calendar.dateComponents([.month, .day], from: now)
             return photos.filter {
                 guard let date = $0.creationDate else { return false }
-                let c = cal.dateComponents([.month, .day], from: date)
+                let c = calendar.dateComponents([.month, .day], from: date)
                 return c.month == today.month && c.day == today.day
             }
         case .duplicates:
             return photos.filter { duplicatePaths.contains($0.url.path) }
         case .label(let label):
-            return photos.filter { meta($0).label == label }
-        case .album(let id):
-            guard let album = albums.first(where: { $0.id == id }) else { return [] }
-            let membership = Set(album.photoPaths)
+            return photos.filter { (metaByPath[$0.url.path]?.label ?? .none) == label }
+        case .album:
+            guard let albumPaths else { return [] }
+            let membership = Set(albumPaths)
             return photos.filter { membership.contains($0.url.path) }  // sorted later
         case .tag(let tag):
-            return photos.filter { meta($0).tags.contains(tag) }
+            return photos.filter { metaByPath[$0.url.path]?.tags.contains(tag) ?? false }
         case .folder(let url):
             // Folder + descendants via the folder index (iterate folders, not photos).
             let prefix = url.path.hasSuffix("/") ? url.path : url.path + "/"
-            let byFolder = directPhotosByFolder
             var result: [Photo] = []
             for (folderPath, folderPhotos) in byFolder
             where folderPath == url.path || folderPath.hasPrefix(prefix) {
@@ -857,7 +901,14 @@ final class AppModel {
         let key = visibleSignature
         if let hit = visibleCacheMap[key] { lastVisible = hit; cancelSupersededSort(currentKey: key); return hit }
 
-        let base = scoped(sourcePhotos)
+        let source = sourcePhotos
+        let scope = committedSidebar
+        // Expensive membership scopes (Favorites/Label/Tag/…) on a large
+        // library: don't pay the O(photos) scope pass on the main thread —
+        // route scope + filter + sort off-main together. (Entering Favorites
+        // ran the pass synchronously and measured 94ms at 66.8k photos.)
+        let offloadScope = Self.scopeIsExpensive(scope) && source.count > asyncSortThreshold
+        let base = offloadScope ? source : scoped(source)
         let sorter = currentSorter()
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         let f = filter
@@ -865,10 +916,10 @@ final class AppModel {
         // Value snapshots for the (possibly off-main) pass — all COW, no copying.
         let names = query.isEmpty ? [:] : lowerNames
         let tags = lowercasedTags(query: query)
-        let metaByPath = needsPass ? store.items : [:]
+        let metaByPath = (needsPass || (offloadScope && Self.scopeNeedsMeta(scope))) ? store.items : [:]
         let exifSnapshot = needsPass ? exif : [:]
 
-        if base.count <= asyncSortThreshold {
+        if !offloadScope, base.count <= asyncSortThreshold {
             // Small scope: camera-name lookups built per-base (O(base), ~ms) —
             // NOT from the full 67k EXIF index, which costs ~200ms.
             var cams: [String: String] = [:]
@@ -903,6 +954,12 @@ final class AppModel {
             let camsCached = (!query.isEmpty && lowerCameraKey == indexVersion) ? lowerCameraCache : nil
             let indexVersionSnapshot = indexVersion
             let wantsCams = !query.isEmpty
+            // Scope-pass snapshots for the offloaded membership scan.
+            let dupSnapshot = offloadScope ? duplicatePaths : []
+            var albumSnapshot: [String]?
+            if case .album(let id) = scope {
+                albumSnapshot = albums.first(where: { $0.id == id })?.photoPaths
+            }
             sortTask = Task { [weak self] in
                 await MainActor.run { self?.isSortingVisible = true }
                 let (sorted, builtCams) = await Task.detached(priority: .userInitiated) {
@@ -916,10 +973,15 @@ final class AppModel {
                             built = cams
                         }
                     }
-                    let gathered = needsPass
-                        ? AppModel.filterAndSearch(base, filter: f, query: query, names: names,
-                                                   cams: cams, tags: tags, metaByPath: metaByPath, exif: exifSnapshot)
+                    let scopedBase = offloadScope
+                        ? AppModel.scopePass(base, scope: scope, metaByPath: metaByPath,
+                                             duplicatePaths: dupSnapshot, albumPaths: albumSnapshot,
+                                             byFolder: [:])
                         : base
+                    let gathered = needsPass
+                        ? AppModel.filterAndSearch(scopedBase, filter: f, query: query, names: names,
+                                                   cams: cams, tags: tags, metaByPath: metaByPath, exif: exifSnapshot)
+                        : scopedBase
                     return (sorter(gathered), built)
                 }.value
                 // This Task inherits @MainActor, so execution resumes here on the

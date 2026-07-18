@@ -51,5 +51,6 @@ offlineDriveGuardTests()
 thumbnailSweepTests()
 thumbnailPreviewAndStoreTests()
 perfProbeTests()
+scopePassTests()
 
 exit(Harness.finish())
