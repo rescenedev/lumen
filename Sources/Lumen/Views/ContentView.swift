@@ -188,8 +188,11 @@ struct ContentView: View {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
+            // A bare spinner here said only "something is happening" — during a
+            // multi-minute NAS import that's the least useful thing it could
+            // say. It carries the live count and a way out instead.
             if model.isScanning {
-                ProgressView().controlSize(.small)
+                ScanToolbarStatus(scan: model.scanProgress) { model.cancelScan() }
             }
 
             Picker("View", selection: viewModeBinding) {

@@ -222,32 +222,31 @@ struct PhotoBrowserView: View {
                     WarmingStatusView(warming: model.warming)
                 }
                 if model.isIndexingExif {
-                    // Determinate once the work list is sized — same treatment as
-                    // warming, so every long background job reads "x of y".
-                    if model.exifIndexTotal > 0 {
-                        ProgressView(value: Double(model.exifIndexDone),
-                                     total: Double(model.exifIndexTotal))
-                            .progressViewStyle(.linear)
-                            .controlSize(.small)
-                            .frame(width: 70)
-                    } else {
-                        ProgressView().controlSize(.mini)
+                    // Same row shape as warming, so the three background jobs
+                    // read as one family instead of three ad-hoc layouts.
+                    StatusRow(label: "Metadata",
+                              detail: BackgroundWorkText.counts(done: model.exifIndexDone,
+                                                                total: model.exifIndexTotal),
+                              context: indexingContext) {
+                        if model.exifIndexTotal > 0 {
+                            ThinProgressBar(fraction: Double(model.exifIndexDone)
+                                            / Double(model.exifIndexTotal))
+                        } else {
+                            ProgressView().controlSize(.mini)
+                        }
                     }
-                    Text(indexingStatusText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .help("Reading camera & EXIF info so search and the map can find photos")
+                    .help("Reading camera & EXIF info so search and the map can find photos")
                 } else if model.exifIndexJustFinished {
-                    Image(systemName: "checkmark.circle.fill")
-                        .imageScale(.small)
-                        .foregroundStyle(.green)
-                    Text("Metadata indexed · \(model.exifReadyCount.formatted()) photos")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .help("Photo metadata (camera, date, GPS) is indexed — search and the map are ready")
+                    StatusRow(label: "Metadata ready",
+                              detail: "\(model.exifReadyCount.formatted()) photos",
+                              context: nil) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .imageScale(.small)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.green)
+                    }
+                    .transition(.opacity)
+                    .help("Photo metadata (camera, date, GPS) is indexed — search and the map are ready")
                 }
                 Spacer()
                 if model.viewMode == .grid {
@@ -265,14 +264,13 @@ struct PhotoBrowserView: View {
         .background(.bar)
     }
 
-    private var indexingStatusText: String {
-        let total = model.exifIndexTotal
-        guard total > 0 else { return "Indexing photo metadata…" }
-        var parts = ["Indexing metadata"]
+    /// Where the index is reading from and how fast — the trailing context of
+    /// the row, at the same rank as the folder name on the other two jobs.
+    private var indexingContext: String? {
+        var parts: [String] = []
         if !model.exifIndexSource.isEmpty { parts.append(model.exifIndexSource) }
-        parts.append("\(model.exifIndexDone.formatted()) / \(total.formatted())")
         if model.exifIndexRate > 0 { parts.append("\(model.exifIndexRate)/s") }
-        return parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var statusText: String {

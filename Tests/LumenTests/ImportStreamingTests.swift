@@ -283,31 +283,24 @@ func importStreamingTests() {
     test("scanStatusTextShowsBothNumbersOnlyWhenTheyDiffer") {
         // Counts go through Int.formatted(), so the expectations are built the
         // same way — the assertion is about the wording, not the machine locale.
-        checkEqual(ScanStatusText.statusBar(found: 12_480, added: 12_000,
-                                            folder: "2011.Turkey", stopping: false),
-                   "Reading folder · \(12_480.formatted()) found · \(12_000.formatted()) new · 2011.Turkey",
+        checkEqual(ScanStatusText.counts(found: 12_480, added: 12_000, stopping: false),
+                   "\(12_480.formatted()) found · \(12_000.formatted()) new",
                    "some photos were already in the library — say so")
-        checkEqual(ScanStatusText.statusBar(found: 12_480, added: 12_480,
-                                            folder: nil, stopping: false),
-                   "Reading folder · \(12_480.formatted()) photos",
+        checkEqual(ScanStatusText.counts(found: 12_480, added: 12_480, stopping: false),
+                   "\(12_480.formatted()) photos",
                    "a fresh import shows one number, not the same one twice")
-        checkEqual(ScanStatusText.statusBar(found: 5, added: 5, folder: "", stopping: false),
-                   "Reading folder · 5 photos", "an empty folder name is dropped, not appended")
-        checkEqual(ScanStatusText.statusBar(found: 5, added: 5, folder: "x", stopping: true),
-                   "Stopping…")
+        checkEqual(ScanStatusText.counts(found: 5, added: 5, stopping: true), "…",
+                   "a stopping row shows no stale count next to its 'Stopping' label")
     }
 
-    test("warmingTextAlwaysCarriesADenominator") {
+    test("backgroundWorkTextAlwaysCarriesADenominator") {
         // The old status line was a bare countdown ("Caching 29,412") — a number
-        // with nothing to measure it against.
-        checkEqual(BackgroundWorkText.warming(done: 12_340, total: 30_124, folder: "2011.Turkey"),
-                   "Thumbnails \(12_340.formatted()) / \(30_124.formatted()) · 41% · 2011.Turkey")
-        checkEqual(BackgroundWorkText.warming(done: 0, total: 8, folder: nil),
-                   "Thumbnails 0 / 8 · 0%")
-        checkEqual(BackgroundWorkText.warming(done: 8, total: 8, folder: nil),
-                   "Thumbnails 8 / 8 · 100%")
-        checkEqual(BackgroundWorkText.warming(done: 0, total: 0, folder: nil),
-                   "Thumbnails 0 / 0", "no total yet ⇒ no misleading 0%/NaN")
+        // with nothing to measure it against. The bar carries the share, so the
+        // text carries the precision and nothing is said twice.
+        checkEqual(BackgroundWorkText.counts(done: 12_340, total: 30_124),
+                   "\(12_340.formatted()) of \(30_124.formatted())")
+        checkEqual(BackgroundWorkText.counts(done: 0, total: 8), "0 of 8")
+        checkEqual(BackgroundWorkText.counts(done: 8, total: 8), "8 of 8")
     }
 
     test("warmingMonitorDerivesDoneAndFraction") {

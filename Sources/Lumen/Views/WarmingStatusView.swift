@@ -8,36 +8,24 @@ struct WarmingStatusView: View {
 
     var body: some View {
         if warming.remaining > 0 {
-            HStack(spacing: 6) {
-                // Determinate: the work list size is known up front, so show
-                // real headway instead of an indeterminate spinner.
-                ProgressView(value: warming.fraction)
-                    .progressViewStyle(.linear)
-                    .controlSize(.small)
-                    .frame(width: 70)
-                Text(BackgroundWorkText.warming(done: warming.done, total: warming.total,
-                                                folder: warming.folder))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .help("Building the thumbnail cache in the background so browsing is instant. "
-                          + "Photos stay usable while this runs.")
+            StatusRow(label: "Thumbnails",
+                      detail: BackgroundWorkText.counts(done: warming.done, total: warming.total),
+                      context: warming.folder) {
+                ThinProgressBar(fraction: warming.fraction)
             }
+            .help("Building the thumbnail cache in the background so browsing is instant. "
+                  + "Your photos stay usable while this runs.")
         }
     }
 }
 
-/// Pure status-line wording for the two long background jobs, kept out of the
-/// views so the phrasing is unit-tested and consistent.
+/// Pure status-line wording for the long background jobs, kept out of the views
+/// so the phrasing is unit-tested and consistent between them.
 enum BackgroundWorkText {
-    /// Thumbnail warming: the total is known, so always show the fraction.
-    static func warming(done: Int, total: Int, folder: String?) -> String {
-        var text = "Thumbnails \(done.formatted()) / \(total.formatted())"
-        if total > 0 {
-            text += " · \(Int((Double(done) / Double(total) * 100).rounded()))%"
-        }
-        if let folder, !folder.isEmpty { text += " · \(folder)" }
-        return text
+    /// Always a fraction. A bare countdown ("Caching 29,412") is a number with
+    /// nothing to measure it against. No percentage: the bar already says what
+    /// share is done, and printing it twice is clutter, not clarity.
+    static func counts(done: Int, total: Int) -> String {
+        "\(done.formatted()) of \(total.formatted())"
     }
 }
