@@ -3,11 +3,11 @@ import SwiftUI
 /// Toolbar readout for a running import — the toolbar is where the eye goes
 /// first, so this is the primary indicator; the status bar carries the detail.
 ///
-/// One capsule, not three loose controls: a spinner, a label, a number and a
-/// button sitting side by side in a toolbar read as four unrelated things. The
-/// pill makes them one object, and the stop glyph inside it is the macOS idiom
-/// for "this activity, cancel it" (the way Safari puts stop inside its own
-/// chrome) — an escape hatch that costs no words.
+/// Deliberately UNSTYLED: the toolbar already draws each item on its own
+/// capsule, so adding a background here nests a capsule inside a capsule and
+/// the item reads as a heavy double ring. Contribute content, let the window
+/// chrome own the material — that's what keeps this item looking like it
+/// belongs next to the view and sort controls rather than pasted over them.
 struct ScanToolbarStatus: View {
     @ObservedObject var scan: ScanMonitor
     var onStop: () -> Void
@@ -36,11 +36,8 @@ struct ScanToolbarStatus: View {
             .disabled(scan.isStopping)
             .help("Stop importing")
             .accessibilityLabel("Stop importing")
+            .padding(.leading, 1)
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 6)
-        .padding(.vertical, 3)
-        .background(.quaternary.opacity(0.55), in: Capsule(style: .continuous))
         .onHover { hovering = $0 }
         .animation(ProgressChrome.settle, value: hovering)
     }
