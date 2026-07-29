@@ -21,24 +21,36 @@ struct AsyncThumbnail: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
+                    .transition(.opacity)
             } else if failed {
-                placeholder(systemImage: "exclamationmark.triangle")
+                placeholder(systemImage: "exclamationmark.triangle.fill",
+                            tint: AnyShapeStyle(.yellow.opacity(0.85)))
             } else {
-                placeholder(systemImage: nil)
+                placeholder(systemImage: "photo",
+                            tint: AnyShapeStyle(.secondary.opacity(0.45)))
             }
         }
+        .animation(.easeOut(duration: 0.18), value: image == nil)
         .task(id: url) { await load() }
     }
 
-    private func placeholder(systemImage: String?) -> some View {
-        ZStack {
-            Rectangle().fill(.quaternary.opacity(0.5))
-            if let systemImage {
+    /// A spinner per cell turns a cold grid into a field of flickering
+    /// pinwheels — visual noise that says nothing (the real progress lives in
+    /// the status bar, with a count and a bar). A still, dim glyph reads as
+    /// "not loaded yet" and lets the photos that HAVE landed carry the view.
+    /// Mirrors the AppKit grid cell's placeholder (see `PhotoGridCellView`), but
+    /// with semantic colors: unlike that always-dark grid, this view also sits on
+    /// the inspector and viewer chrome, which follow the system theme.
+    private func placeholder(systemImage: String, tint: AnyShapeStyle) -> some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            ZStack {
+                Rectangle().fill(.quaternary.opacity(0.5))
                 Image(systemName: systemImage)
-                    .foregroundStyle(.secondary)
-            } else {
-                ProgressView().controlSize(.small)
+                    .font(.system(size: min(side * 0.30, 56), weight: .semibold))
+                    .foregroundStyle(tint)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
     }
 

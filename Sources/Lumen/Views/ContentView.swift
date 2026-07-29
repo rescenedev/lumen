@@ -131,6 +131,10 @@ struct ContentView: View {
         } else if model.totalCount == 0 {
             if model.isLoadingLibrary {
                 LibraryLoadingPlaceholder()
+            } else if model.isScanning {
+                // First import into an empty library: without this the welcome
+                // screen sat there unchanged for the whole NAS walk.
+                ScanningPlaceholder(scan: model.scanProgress) { model.cancelScan() }
             } else {
                 EmptyStateView()
             }

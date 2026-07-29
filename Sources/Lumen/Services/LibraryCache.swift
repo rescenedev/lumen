@@ -262,7 +262,30 @@ enum LibraryCache {
         return decoded
     }
 
+    /// Replace the persisted map (reconcile: it just rescanned every live root).
+    /// Queued on the shared save queue so it can't interleave with a merge.
     static func saveFolderMtimes(_ mtimes: [String: Date]) {
+        saveQueue.async { writeFolderMtimes(mtimes) }
+    }
+
+    /// Add the folders one import walked, keeping every other root's entry.
+    /// Without this an imported folder has no recorded mtime, so the very next
+    /// reconcile re-stats the whole tree — the exact cost the incremental
+    /// scanner exists to avoid, paid again on the next launch.
+    ///
+    /// Synchronous (on the serial save queue, so a concurrent reconcile save
+    /// can't drop the merged entries): the import path must know these are on
+    /// disk before it lets a reconcile start. CALL OFF THE MAIN THREAD.
+    static func mergeFolderMtimes(_ mtimes: [String: Date]) {
+        guard !mtimes.isEmpty else { return }
+        saveQueue.sync {
+            var merged = loadFolderMtimes()
+            for (path, date) in mtimes { merged[path] = date }
+            writeFolderMtimes(merged)
+        }
+    }
+
+    private static func writeFolderMtimes(_ mtimes: [String: Date]) {
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
         guard let data = try? encoder.encode(mtimes) else { return }

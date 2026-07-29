@@ -7,6 +7,40 @@ enum IncrementalScanner {
     struct Result: Sendable {
         let photos: [Photo]
         let folderMtimes: [String: Date]
+        /// False when the walk was abandoned early (the caller cancelled).
+        /// `folderMtimes` is then NOT safe to persist: a directory records its
+        /// mtime before its entries are read, so a folder abandoned mid-read
+        /// would be remembered as fully scanned and skipped forever after.
+        let completed: Bool
+
+        init(photos: [Photo], folderMtimes: [String: Date], completed: Bool = true) {
+            self.photos = photos
+            self.folderMtimes = folderMtimes
+            self.completed = completed
+        }
+    }
+
+    /// Optional streaming hooks. Without them `scan` behaves exactly as before:
+    /// one result once the whole tree has been walked. With them the caller
+    /// receives photos and a running count *while* the walk is still going —
+    /// which is the difference between "the app froze" and "it's importing" when
+    /// a 30k-photo NAS folder takes minutes to enumerate.
+    ///
+    /// Every hook is invoked on the scanning thread, at folder boundaries only.
+    struct Stream: Sendable {
+        /// Hand over accumulated photos once this many are pending. The caller
+        /// picks it: each hand-off costs the UI a library-version bump, so a
+        /// large library wants larger batches.
+        var batchSize: Int = 1000
+        /// Hand over a short batch anyway once this long has passed, so a slow
+        /// (or sparse) NAS walk still shows the grid growing.
+        var flushInterval: TimeInterval = 3
+        /// How often the running count may be republished.
+        var progressInterval: TimeInterval = 0.25
+        var onBatch: @Sendable ([Photo]) -> Void
+        var onProgress: @Sendable (_ found: Int, _ folder: String?) -> Void = { _, _ in }
+        /// Polled at every folder boundary; `true` abandons the walk.
+        var isCancelled: @Sendable () -> Bool = { false }
     }
 
     private static let fileKeys: Set<URLResourceKey> = [
@@ -15,7 +49,8 @@ enum IncrementalScanner {
 
     static func scan(roots: [URL],
                      knownMtimes: [String: Date],
-                     cachedByFolder: [String: [Photo]]) -> Result {
+                     cachedByFolder: [String: [Photo]],
+                     stream: Stream? = nil) -> Result {
         let fm = FileManager.default
         var photos: [Photo] = []
         var mtimes: [String: Date] = [:]
@@ -24,7 +59,38 @@ enum IncrementalScanner {
         // until the stack overflows on a malformed library.
         var visited: Set<String> = []
 
+        // Streaming bookkeeping: `flushed` is how much of `photos` the caller
+        // already has, so batches need no second buffer.
+        var flushed = 0
+        var lastFlush = CFAbsoluteTimeGetCurrent()
+        var lastProgress: CFAbsoluteTime = 0
+        var cancelled = false
+
+        func publish(folder: String?, force: Bool) {
+            guard let stream else { return }
+            let now = CFAbsoluteTimeGetCurrent()
+            let pending = photos.count - flushed
+            if pending > 0, force || pending >= stream.batchSize
+                || now - lastFlush >= stream.flushInterval {
+                stream.onBatch(Array(photos[flushed...]))
+                flushed = photos.count
+                lastFlush = now
+            }
+            // The count moves even through folders that yield nothing, so a walk
+            // over a deep tree of empty directories still looks alive.
+            if force || now - lastProgress >= stream.progressInterval {
+                lastProgress = now
+                stream.onProgress(photos.count, folder)
+            }
+        }
+
+        func checkCancelled() -> Bool {
+            if !cancelled, stream?.isCancelled() == true { cancelled = true }
+            return cancelled
+        }
+
         func walk(_ dir: URL) {
+            guard !checkCancelled() else { return }
             guard visited.insert(dir.resolvingSymlinksInPath().path).inserted else { return }
             let dirMtime = (try? dir.resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate
@@ -90,9 +156,14 @@ enum IncrementalScanner {
                     }
                 }
             }
+            // Folder boundary: everything found under `dir` is complete, so it is
+            // safe to hand to the caller.
+            guard !cancelled else { return }
+            publish(folder: dir.lastPathComponent, force: false)
         }
 
         for root in roots {
+            guard !checkCancelled() else { break }
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: root.path, isDirectory: &isDir) else { continue }
             if isDir.boolValue {
@@ -103,6 +174,9 @@ enum IncrementalScanner {
                 photos.append(Photo(url: root, resourceValues: values))
             }
         }
-        return Result(photos: photos, folderMtimes: mtimes)
+        // Final hand-off: the tail batch always ships, even after a cancel, so
+        // the caller keeps the photos it already paid the NAS to enumerate.
+        publish(folder: nil, force: true)
+        return Result(photos: photos, folderMtimes: mtimes, completed: !cancelled)
     }
 }

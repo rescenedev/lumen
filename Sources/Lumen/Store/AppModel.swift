@@ -10,7 +10,7 @@ final class AppModel {
     // Library
     private(set) var allPhotos: [Photo] = [] { didSet { libraryVersion &+= 1 } }
     private(set) var rootFolders: [URL] = []
-    var isScanning = false
+    private(set) var isScanning = false
     private(set) var isLoadingLibrary = false
 
     // Photos Library (Apple Photos / iCloud) — kept physically separate from the
@@ -325,6 +325,9 @@ final class AppModel {
     // Background full-library thumbnail warming. In its own observable so its
     // frequent progress ticks don't re-render the grid/sidebar.
     @ObservationIgnored let warming = WarmingMonitor()
+    /// Import progress lives in its own observable object so the scan's
+    /// several-times-a-second ticks only re-render the status label.
+    @ObservationIgnored let scanProgress = ScanMonitor()
 
     // Folder presentation (hierarchical tree by default)
     var folderTreeView = true { didSet { persistSettings() } }
@@ -525,8 +528,8 @@ final class AppModel {
             }
             entries = front + back
         }
-        ThumbnailCache.shared.warmDiskCache(entries) { [weak self] remaining, folder in
-            self?.warming.update(remaining: remaining, folder: folder)
+        ThumbnailCache.shared.warmDiskCache(entries) { [weak self] remaining, total, folder in
+            self?.warming.update(remaining: remaining, total: total, folder: folder)
         }
         sweepStaleThumbnailsIfDue(entries)
     }
@@ -1373,20 +1376,25 @@ final class AppModel {
         var lowerNames: [URL: String] = [:]
     }
 
+    /// The folder-index key for one photo. Parent path by string slicing —
+    /// equivalent to folderURL.path for the absolute file URLs we store, and
+    /// ~4x faster than going through URL.deletingLastPathComponent (179ms →
+    /// ~40ms at 67k, measured; this build gates the launch spinner).
+    /// Single definition on purpose: the full rebuild and the incremental
+    /// append (`appendScanned`) must produce byte-identical keys, or a folder
+    /// click after an import would miss half its photos.
+    nonisolated static func folderKey(for photo: Photo) -> String {
+        let path = photo.url.path
+        if let slash = path.lastIndex(of: "/"), slash != path.startIndex {
+            return String(path[..<slash])
+        }
+        return photo.folderURL.path
+    }
+
     nonisolated private static func computeDerivedIndexes(_ photos: [Photo]) -> DerivedIndexes {
         var d = DerivedIndexes()
         d.byID = Dictionary(photos.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
-        // Parent path by string slicing — equivalent to folderURL.path for the
-        // absolute file URLs we store, and ~4x faster than going through
-        // URL.deletingLastPathComponent (179ms → ~40ms at 67k, measured;
-        // this build gates the launch spinner).
-        d.byFolder = Dictionary(grouping: photos) { photo in
-            let path = photo.url.path
-            if let slash = path.lastIndex(of: "/"), slash != path.startIndex {
-                return String(path[..<slash])
-            }
-            return photo.folderURL.path
-        }
+        d.byFolder = Dictionary(grouping: photos, by: Self.folderKey(for:))
         d.lowerNames = Dictionary(photos.map { ($0.url, $0.filename.lowercased()) },
                                   uniquingKeysWith: { a, _ in a })
         return d
@@ -1436,7 +1444,7 @@ final class AppModel {
     @ObservationIgnored private var folderIndexKey = -1
     @ObservationIgnored private var directPhotosByFolder: [String: [Photo]] {
         if libraryVersion == folderIndexKey { return folderIndexCache }
-        folderIndexCache = Dictionary(grouping: allPhotos) { $0.folderURL.path }
+        folderIndexCache = Dictionary(grouping: allPhotos, by: Self.folderKey(for:))
         folderIndexKey = libraryVersion
         return folderIndexCache
     }
@@ -1495,34 +1503,199 @@ final class AppModel {
 
     func importURLs(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
-        let newRoots = urls.filter {
-            (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
-        }
-        Task { await scan(adding: urls, newRoots: newRoots) }
+        Task { await scan(adding: urls) }
     }
 
-    private func scan(adding urls: [URL], newRoots: [URL]) async {
+    /// Stop the running import. Photos found so far are kept — the user paid the
+    /// NAS to enumerate them.
+    func cancelScan() { scanProgress.cancel() }
+
+    // Two imports can overlap (a drop while an open-panel import is still
+    // wrapping up), so the observed flag is driven by a count, not a bool.
+    @ObservationIgnored private var runningScans = 0
+
+    private func beginScan() -> ScanCancelToken {
+        runningScans += 1
         isScanning = true
-        let scanned = await Task.detached(priority: .userInitiated) { PhotoScanner.expand(urls: urls) }.value
+        return scanProgress.begin()
+    }
 
-        var seen = Set(allPhotos.map { $0.url })
-        var merged = allPhotos
-        var added: [Photo] = []
-        for photo in scanned where !seen.contains(photo.url) {
-            merged.append(photo); seen.insert(photo.url); added.append(photo)
+    private func endScan(_ token: ScanCancelToken) {
+        runningScans = max(0, runningScans - 1)
+        scanProgress.finish(token)   // no-op once a newer scan owns the display
+        guard runningScans == 0 else { return }
+        isScanning = false
+        if rescanDeferred { rescanDeferred = false; rescanRoots() }
+    }
+
+    /// A folder-watcher event arrived while an import was walking the disk, and
+    /// was held back — see `rescanRoots`.
+    @ObservationIgnored private var rescanDeferred = false
+
+    /// Import walks stream their results back: enumerating a 30k-photo folder on
+    /// an SMB share takes minutes, and the old path published *nothing* until it
+    /// had finished — no count, no photos, just a spinner in the toolbar corner.
+    /// Now the scanner hands over batches at folder boundaries, each one
+    /// appended with `appendScanned` (O(batch), not an O(library) rebuild), so
+    /// the grid fills in as the walk progresses.
+    private func scan(adding urls: [URL]) async {
+        let token = beginScan()
+        // `end()` is idempotent and runs at the first of: the walk finishing
+        // (below, so the long EXIF tail doesn't sit under a stale "Adding…")
+        // or any early return.
+        var ended = false
+        func end() { if !ended { ended = true; endScan(token) } }
+        defer { end() }
+
+        // Both of these stat the filesystem, which blocks for seconds on a
+        // wedged SMB mount — never on the main actor.
+        let newRoots = await Task.detached(priority: .userInitiated) {
+            urls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+        }.value
+
+        // Register the roots before the walk, so the sidebar shows the folder
+        // the user just picked instead of staying empty for minutes.
+        var registeredRoot = false
+        for root in newRoots where !rootFolders.contains(root) {
+            rootFolders.append(root); registeredRoot = true
         }
-        allPhotos = merged
-        for root in newRoots where !rootFolders.contains(root) { rootFolders.append(root) }
+        if registeredRoot { persistRecentFolders() }
 
-        persistRecentFolders()
-        watcher?.watch(rootFolders.filter { FileManager.default.fileExists(atPath: $0.path) })
+        // Each hand-off bumps `libraryVersion` and re-sorts the visible list, so
+        // the batch size scales with the library: a fixed size would give a 67k
+        // library hundreds of resorts, and a fresh one a grid that never moves.
+        let batchSize = max(1_000, allPhotos.count / 12)
+        // Re-importing a known folder reuses the cached metadata instead of
+        // re-stat'ing every file (the incremental scanner's NAS win, which the
+        // old import path — a plain full walk — never got).
+        let cachedByFolder = directPhotosByFolder
+
+        enum ScanEvent: Sendable {
+            case batch([Photo])
+            case progress(found: Int, folder: String?)
+        }
+        let (events, continuation) = AsyncStream<ScanEvent>.makeStream()
+        let stream = IncrementalScanner.Stream(
+            batchSize: batchSize,
+            onBatch: { continuation.yield(.batch($0)) },
+            onProgress: { continuation.yield(.progress(found: $0, folder: $1)) },
+            isCancelled: { token.isCancelled }
+        )
+        let scanTask = Task.detached(priority: .userInitiated) { () -> IncrementalScanner.Result in
+            defer { continuation.finish() }
+            let known = LibraryCache.loadFolderMtimes()
+            return IncrementalScanner.scan(roots: urls, knownMtimes: known,
+                                           cachedByFolder: cachedByFolder, stream: stream)
+        }
+
+        // One ordered channel, consumed on the main actor — batches can never
+        // land out of order or race the completion below.
+        var added: [Photo] = []
+        for await event in events {
+            switch event {
+            case .batch(let batch):
+                let fresh = appendScanned(batch)
+                if !fresh.isEmpty {
+                    added.append(contentsOf: fresh)
+                    scanProgress.addedPhotos(token, fresh.count)
+                }
+            case .progress(let found, let folder):
+                scanProgress.update(token, found: found, folder: folder)
+            }
+        }
+        let result = await scanTask.value
+
+        // Remember the folder mtimes this walk observed, so the next reconcile
+        // (and the next launch) reuses them instead of re-stat'ing the tree.
+        // Never after a cancel — see `IncrementalScanner.Result.completed`.
+        // Awaited BEFORE `end()` releases the deferred reconcile below: that
+        // reconcile reads the mtimes off disk, and if it beat this write it
+        // would re-walk the whole tree we just finished walking.
+        if result.completed {
+            let mtimes = result.folderMtimes
+            await Task.detached(priority: .utility) { LibraryCache.mergeFolderMtimes(mtimes) }.value
+        }
+        end()
+
+        let roots = rootFolders
+        let available = await Task.detached(priority: .utility) {
+            roots.filter { FileManager.default.fileExists(atPath: $0.path) }
+        }.value
+        watcher?.watch(available)
+
+        guard !added.isEmpty else {
+            // Say so rather than leaving the user staring at an unchanged grid
+            // wondering whether the import ran at all.
+            if result.completed {
+                showToast(result.photos.isEmpty
+                          ? "No photos found in that folder"
+                          : "Those photos are already in your library")
+            }
+            if registeredRoot { refreshDerivedCachesOffMain() }
+            return
+        }
         recomputeMetaCounts()
+        // Backstop: `appendScanned` maintained the derived caches incrementally,
+        // this re-derives them from the final library off-main so a streaming
+        // import can never leave them drifted.
         refreshDerivedCachesOffMain()
         persistLibraryCache()
-        isScanning = false
+        showToast(result.completed
+                  ? "Added \(added.count.formatted()) photos"
+                  : "Stopped — added \(added.count.formatted()) photos")
 
         if !exif.isEmpty { await indexExif(for: added) }  // full index is deferred until needed
         startThumbnailWarming()
+    }
+
+    /// Append a freshly scanned batch and EXTEND the derived caches in place,
+    /// rather than letting the library-version bump invalidate them.
+    /// A streaming import commits many batches; recomputing stats + indexes for
+    /// the whole library on each one is O(library × batches) and measured ~250ms
+    /// of main-thread work per commit at 67k photos. This is O(batch).
+    /// Returns the photos that were genuinely new (deduped against the library).
+    @discardableResult
+    private func appendScanned(_ batch: [Photo]) -> [Photo] {
+        guard !batch.isEmpty else { return [] }
+        // Read through the getters BEFORE the append: a cold cache is built once
+        // here instead of lazily during the next sidebar/grid render.
+        var byID = photoByID
+        var byFolder = directPhotosByFolder
+        var lower = lowerNames
+        var s = stats
+
+        let cal = Calendar.current
+        let cutoff = Date().addingTimeInterval(-30 * 24 * 3600)
+        let today = cal.dateComponents([.month, .day], from: Date())
+
+        var fresh: [Photo] = []
+        fresh.reserveCapacity(batch.count)
+        for photo in batch where byID[photo.url] == nil {
+            byID[photo.url] = photo
+            fresh.append(photo)
+            byFolder[Self.folderKey(for: photo), default: []].append(photo)
+            lower[photo.url] = photo.filename.lowercased()
+            s.folderCounts[photo.folderURL, default: 0] += 1
+            if let date = photo.creationDate {
+                if date >= cutoff { s.recentlyAdded += 1 }
+                let c = cal.dateComponents([.month, .day], from: date)
+                if c.month == today.month && c.day == today.day { s.onThisDay += 1 }
+            }
+        }
+        guard !fresh.isEmpty else { return [] }
+
+        allPhotos.append(contentsOf: fresh)   // bumps libraryVersion
+        statsCache = s
+        statsCacheKey = libraryVersion
+        // `byID` came from `photoByID`, so it already merges Photos assets —
+        // keying on (libraryVersion, assetsVersion) keeps that valid.
+        idIndexCache = byID
+        idIndexKey = (libraryVersion, assetsVersion)
+        folderIndexCache = byFolder
+        folderIndexKey = libraryVersion
+        lowerNameCache = lower
+        lowerNameKey = libraryVersion
+        return fresh
     }
 
     /// Reconcile the in-memory library with what's on disk for the given roots.
@@ -1916,6 +2089,13 @@ final class AppModel {
 
     /// Folder watcher callback.
     private func rescanRoots() {
+        // An import is already walking the filesystem. A reconcile now would
+        // fight it for NAS bandwidth AND be discarded anyway — its diff is
+        // computed against a library the import keeps growing, which trips the
+        // "never apply a stale diff" guard. Hold the event and replay it once
+        // the import (and its folder-mtime write) has settled.
+        guard !isScanning else { rescanDeferred = true; return }
+
         // Stat the roots off the main actor: an FS change on a stalled-but-mounted
         // SMB share would otherwise block the main thread on fileExists until the
         // OS timeout (seconds) every time the watcher fires.

@@ -5,10 +5,23 @@ import SwiftUI
 /// status view that observes this — not the grid or sidebar.
 @MainActor
 final class WarmingMonitor: ObservableObject {
+    /// Thumbnails still to build in this pass.
     @Published private(set) var remaining = 0
+    /// The size of this pass's work list. A bare countdown ("Caching 29,412")
+    /// tells the user nothing about how far along they are — the denominator is
+    /// what makes the number mean something.
+    @Published private(set) var total = 0
     @Published private(set) var folder: String?
 
-    func update(remaining: Int, folder: String?) {
+    /// Thumbnails finished in this pass.
+    var done: Int { max(0, total - remaining) }
+    /// 0…1, or 0 before a total is known — safe to hand to a determinate bar.
+    var fraction: Double { total > 0 ? Double(done) / Double(total) : 0 }
+
+    func update(remaining: Int, total: Int, folder: String?) {
+        // A late tick from a superseded pass can carry a bigger remaining than
+        // its own total; clamp so the bar can never run backwards past full.
+        self.total = max(total, remaining)
         self.remaining = remaining
         self.folder = folder
     }

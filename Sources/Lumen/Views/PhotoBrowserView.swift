@@ -211,12 +211,32 @@ struct PhotoBrowserView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
 
             HStack(spacing: 6) {
-                WarmingStatusView(warming: model.warming)
+                // An import is what the user just asked for, so it takes this
+                // slot from the (silent, always-running) thumbnail warming.
+                // Gated on `model.isScanning` — an @Observable property — NOT
+                // on the monitor: ScanMonitor is an ObservableObject, so only
+                // the child holding it with @ObservedObject re-renders on it.
+                if model.isScanning {
+                    ScanStatusView(scan: model.scanProgress) { model.cancelScan() }
+                } else {
+                    WarmingStatusView(warming: model.warming)
+                }
                 if model.isIndexingExif {
-                    ProgressView().controlSize(.mini)
+                    // Determinate once the work list is sized — same treatment as
+                    // warming, so every long background job reads "x of y".
+                    if model.exifIndexTotal > 0 {
+                        ProgressView(value: Double(model.exifIndexDone),
+                                     total: Double(model.exifIndexTotal))
+                            .progressViewStyle(.linear)
+                            .controlSize(.small)
+                            .frame(width: 70)
+                    } else {
+                        ProgressView().controlSize(.mini)
+                    }
                     Text(indexingStatusText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .monospacedDigit()
                         .lineLimit(1)
                         .help("Reading camera & EXIF info so search and the map can find photos")
                 } else if model.exifIndexJustFinished {
