@@ -36,8 +36,15 @@ struct ScanToolbarStatus: View {
             .disabled(scan.isStopping)
             .help("Stop importing")
             .accessibilityLabel("Stop importing")
-            .padding(.leading, 1)
+            // Wider than the gaps inside the label+count pair: proximity is
+            // grouping, and the stop control is a different kind of thing from
+            // the status it sits beside.
+            .padding(.leading, 4)
         }
+        // The toolbar capsule's rounded ends curve inward, so content flush to
+        // its bounds visually collides with them — the spinner and the stop
+        // glyph, being round themselves, worst of all.
+        .padding(.horizontal, 6)
         .onHover { hovering = $0 }
         .animation(ProgressChrome.settle, value: hovering)
     }
