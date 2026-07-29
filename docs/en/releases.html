@@ -106,9 +106,22 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.5">
+    <div class="release-head">
+      <h2>0.5.5</h2><span class="date">July 29, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Adding a large folder responds right away</h3>
+    <ul>
+      <li><b>Add a 30,000-photo folder on a NAS and photos start appearing immediately.</b> Previously nothing showed until the whole folder had been read — minutes over SMB. Results now stream in folder by folder, the count of photos found climbs live, and you can stop at any time.</li>
+      <li><b>Re-adding the same folder, and the next launch, no longer re-read the whole tree.</b> Folder timestamps are recorded during the import, so the per-file network round-trips are gone.</li>
+      <li><b>Background work now shows how much of the total is done.</b> Thumbnail caching and metadata indexing report <code>12,340 / 30,124</code> with a progress bar instead of counting down with no denominator.</li>
+      <li><b>The app stays responsive during an import.</b> Filesystem probes and the library merge moved off the main thread, and folder-watcher rescans are held back while an import runs so they don't compete for NAS bandwidth.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.4">
     <div class="release-head">
-      <h2>0.5.4</h2><span class="date">July 18, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.4</h2><span class="date">July 18, 2026</span>
     </div>
     <h3>Favorites, tags, and labels open instantly</h3>
     <ul>

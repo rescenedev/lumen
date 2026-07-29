@@ -17,3 +17,9 @@ SELLING-TODO.md
 *.xcuserstate
 xcuserdata/
 .gstack/
+
+# Agent tooling installed into the checkout (same reasoning as .gstack/):
+# it configures the assistant, not the app.
+.agents/
+.claude/
+skills-lock.json
