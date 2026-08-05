@@ -2302,9 +2302,12 @@ final class AppModel {
     func removeRootFolder(_ url: URL) {
         guard rootFolders.contains(url) else { return }
         rootFolders.removeAll { $0 == url }
-        let prefix = url.path + "/"
-        let removed = allPhotos.filter { $0.url.path == url.path || $0.url.path.hasPrefix(prefix) }
-        allPhotos.removeAll { $0.url.path == url.path || $0.url.path.hasPrefix(prefix) }
+        // The same path-component boundary test the offline guard uses, so
+        // removing /Volumes/nas can never take /Volumes/nas2 with it. (Hoisted:
+        // the set is built once, not per photo.)
+        let scope: Set<URL> = [url]
+        let removed = allPhotos.filter { Self.url($0.url, isUnderAny: scope) }
+        allPhotos.removeAll { Self.url($0.url, isUnderAny: scope) }
         // One assignment each — per-item removeValue on the observed dicts fires
         // the observation machinery per element (a large root = thousands).
         var prunedExif = exif
@@ -2315,15 +2318,27 @@ final class AppModel {
         }
         exif = prunedExif
         duplicatePaths = prunedDups
-        if case .folder(let sel) = selectedSidebar, sel == url || sel.path.hasPrefix(prefix) {
+        if case .folder(let sel) = selectedSidebar, Self.url(sel, isUnderAny: scope) {
             selectedSidebar = .allPhotos
         }
+        // A removed root must also leave the offline set, or a folder later
+        // added back at the same path would render grayed-out and unselectable.
+        offlineRoots.remove(url)
         recomputeMetaCounts()
         refreshDerivedCachesOffMain()
         persistRecentFolders()
         persistLibraryCache()
         persistExifCache()
-        watcher?.watch(rootFolders.filter { FileManager.default.fileExists(atPath: $0.path) })
+        // Off the main actor: this is the path you take when a NAS volume died,
+        // and statting whatever roots remain can block for seconds on a wedged
+        // SMB mount — freezing the app on the very click meant to escape it.
+        let remaining = rootFolders
+        Task { [weak self] in
+            let available = await Task.detached(priority: .utility) {
+                remaining.filter { FileManager.default.fileExists(atPath: $0.path) }
+            }.value
+            self?.watcher?.watch(available)
+        }
     }
 
     func startRenameFolder(_ url: URL) {

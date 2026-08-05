@@ -310,7 +310,7 @@ struct SidebarView: View {
                                        count: folderCounts[url] ?? 0, offline: offline)
                             .tag(SidebarItem.folder(url))
                             .selectionDisabled(offline)
-                            .contextMenu { if !offline { FolderContextMenu(url: url) } }
+                            .contextMenu { FolderContextMenu(url: url) }
                     }
                 }
             } header: {
@@ -388,7 +388,7 @@ private struct FolderTreeNode: View {
         return FolderRowLabel(name: node.name, count: node.count, offline: offline)
             .tag(SidebarItem.folder(node.url))
             .selectionDisabled(offline)
-            .contextMenu { if !offline { FolderContextMenu(url: node.url) } }
+            .contextMenu { FolderContextMenu(url: node.url) }
     }
 }
 
@@ -419,7 +419,12 @@ private struct FolderRowLabel: View {
             Image(systemName: "folder")
                 .foregroundStyle(offline ? Color.secondary.opacity(0.4) : Color.secondary)
         }
-        .help(offline ? "Drive not connected — the folder comes back when the volume mounts" : "")
+        // The row is grayed and unselectable, so the tooltip has to say both
+        // things: it comes back on its own, and there's a way out if it won't.
+        .help(offline
+              ? "Drive not connected — the folder comes back when the volume mounts. "
+                + "Right-click to remove it from the library."
+              : "")
     }
 }
 
