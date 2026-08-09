@@ -106,9 +106,22 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.7">
+    <div class="release-head">
+      <h2>0.5.7</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Click a background job for details — and retry the photos that failed</h3>
+    <ul>
+      <li><b>Status-bar jobs are now clickable.</b> The popover shows the exact file being read (full path), the progress and throughput, and the photos the job could not process — each with the reason and a reveal-in-Finder action.</li>
+      <li><b>Failed photos are recorded and can be retried.</b> Nothing used to record them, so a thumbnail that would not decode simply stayed blank and unreadable metadata stayed silently empty. Failures now persist across launches, with a reason, and "Retry" runs them again.</li>
+      <li><b>A count badge appears on the row when anything failed</b>, and stays after indexing finishes — a partial failure is no longer reported as success.</li>
+      <li><b>Fixed overlapping text in the status bar</b>, where a long job row was drawn straight through the centered item count, and a progress counter that could exceed its own total.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.6">
     <div class="release-head">
-      <h2>0.5.6</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.6</h2><span class="date">August 9, 2026</span>
     </div>
     <h3>A disconnected drive can be removed from the library</h3>
     <ul>
