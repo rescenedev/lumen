@@ -261,3 +261,71 @@ func volumeIdentityTests() {
                       "an edited file must not reuse a stale thumbnail")
     }
 }
+
+/// Carrying the EXIF index across a mount-point change without re-reading the
+/// NAS — and without ever discarding entries for a share that is merely away.
+func exifAdoptionTests() {
+    func photo(_ path: String) -> Photo {
+        Photo(url: URL(fileURLWithPath: path), byteSize: 1, creationDate: nil, modificationDate: nil)
+    }
+    func info(_ w: Int) -> ExifInfo {
+        var i = ExifInfo(); i.pixelWidth = w; return i
+    }
+    /// Stand-in for VolumeIdentity: both mount points map to the same volume,
+    /// so the same file has one key regardless of where it is mounted.
+    let key: (String) -> String = { path in
+        for mount in ["/Volumes/zpool", "/Users/z/nas-mnt/zpool"] where path.hasPrefix(mount) {
+            return "//nas/zpool" + path.dropFirst(mount.count)
+        }
+        return path
+    }
+
+    test("aPhotoSeenAtANewMountPointAdoptsItsOldEntry") {
+        let moved = photo("/Users/z/nas-mnt/zpool/photos/a.jpg")
+        let old = ["/Volumes/zpool/photos/a.jpg": info(4000)]
+        let r = AppModel.adoptExif(missing: [moved], exif: old, key: key)
+        checkEqual(r.adopted.count, 1, "should be adopted, not re-read")
+        checkEqual(r.adopted["/Users/z/nas-mnt/zpool/photos/a.jpg"]?.pixelWidth, 4000)
+        check(r.stillMissing.isEmpty)
+        checkEqual(r.redundant, ["/Volumes/zpool/photos/a.jpg"],
+                   "the old-path record is now redundant and safe to drop")
+    }
+
+    test("aGenuinelyNewPhotoIsStillRead") {
+        let fresh = photo("/Users/z/nas-mnt/zpool/photos/new.jpg")
+        let r = AppModel.adoptExif(missing: [fresh],
+                                   exif: ["/Volumes/zpool/photos/a.jpg": info(4000)], key: key)
+        check(r.adopted.isEmpty)
+        checkEqual(r.stillMissing.map { $0.url.path }, ["/Users/z/nas-mnt/zpool/photos/new.jpg"])
+        check(r.redundant.isEmpty, "nothing may be dropped when nothing was adopted")
+    }
+
+    test("entriesForAnAbsentVolumeAreNEVERDropped") {
+        // The dangerous case: re-keying on load would discard these, turning a
+        // cosmetic problem into a full re-read once the share came back.
+        let localOnly = photo("/Users/z/Desktop/x.jpg")
+        let awayShare = ["/Volumes/zpool/photos/a.jpg": info(4000),
+                         "/Volumes/zpool/photos/b.jpg": info(3000)]
+        let r = AppModel.adoptExif(missing: [localOnly], exif: awayShare, key: key)
+        check(r.adopted.isEmpty)
+        check(r.redundant.isEmpty, "an unmatched old entry must survive: \(r.redundant)")
+        checkEqual(r.stillMissing.count, 1)
+    }
+
+    test("adoptionIsANoOpWithNothingToWorkFrom") {
+        checkEqual(AppModel.adoptExif(missing: [], exif: ["/a.jpg": info(1)], key: key)
+                     .stillMissing.count, 0)
+        let one = [photo("/a.jpg")]
+        checkEqual(AppModel.adoptExif(missing: one, exif: [:], key: key).stillMissing.count, 1)
+    }
+
+    test("aPhotoAlreadyFiledUnderItsOwnPathIsNotSelfAdopted") {
+        // Guards against reporting "reused N" for entries that never moved.
+        let same = photo("/Volumes/zpool/photos/a.jpg")
+        let r = AppModel.adoptExif(missing: [same],
+                                   exif: ["/Volumes/zpool/photos/a.jpg": info(4000)], key: key)
+        check(r.adopted.isEmpty, "same path ⇒ nothing to adopt")
+        check(r.redundant.isEmpty, "and nothing to delete — it would delete the live entry")
+        checkEqual(r.stillMissing.count, 1)
+    }
+}

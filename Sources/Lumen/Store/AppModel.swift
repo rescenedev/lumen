@@ -2056,6 +2056,57 @@ final class AppModel {
         startThumbnailWarming()
     }
 
+    /// What an index pass can skip because the same FILE is already covered
+    /// under a different path — the case a remounted share creates.
+    struct ExifAdoption: Sendable {
+        /// path → info, to merge into the index without reading anything.
+        var adopted: [String: ExifInfo] = [:]
+        /// Photos genuinely never read.
+        var stillMissing: [Photo] = []
+        /// Old-path entries made redundant by an adoption — safe to drop,
+        /// because the very same file is now present under a live path.
+        var redundant: [String] = []
+    }
+
+    /// Match photos with no entry at their current path against entries filed
+    /// under a previous mount point.
+    ///
+    /// Deliberately additive: nothing is re-keyed and nothing is dropped unless
+    /// an adoption proves it redundant. Re-keying the whole index on load would
+    /// be tidier but far more dangerous — a share that happens to be unmounted
+    /// at launch would have its entries discarded, turning a cosmetic problem
+    /// into a 64k-photo re-read of the NAS.
+    ///
+    /// `key` is injectable so the behaviour can be tested without mounting
+    /// anything; production passes `VolumeIdentity.key(for:)`.
+    nonisolated static func adoptExif(
+        missing: [Photo], exif: [String: ExifInfo],
+        key: (String) -> String = { VolumeIdentity.key(for: $0) }
+    ) -> ExifAdoption {
+        var result = ExifAdoption()
+        guard !missing.isEmpty, !exif.isEmpty else {
+            result.stillMissing = missing
+            return result
+        }
+        // Only entries whose path is NOT a live one can be a previous mount of
+        // something; building the map from those alone keeps it small.
+        var byKey: [String: (path: String, info: ExifInfo)] = [:]
+        byKey.reserveCapacity(exif.count)
+        for (path, info) in exif where byKey[key(path)] == nil {
+            byKey[key(path)] = (path, info)
+        }
+        for photo in missing {
+            let path = photo.url.path
+            if let hit = byKey[key(path)], hit.path != path {
+                result.adopted[path] = hit.info
+                result.redundant.append(hit.path)
+            } else {
+                result.stillMissing.append(photo)
+            }
+        }
+        return result
+    }
+
     private(set) var isIndexingExif = false
     /// Progress for the on-demand EXIF pass, so the UI can show "Indexing…"
     /// instead of an empty result while a large (NAS) library is read.
@@ -2093,18 +2144,41 @@ final class AppModel {
             // Fast local disk before the (slow) NAS, so results appear quickly
             // and the user never waits on the network for nearby photos. The
             // boundary also drives the "Local disk / NAS" status label.
-            let (urls, localCount) = await Task.detached(priority: .utility) { () -> ([URL], Int) in
+            let prep = await Task.detached(priority: .utility) { () -> (urls: [URL], localCount: Int, adoption: ExifAdoption) in
                 let missing = photos.filter { snapshot[$0.url.path] == nil }
-                guard !missing.isEmpty else { return ([], 0) }
+                guard !missing.isEmpty else { return ([], 0, ExifAdoption()) }
+                // Before reading anything: a photo with no entry at its current
+                // path may already be indexed under a previous mount point. On
+                // the reference NAS this is the difference between adopting
+                // tens of thousands of entries and re-reading them over SMB.
+                let adoption = AppModel.adoptExif(missing: missing, exif: snapshot)
+                let stillMissing = adoption.stillMissing
+                guard !stillMissing.isEmpty else { return ([], 0, adoption) }
                 let networkPrefixes = AppModel.networkVolumePrefixes()
                 let isNetwork = { (url: URL) in networkPrefixes.contains { url.path.hasPrefix($0) } }
-                let localURLs = missing.map { $0.url }.filter { !isNetwork($0) }
-                let networkURLs = missing.map { $0.url }.filter { isNetwork($0) }
-                return (localURLs + networkURLs, localURLs.count)
+                let localURLs = stillMissing.map { $0.url }.filter { !isNetwork($0) }
+                let networkURLs = stillMissing.map { $0.url }.filter { isNetwork($0) }
+                return (localURLs + networkURLs, localURLs.count, adoption)
             }.value
-            guard !urls.isEmpty else { isIndexingExif = false; return }
-            startExifIndexing(urls: urls, localCount: localCount)
+
+            applyExifAdoption(prep.adoption)
+            guard !prep.urls.isEmpty else { isIndexingExif = false; return }
+            startExifIndexing(urls: prep.urls, localCount: prep.localCount)
         }
+    }
+
+    /// Install entries carried over from a previous mount point, and drop the
+    /// old-path records they replaced (safe: the same file is now filed under a
+    /// live path, so nothing becomes unreachable).
+    private func applyExifAdoption(_ adoption: ExifAdoption) {
+        guard !adoption.adopted.isEmpty else { return }
+        var merged = exif
+        for (path, info) in adoption.adopted { merged[path] = info }
+        for path in adoption.redundant { merged.removeValue(forKey: path) }
+        exif = merged
+        persistExifCache()
+        showToast("Reused metadata for \(adoption.adopted.count.formatted()) photos "
+                  + "after the volume moved")
     }
 
     private func startExifIndexing(urls: [URL], localCount: Int) {

@@ -106,9 +106,20 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.10">
+    <div class="release-head">
+      <h2>0.5.10</h2><span class="date">2026년 8월 9일</span><span class="tag">최신</span>
+    </div>
+    <h3>마운트 위치가 바뀌어도 메타데이터를 다시 읽지 않습니다</h3>
+    <ul>
+      <li><b>0.5.9에서 썸네일에 적용한 볼륨 식별을 메타데이터 인덱스까지 확장했습니다.</b> 같은 NAS 공유가 다른 경로로 잡히면 그 아래 사진의 EXIF를 전부 다시 읽었는데(수만 장, NAS에서 몇 시간), 이제 이전 경로에 기록된 항목을 <b>파일을 읽지 않고 그대로 물려받습니다.</b></li>
+      <li><b>절대 버리지 않는 방식입니다.</b> 인덱스를 통째로 다시 키잉하는 대신 조회 시점에 매칭만 합니다 — 실행할 때 공유가 잠깐 언마운트돼 있다고 해서 그 항목들이 사라지면, 지금 문제보다 훨씬 나쁜 6만 장 재읽기가 되기 때문입니다. 옛 경로 기록은 같은 파일이 살아 있는 경로에서 확인된 경우에만 정리합니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.9">
     <div class="release-head">
-      <h2>0.5.9</h2><span class="date">2026년 8월 9일</span><span class="tag">최신</span>
+      <h2>0.5.9</h2><span class="date">2026년 8월 9일</span>
     </div>
     <h3>NAS 경로가 바뀌어도 캐시를 다시 만들지 않습니다</h3>
     <ul>

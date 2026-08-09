@@ -106,9 +106,20 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.10">
+    <div class="release-head">
+      <h2>0.5.10</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Metadata is no longer re-read when a volume moves</h3>
+    <ul>
+      <li><b>The volume identity introduced for thumbnails in 0.5.9 now covers the metadata index too.</b> A share reachable at a different mount point used to mean re-reading EXIF for every photo under it — tens of thousands of files, hours over a NAS. Entries filed under the previous path are now <b>adopted without touching the file.</b></li>
+      <li><b>Nothing is ever discarded to achieve it.</b> Rather than re-keying the index, the match happens at lookup time: if a share simply happens to be unmounted at launch, its entries must not vanish — that would turn a cosmetic problem into a 64,000-photo re-read. Old-path records are cleaned up only once the same file is confirmed under a live path.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.9">
     <div class="release-head">
-      <h2>0.5.9</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.9</h2><span class="date">August 9, 2026</span>
     </div>
     <h3>A NAS that moves mount point no longer rebuilds the cache</h3>
     <ul>
