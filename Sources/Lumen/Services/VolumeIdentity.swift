@@ -38,6 +38,60 @@ enum VolumeIdentity {
         var point: String
         /// What it IS, independent of where (`//192.168.123.104/zpool`).
         var id: String
+        var kind: Kind = .internalDisk
+        /// Human name of the volume, for a tooltip ("orico", "zpool").
+        var name: String = ""
+    }
+
+    /// Where a folder physically lives. The sidebar draws all folders the same,
+    /// so a NAS root that takes minutes to open looks exactly like a folder on
+    /// the internal SSD — this is what lets the row say which it is.
+    enum Kind: Sendable, Equatable {
+        case internalDisk
+        case external
+        case network
+
+        /// SF Symbol, following Finder's sidebar vocabulary.
+        var symbol: String {
+            switch self {
+            case .internalDisk: return "folder"
+            case .external: return "externaldrive"
+            case .network: return "externaldrive.badge.wifi"
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .internalDisk: return "This Mac"
+            case .external: return "External disk"
+            case .network: return "Network share"
+            }
+        }
+    }
+
+    /// Which storage a path sits on. `.internalDisk` when it can't be told —
+    /// the neutral answer, and the same icon the sidebar drew before.
+    static func kind(for path: String) -> Kind {
+        mount(containing: path)?.kind ?? .internalDisk
+    }
+
+    /// "Network share · zpool" for a row tooltip, nil when it's the boot disk
+    /// (saying "This Mac" on every local folder would be noise).
+    static func describe(_ path: String) -> String? {
+        guard let m = mount(containing: path), m.kind != .internalDisk else { return nil }
+        return m.name.isEmpty ? m.kind.label : "\(m.kind.label) · \(m.name)"
+    }
+
+    /// Pure classifier — testable without mounting anything.
+    static func classify(device: String, isInternal: Bool?, isRemovable: Bool?) -> Kind {
+        if device.hasPrefix("//") { return .network }
+        if !device.hasPrefix("/"), device.contains(":") { return .network }
+        if isRemovable == true { return .external }
+        // `volumeIsInternal == false` on a local device means an attached disk.
+        // Unknown (nil) stays internal: guessing "external" would put a drive
+        // badge on the boot volume.
+        if isInternal == false { return .external }
+        return .internalDisk
     }
 
     private static let lock = NSLock()
@@ -65,7 +119,7 @@ enum VolumeIdentity {
             let point = string(from: &fs.f_mntonname)
             let from = string(from: &fs.f_mntfromname)
             guard !point.isEmpty else { continue }
-            out.append(Mount(point: point, id: identity(mountPoint: point, device: from)))
+            out.append(describe(mountPoint: point, device: from))
         }
         // Longest first, so the containment test finds the most specific mount.
         out.sort { $0.point.count > $1.point.count }
@@ -97,14 +151,26 @@ enum VolumeIdentity {
         return device
     }
 
-    private static func identity(mountPoint: String, device: String) -> String {
-        // Only ask the filesystem for a UUID when the device string can't
-        // identify the volume on its own — network shares never need it.
-        if device.hasPrefix("//") || (!device.hasPrefix("/") && device.contains(":")) {
-            return identity(device: device, uuid: nil)
+    /// One filesystem lookup per MOUNT (not per file), done while the table is
+    /// built. Network shares are answered from the device string alone, so a
+    /// wedged NAS is never probed here.
+    private static func describe(mountPoint: String, device: String) -> Mount {
+        let isNetworkDevice = device.hasPrefix("//")
+            || (!device.hasPrefix("/") && device.contains(":"))
+        if isNetworkDevice {
+            return Mount(point: mountPoint,
+                         id: identity(device: device, uuid: nil),
+                         kind: .network,
+                         name: (mountPoint as NSString).lastPathComponent)
         }
-        let uuid = (try? URL(fileURLWithPath: mountPoint)
-            .resourceValues(forKeys: [.volumeUUIDStringKey]))?.volumeUUIDString
-        return identity(device: device, uuid: uuid)
+        let values = try? URL(fileURLWithPath: mountPoint).resourceValues(
+            forKeys: [.volumeUUIDStringKey, .volumeNameKey,
+                      .volumeIsInternalKey, .volumeIsRemovableKey])
+        return Mount(point: mountPoint,
+                     id: identity(device: device, uuid: values?.volumeUUIDString),
+                     kind: classify(device: device,
+                                    isInternal: values?.volumeIsInternal,
+                                    isRemovable: values?.volumeIsRemovable),
+                     name: values?.volumeName ?? (mountPoint as NSString).lastPathComponent)
     }
 }

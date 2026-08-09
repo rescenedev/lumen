@@ -306,8 +306,11 @@ struct SidebarView: View {
                     // every sidebar body evaluation.
                     ForEach(model.photoFolders, id: \.self) { url in
                         let offline = model.isUnderOfflineRoot(url)
+                        let isRoot = model.isRootFolder(url)
                         FolderRowLabel(name: url.lastPathComponent,
-                                       count: folderCounts[url] ?? 0, offline: offline)
+                                       count: folderCounts[url] ?? 0, offline: offline,
+                                       storage: isRoot ? VolumeIdentity.kind(for: url.path) : nil,
+                                       storageDetail: isRoot ? VolumeIdentity.describe(url.path) : nil)
                             .tag(SidebarItem.folder(url))
                             .selectionDisabled(offline)
                             .contextMenu { FolderContextMenu(url: url) }
@@ -385,7 +388,10 @@ private struct FolderTreeNode: View {
 
     private var label: some View {
         let offline = model.isUnderOfflineRoot(node.url)
-        return FolderRowLabel(name: node.name, count: node.count, offline: offline)
+        let isRoot = model.isRootFolder(node.url)
+        return FolderRowLabel(name: node.name, count: node.count, offline: offline,
+                              storage: isRoot ? VolumeIdentity.kind(for: node.url.path) : nil,
+                              storageDetail: isRoot ? VolumeIdentity.describe(node.url.path) : nil)
             .tag(SidebarItem.folder(node.url))
             .selectionDisabled(offline)
             .contextMenu { FolderContextMenu(url: node.url) }
@@ -400,6 +406,11 @@ private struct FolderRowLabel: View {
     let name: String
     let count: Int
     let offline: Bool
+    /// Where this folder lives — set only on the roots the user added, so the
+    /// badge marks the boundary between storage rather than repeating on every
+    /// descendant. nil draws the plain folder icon.
+    var storage: VolumeIdentity.Kind?
+    var storageDetail: String?
 
     var body: some View {
         Label {
@@ -416,7 +427,7 @@ private struct FolderRowLabel: View {
                 }
             }
         } icon: {
-            Image(systemName: "folder")
+            Image(systemName: storage?.symbol ?? "folder")
                 .foregroundStyle(offline ? Color.secondary.opacity(0.4) : Color.secondary)
         }
         // The row is grayed and unselectable, so the tooltip has to say both
@@ -424,7 +435,7 @@ private struct FolderRowLabel: View {
         .help(offline
               ? "Drive not connected — the folder comes back when the volume mounts. "
                 + "Right-click to remove it from the library."
-              : "")
+              : (storageDetail ?? ""))
     }
 }
 

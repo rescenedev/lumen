@@ -329,3 +329,44 @@ func exifAdoptionTests() {
         checkEqual(r.stillMissing.count, 1)
     }
 }
+
+/// A NAS root that takes minutes to open used to look exactly like a folder on
+/// the internal SSD. The sidebar now marks where a root lives.
+func volumeKindTests() {
+    typealias K = VolumeIdentity.Kind
+
+    test("smbAndNfsAreNetwork") {
+        checkEqual(VolumeIdentity.classify(device: "//zihado@192.168.123.104/zpool",
+                                           isInternal: nil, isRemovable: nil), K.network)
+        checkEqual(VolumeIdentity.classify(device: "OrbStack:/OrbStack",
+                                           isInternal: nil, isRemovable: nil), K.network)
+    }
+
+    test("removableOrNonInternalLocalDisksAreExternal") {
+        checkEqual(VolumeIdentity.classify(device: "/dev/disk15s1",
+                                           isInternal: false, isRemovable: false), K.external)
+        checkEqual(VolumeIdentity.classify(device: "/dev/disk16s1",
+                                           isInternal: true, isRemovable: true), K.external,
+                   "an ejectable volume is external even if the bus says internal")
+    }
+
+    test("theBootDiskIsInternal_andUnknownStaysInternal") {
+        checkEqual(VolumeIdentity.classify(device: "/dev/disk3s5",
+                                           isInternal: true, isRemovable: false), K.internalDisk)
+        // Guessing "external" on a nil answer would badge the boot volume.
+        checkEqual(VolumeIdentity.classify(device: "/dev/disk3s5",
+                                           isInternal: nil, isRemovable: nil), K.internalDisk)
+    }
+
+    test("eachKindHasItsOwnSymbol") {
+        let symbols = Set([K.internalDisk, .external, .network].map(\.symbol))
+        checkEqual(symbols.count, 3, "three kinds must not share an icon: \(symbols)")
+        checkEqual(K.internalDisk.symbol, "folder", "local folders keep the icon they had")
+    }
+
+    test("describeIsSilentForTheBootDiskAndNamedOtherwise") {
+        // The tooltip exists to explain the badge; a badge-less row has nothing
+        // to explain, so saying "This Mac" on every local folder is noise.
+        checkNil(VolumeIdentity.describe("/Users/zihado/Desktop"))
+    }
+}
