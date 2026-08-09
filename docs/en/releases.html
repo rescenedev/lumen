@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.8">
+    <div class="release-head">
+      <h2>0.5.8</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>The detail popover updates live, and jobs can be restarted</h3>
+    <ul>
+      <li><b>Fixed the detail popover showing frozen numbers.</b> It kept displaying the values from the instant it opened — "Idle" and a progress bar that never moved — while the job was plainly running. The file being read and the progress now update live, and a job that has just started says "Starting…" rather than "Idle".</li>
+      <li><b>Fixed status-bar text spilling vertically in a narrow window.</b> When space ran short the text wrapped one character per line and grew straight out of the status bar over your photos. Rows now stay on one line and shorten the folder name and rate first.</li>
+      <li><b>Jobs can be restarted.</b> In the detail popover, "Restart" re-runs the pass over whatever is still missing, and "Rebuild All…" discards the cache and starts from zero (it asks first — that one takes hours).</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.7">
     <div class="release-head">
-      <h2>0.5.7</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.7</h2><span class="date">August 9, 2026</span>
     </div>
     <h3>Click a background job for details — and retry the photos that failed</h3>
     <ul>
