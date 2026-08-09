@@ -106,9 +106,22 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.9">
+    <div class="release-head">
+      <h2>0.5.9</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>A NAS that moves mount point no longer rebuilds the cache</h3>
+    <ul>
+      <li><b>Thumbnails survive the same share being mounted somewhere else.</b> Cache keys used the absolute path, so a share seen as <code>/Volumes/zpool</code> on one login and <code>/Users/…/nas-mnt/zpool</code> on the next invalidated every thumbnail under it — measured 101,599 files on disk with only 33,198 still reachable. Volumes are now identified by themselves (UUID for local disks, the share address for network mounts), and existing thumbnails are adopted rather than rebuilt.</li>
+      <li><b>Metadata progress shows the actual work.</b> A pass with 8,445 photos left to read displayed "55,809 of 64,254", which read as re-doing everything every time. It now reports the pass's own work, with the already-cached count as context in the detail popover.</li>
+      <li><b>Thumbnail progress shows throughput and time left</b> — <code>2.4/s · ~3.6h left</code>.</li>
+      <li><b>Faster thumbnail building over a NAS.</b> Network reads are latency-bound, so concurrency went from 3 to 8 lanes there (local storage stays at 3).</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.8">
     <div class="release-head">
-      <h2>0.5.8</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.8</h2><span class="date">August 9, 2026</span>
     </div>
     <h3>The detail popover updates live, and jobs can be restarted</h3>
     <ul>
