@@ -9,22 +9,47 @@ enum ExifIndexer {
     /// the bottleneck (parallelism barely helped in testing) and a serial pass at
     /// background priority keeps the index from spiking CPU or stealing I/O from
     /// the foreground while the user browses.
-    static func index(_ urls: [URL]) -> [String: ExifInfo] {
-        var result: [String: ExifInfo] = [:]
-        result.reserveCapacity(urls.count)
+    struct Result: Sendable {
+        var info: [String: ExifInfo] = [:]
+        /// Files that produced nothing usable, with a short cause. They are
+        /// still cached as empty (below) so the main pass doesn't re-read them
+        /// on every launch — the log is what makes them visible and retryable.
+        var failures: [JobFailure] = []
+    }
+
+    static func index(_ urls: [URL]) -> Result {
+        var result = Result()
+        result.info.reserveCapacity(urls.count)
+        let now = Date()
         for url in urls {
-            result[url.path] = read(url)
+            let outcome = readOutcome(url)
+            result.info[url.path] = outcome.info
+            if let reason = outcome.failure {
+                result.failures.append(JobFailure(kind: .metadata, path: url.path,
+                                                  reason: reason, date: now))
+            }
         }
         return result
     }
 
-    static func read(_ url: URL) -> ExifInfo {
+    /// Convenience for callers that only want the values (tests, one-offs).
+    static func read(_ url: URL) -> ExifInfo { readOutcome(url).info }
+
+    /// `failure` is non-nil when nothing could be read — distinguishing "this
+    /// photo genuinely carries no EXIF" (success, empty info) from "we could
+    /// not read the file at all" (failure), which the old code conflated.
+    static func readOutcome(_ url: URL) -> (info: ExifInfo, failure: String?) {
         var info = ExifInfo()
         // Don't pull whole files out of iCloud just to index them.
-        if iCloudDownloader.isDataless(url) { return info }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
-        else { return info }
+        if iCloudDownloader.isDataless(url) {
+            return (info, "Not downloaded from iCloud yet")
+        }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return (info, "Could not open the file")
+        }
+        guard let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
+            return (info, "No readable image properties")
+        }
 
         // Via NSNumber.intValue: a plain `as? Int` returns nil for a
         // float-backed CFNumber, silently dropping the dimension.
@@ -53,7 +78,7 @@ enum ExifIndexer {
             info.latitude = latRef == "S" ? -lat : lat
             info.longitude = lonRef == "W" ? -lon : lon
         }
-        return info
+        return (info, nil)
     }
 
     private static let exifDateFormatter: DateFormatter = {

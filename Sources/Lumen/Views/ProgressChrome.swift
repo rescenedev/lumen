@@ -64,6 +64,9 @@ struct StatusRow<Indicator: View, Trailing: View>: View {
     var label: String
     var detail: String
     var context: String?
+    /// Photos this job could not process. Surfaced right in the row so a silent
+    /// failure isn't something you only find by opening the popover.
+    var failures: Int = 0
     @ViewBuilder var indicator: Indicator
     @ViewBuilder var trailing: Trailing
 
@@ -86,16 +89,53 @@ struct StatusRow<Indicator: View, Trailing: View>: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            if failures > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .imageScale(.small)
+                        .symbolRenderingMode(.hierarchical)
+                    Text(failures.formatted())
+                        .font(.caption.weight(.medium))
+                        .monospacedDigit()
+                }
+                .foregroundStyle(.orange)
+            }
             trailing
         }
         .fixedSize(horizontal: false, vertical: true)
     }
 }
 
+/// Wraps a status row in a plain button that opens its detail popover, with a
+/// hover highlight so the row reads as clickable — a bare label in a status bar
+/// gives no hint that there is more behind it.
+struct StatusRowButton<Content: View, Detail: View>: View {
+    @ViewBuilder var content: Content
+    @ViewBuilder var detail: Detail
+
+    @State private var showing = false
+    @State private var hovering = false
+
+    var body: some View {
+        Button { showing.toggle() } label: {
+            content
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(hovering ? AnyShapeStyle(.quaternary.opacity(0.6)) : AnyShapeStyle(.clear),
+                            in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(ProgressChrome.settle, value: hovering)
+        .popover(isPresented: $showing, arrowEdge: .top) { detail }
+    }
+}
+
 extension StatusRow where Trailing == EmptyView {
-    init(label: String, detail: String, context: String?,
+    init(label: String, detail: String, context: String?, failures: Int = 0,
          @ViewBuilder indicator: () -> Indicator) {
-        self.init(label: label, detail: detail, context: context,
+        self.init(label: label, detail: detail, context: context, failures: failures,
                   indicator: indicator, trailing: { EmptyView() })
     }
 }

@@ -329,6 +329,71 @@ final class AppModel {
     /// several-times-a-second ticks only re-render the status label.
     @ObservationIgnored let scanProgress = ScanMonitor()
 
+    // MARK: - Background-job failures
+
+    /// Photos a background pass could not process, surfaced in the status
+    /// popover. Mirrors `JobFailureLog` (which the worker threads write) onto
+    /// the main actor so SwiftUI can observe it.
+    private(set) var jobFailures: [JobFailure] = []
+
+    func failures(_ kind: JobFailure.Kind) -> [JobFailure] {
+        jobFailures.filter { $0.kind == kind }
+    }
+
+    /// Pull the log onto the main actor. Coalesced: a failing chunk calls this
+    /// once per 200 photos, and the popover only needs to be roughly live.
+    @ObservationIgnored private var failureRefreshTask: Task<Void, Never>?
+    func refreshJobFailures() {
+        guard failureRefreshTask == nil else { return }
+        failureRefreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard let self else { return }
+            self.failureRefreshTask = nil
+            self.jobFailures = JobFailureLog.shared.all()
+        }
+    }
+
+    func loadJobFailures() { jobFailures = JobFailureLog.shared.all() }
+
+    func clearFailures(_ kind: JobFailure.Kind) {
+        JobFailureLog.shared.clear(kind: kind)
+        jobFailures = JobFailureLog.shared.all()
+    }
+
+    /// Re-run the failed photos of one job.
+    ///
+    /// Both jobs skip work they believe is already done — the index skips paths
+    /// present in `exif`, warming skips thumbnails already on disk — so a retry
+    /// is "forget the record of the attempt, then let the normal pass find them
+    /// again". That keeps one code path doing the work instead of a second,
+    /// subtly different retry path.
+    func retryFailures(_ kind: JobFailure.Kind) {
+        let paths = Set(failures(kind).map(\.path))
+        guard !paths.isEmpty else { return }
+        JobFailureLog.shared.clear(kind: kind, paths: paths)
+        jobFailures = JobFailureLog.shared.all()
+
+        switch kind {
+        case .metadata:
+            // Failed reads were cached as empty entries so the main pass would
+            // stop re-reading them; dropping those entries is what makes them
+            // visible to `ensureExifIndex` again.
+            var pruned = exif
+            for path in paths { pruned.removeValue(forKey: path) }
+            exif = pruned
+            ensureExifIndex()
+        case .thumbnail:
+            // A failed thumbnail was never written to disk, so it is still in
+            // the warm pass's todo list — restarting the pass picks it up.
+            startThumbnailWarming()
+        }
+        showToast("Retrying \(paths.count.formatted()) \(kind.label.lowercased()) …")
+    }
+
+    func revealFailure(_ failure: JobFailure) {
+        revealFolderInFinder(URL(filePath: failure.path, directoryHint: .notDirectory))
+    }
+
     // Folder presentation (hierarchical tree by default)
     var folderTreeView = true { didSet { persistSettings() } }
 
@@ -361,6 +426,9 @@ final class AppModel {
             showCrashReportAlert = true
         }
         watcher = FolderWatcher { [weak self] in self?.rescanRoots() }
+        // Failures survive a quit — "저번에 실패한 곳" is only answerable if the
+        // previous session's record is still there on the next launch.
+        loadJobFailures()
         reopenRecentFolders()
         refreshOfflineRoots()
         observeVolumeMounts()
@@ -528,8 +596,8 @@ final class AppModel {
             }
             entries = front + back
         }
-        ThumbnailCache.shared.warmDiskCache(entries) { [weak self] remaining, total, folder in
-            self?.warming.update(remaining: remaining, total: total, folder: folder)
+        ThumbnailCache.shared.warmDiskCache(entries) { [weak self] remaining, total, path in
+            self?.warming.update(remaining: remaining, total: total, currentPath: path)
         }
         sweepStaleThumbnailsIfDue(entries)
     }
@@ -1920,6 +1988,9 @@ final class AppModel {
     /// the recent throughput in photos/sec — shown in the status bar.
     private(set) var exifIndexSource = ""
     private(set) var exifIndexRate = 0
+    /// The file the index is on right now — "exactly where it is reading",
+    /// shown in the background-job popover.
+    private(set) var exifIndexCurrentPath: String?
     /// Set briefly when an indexing pass finishes, so the status bar can confirm
     /// "Indexed N photos" before clearing. `exifReadyCount` is the photos covered.
     private(set) var exifIndexJustFinished = false
@@ -1988,10 +2059,15 @@ final class AppModel {
             while start < urls.count {
                 let end = min(start + chunkSize, urls.count)
                 let chunk = Array(urls[start..<end])
-                let added = await Task.detached(priority: .utility) { ExifIndexer.index(chunk) }.value
-                pending.merge(added) { _, new in new }
+                let result = await Task.detached(priority: .utility) { ExifIndexer.index(chunk) }.value
+                pending.merge(result.info) { _, new in new }
+                if !result.failures.isEmpty {
+                    JobFailureLog.shared.record(result.failures)
+                    refreshJobFailures()
+                }
                 // Cheap status updates every chunk (status bar only).
                 exifIndexDone = baseDone + end
+                exifIndexCurrentPath = chunk.last?.path
                 exifIndexSource = start < localCount ? "Local disk" : "NAS"
                 // Publishing `exif` invalidates the visible cache and re-filters
                 // the whole library — expensive while a search is active. Throttle
@@ -2022,6 +2098,8 @@ final class AppModel {
             exifIndexDone = 0
             exifIndexRate = 0
             exifIndexSource = ""
+            exifIndexCurrentPath = nil
+            refreshJobFailures()
             // Briefly confirm the index is ready, then clear the status indicator.
             exifReadyCount = exif.count
             exifIndexJustFinished = true
@@ -2052,10 +2130,14 @@ final class AppModel {
     private func indexExif(for photos: [Photo]) async {
         guard !photos.isEmpty else { persistExifCache(); return }
         let urls = photos.map { $0.url }
-        let added = await Task.detached(priority: .utility) { ExifIndexer.index(urls) }.value
+        let result = await Task.detached(priority: .utility) { ExifIndexer.index(urls) }.value
         var merged = exif
-        for (key, value) in added { merged[key] = value }
+        for (key, value) in result.info { merged[key] = value }
         exif = merged
+        if !result.failures.isEmpty {
+            JobFailureLog.shared.record(result.failures)
+            refreshJobFailures()
+        }
         persistExifCache()
     }
 

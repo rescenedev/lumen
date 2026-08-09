@@ -204,13 +204,14 @@ struct PhotoBrowserView: View {
 
     private var statusBar: some View {
         @Bindable var model = model
-        return ZStack {
-            Text(statusText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-
-            HStack(spacing: 6) {
+        // Three real columns, NOT a centered label with an overlay on top: the
+        // ZStack this replaces let the background-job rows grow straight
+        // through the centered item count, printing two strings over each
+        // other. Equal `maxWidth: .infinity` on the outer columns keeps the
+        // middle one centred while giving the jobs a bounded region to
+        // truncate inside.
+        return HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 // An import is what the user just asked for, so it takes this
                 // slot from the (silent, always-running) thumbnail warming.
                 // Gated on `model.isScanning` — an @Observable property — NOT
@@ -224,31 +225,56 @@ struct PhotoBrowserView: View {
                 if model.isIndexingExif {
                     // Same row shape as warming, so the three background jobs
                     // read as one family instead of three ad-hoc layouts.
-                    StatusRow(label: "Metadata",
-                              detail: BackgroundWorkText.counts(done: model.exifIndexDone,
-                                                                total: model.exifIndexTotal),
-                              context: indexingContext) {
-                        if model.exifIndexTotal > 0 {
-                            ThinProgressBar(fraction: Double(model.exifIndexDone)
-                                            / Double(model.exifIndexTotal))
-                        } else {
-                            ProgressView().controlSize(.mini)
+                    StatusRowButton {
+                        StatusRow(label: "Metadata",
+                                  detail: BackgroundWorkText.counts(done: model.exifIndexDone,
+                                                                    total: model.exifIndexTotal),
+                                  context: indexingContext,
+                                  failures: model.failures(.metadata).count) {
+                            if model.exifIndexTotal > 0 {
+                                ThinProgressBar(fraction: Double(model.exifIndexDone)
+                                                / Double(model.exifIndexTotal))
+                            } else {
+                                ProgressView().controlSize(.mini)
+                            }
                         }
+                    } detail: {
+                        metadataPopover
                     }
-                    .help("Reading camera & EXIF info so search and the map can find photos")
-                } else if model.exifIndexJustFinished {
-                    StatusRow(label: "Metadata ready",
-                              detail: "\(model.exifReadyCount.formatted()) photos",
-                              context: nil) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .imageScale(.small)
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.green)
+                    .help("Reading camera & EXIF info so search and the map can find photos. "
+                          + "Click for details and any photos that failed.")
+                } else if model.exifIndexJustFinished || !model.failures(.metadata).isEmpty {
+                    // The finished state sticks around while failures remain:
+                    // "indexed, but N photos couldn't be read" is exactly the
+                    // thing the old silent-skip behavior hid.
+                    StatusRowButton {
+                        StatusRow(label: "Metadata ready",
+                                  detail: "\(model.exifReadyCount.formatted()) photos",
+                                  context: nil,
+                                  failures: model.failures(.metadata).count) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .imageScale(.small)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(.green)
+                        }
+                    } detail: {
+                        metadataPopover
                     }
                     .transition(.opacity)
                     .help("Photo metadata (camera, date, GPS) is indexed — search and the map are ready")
                 }
-                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+
+            Text(statusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
+                .layoutPriority(1)
+
+            HStack(spacing: 6) {
                 if model.viewMode == .grid {
                     Image(systemName: "square.grid.3x3")
                         .imageScale(.small)
@@ -258,10 +284,23 @@ struct PhotoBrowserView: View {
                         .frame(width: 96)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .frame(height: 28)
         .background(.bar)
+    }
+
+    private var metadataPopover: some View {
+        BackgroundJobPopover(title: "Reading photo metadata",
+                             currentPath: model.exifIndexCurrentPath,
+                             done: model.exifIndexDone,
+                             total: model.exifIndexTotal,
+                             context: indexingContext,
+                             failures: model.failures(.metadata),
+                             onRetry: { model.retryFailures(.metadata) },
+                             onClear: { model.clearFailures(.metadata) },
+                             onReveal: { model.revealFailure($0) })
     }
 
     /// Where the index is reading from and how fast — the trailing context of

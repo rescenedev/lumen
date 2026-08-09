@@ -309,17 +309,17 @@ func importStreamingTests() {
             checkEqual(monitor.done, 0)
             checkEqual(monitor.fraction, 0, "no division by zero before a total lands")
 
-            monitor.update(remaining: 30_124, total: 30_124, folder: "a")
+            monitor.update(remaining: 30_124, total: 30_124, currentPath: "/nas/a/1.jpg")
             checkEqual(monitor.done, 0)
             checkEqual(monitor.fraction, 0)
 
-            monitor.update(remaining: 17_784, total: 30_124, folder: "b")
+            monitor.update(remaining: 17_784, total: 30_124, currentPath: "/nas/b/2.jpg")
             checkEqual(monitor.done, 12_340)
             check(abs(monitor.fraction - 12_340.0 / 30_124.0) < 0.0001)
 
             // A late tick from a superseded pass (bigger remaining than its own
             // total) must not drive the bar past full or negative.
-            monitor.update(remaining: 500, total: 100, folder: nil)
+            monitor.update(remaining: 500, total: 100, currentPath: nil)
             checkEqual(monitor.total, 500)
             checkEqual(monitor.done, 0)
             check(monitor.fraction >= 0 && monitor.fraction <= 1)

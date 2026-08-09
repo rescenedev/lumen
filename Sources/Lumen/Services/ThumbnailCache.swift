@@ -344,7 +344,7 @@ final class ThumbnailCache {
     /// Decode + persist a thumbnail to disk for every photo whose disk cache is
     /// missing, so any folder opens instantly later. `entries` carries each
     /// file's known mtime so we don't stat the NAS just to check the cache key.
-    /// `progress(remaining, total, currentFolder)` is reported on the main
+    /// `progress(remaining, total, currentPath)` is reported on the main
     /// thread, time-throttled (~3×/sec) so the count is seen moving. `total` is
     /// the size of THIS pass's work list, so the UI can show a real fraction
     /// ("12,340 of 30,124") instead of a bare countdown with no denominator.
@@ -369,7 +369,7 @@ final class ThumbnailCache {
             guard total > 0 else { DispatchQueue.main.async { progress(0, 0, nil) }; return }
 
             let counter = Counter(total)
-            DispatchQueue.main.async { progress(total, total, todo.first?.url.deletingLastPathComponent().lastPathComponent) }
+            DispatchQueue.main.async { progress(total, total, todo.first?.url.path) }
 
             // Enqueue in bounded chunks: a cold warm of ~66k photos used to hold
             // ~66k BlockOperations (closures + contexts) resident for hours. Each
@@ -399,13 +399,26 @@ final class ThumbnailCache {
                             if !FileManager.default.fileExists(atPath: disk.path) {
                                 var image = Self.downsample(url: entry.url, maxPixel: maxPixel)
                                 if image == nil { image = QuickLookThumbnailer.thumbnail(for: entry.url, maxPixel: maxPixel) }
-                                if let image { self.writeDisk(image, to: disk) }   // disk only — don't evict memory
+                                if let image {
+                                    self.writeDisk(image, to: disk)   // disk only — don't evict memory
+                                } else {
+                                    // Both decoders declined: a corrupt file, an
+                                    // unsupported format, or the volume went away
+                                    // mid-pass. Recorded so the status popover can
+                                    // show which photos never got a thumbnail
+                                    // instead of them just staying blank forever.
+                                    JobFailureLog.shared.record(
+                                        kind: .thumbnail, path: entry.url.path,
+                                        reason: FileManager.default.fileExists(atPath: entry.url.path)
+                                            ? "Could not decode the image"
+                                            : "File not reachable")
+                                }
                             }
                         }
                         let (left, push) = counter.tick()
                         if push || left == 0 {
-                            let folder = entry.url.deletingLastPathComponent().lastPathComponent
-                            DispatchQueue.main.async { progress(left, total, left == 0 ? nil : folder) }
+                            let path = entry.url.path
+                            DispatchQueue.main.async { progress(left, total, left == 0 ? nil : path) }
                         }
                     }
                     op.completionBlock = {

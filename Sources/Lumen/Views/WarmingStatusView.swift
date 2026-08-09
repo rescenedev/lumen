@@ -4,17 +4,31 @@ import SwiftUI
 /// It observes `WarmingMonitor` directly, so the frequent progress ticks only
 /// re-render this label — never the grid or sidebar.
 struct WarmingStatusView: View {
+    @Environment(AppModel.self) private var model
     @ObservedObject var warming: WarmingMonitor
 
     var body: some View {
         if warming.remaining > 0 {
-            StatusRow(label: "Thumbnails",
-                      detail: BackgroundWorkText.counts(done: warming.done, total: warming.total),
-                      context: warming.folder) {
-                ThinProgressBar(fraction: warming.fraction)
+            StatusRowButton {
+                StatusRow(label: "Thumbnails",
+                          detail: BackgroundWorkText.counts(done: warming.done, total: warming.total),
+                          context: warming.folder,
+                          failures: model.failures(.thumbnail).count) {
+                    ThinProgressBar(fraction: warming.fraction)
+                }
+            } detail: {
+                BackgroundJobPopover(title: "Building thumbnails",
+                                     currentPath: warming.currentPath,
+                                     done: warming.done,
+                                     total: warming.total,
+                                     context: nil,
+                                     failures: model.failures(.thumbnail),
+                                     onRetry: { model.retryFailures(.thumbnail) },
+                                     onClear: { model.clearFailures(.thumbnail) },
+                                     onReveal: { model.revealFailure($0) })
             }
             .help("Building the thumbnail cache in the background so browsing is instant. "
-                  + "Your photos stay usable while this runs.")
+                  + "Click for details and any photos that failed.")
         }
     }
 }
@@ -25,7 +39,9 @@ enum BackgroundWorkText {
     /// Always a fraction. A bare countdown ("Caching 29,412") is a number with
     /// nothing to measure it against. No percentage: the bar already says what
     /// share is done, and printing it twice is clutter, not clarity.
+    /// `done` is clamped — a late tick from a superseded pass must never print
+    /// a nonsense "1,262,045 of 84,254".
     static func counts(done: Int, total: Int) -> String {
-        "\(done.formatted()) of \(total.formatted())"
+        "\(min(max(done, 0), max(total, 0)).formatted()) of \(max(total, 0).formatted())"
     }
 }
