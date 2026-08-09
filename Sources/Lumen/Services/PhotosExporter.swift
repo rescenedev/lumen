@@ -10,38 +10,24 @@ import UniformTypeIdentifiers
 /// writes the real bytes out of PhotoKit, which is also the only path that can
 /// pull down an asset stored only in iCloud.
 enum PhotosExporter {
-    /// Write each asset's ORIGINAL file straight into `directory`, under the
-    /// name it has in Photos. Returns how many landed.
-    static func writeOriginals(_ photos: [Photo], to directory: URL) async -> Int {
-        var written = 0
-        for photo in photos where photo.isAsset {
-            if await writeOriginal(photo, to: directory) != nil { written += 1 }
+    /// One asset, in the shape the caller asked for. Resized needs a real file
+    /// to downsample, so it stages the original next to the destination and
+    /// removes it again — the alternative is holding a full-size original in
+    /// memory for every photo of a 71k-photo library.
+    static func export(_ photo: Photo, style: ExportStyle, to directory: URL) async -> Bool {
+        switch style {
+        case .originals, .zip:
+            return await writeOriginal(photo, to: directory) != nil
+        case .resized(let maxPixel):
+            let tmp = FileManager.default.temporaryDirectory
+                .appendingPathComponent("LumenOne-\(UUID().uuidString)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: tmp) }
+            guard let original = await writeOriginal(photo, to: tmp) else { return false }
+            let staged = Photo(url: original, byteSize: 0,
+                               creationDate: photo.creationDate, modificationDate: nil)
+            return Exporter.exportResized(staged, maxPixel: maxPixel, to: directory)
         }
-        return written
-    }
-
-    /// Materialise assets as real files in a temporary directory so the shared
-    /// resize/zip paths can treat them like any other photo. The caller MUST
-    /// call `cleanup` — these are full-size originals, easily gigabytes.
-    static func stage(_ photos: [Photo]) async -> (photos: [Photo], cleanup: @Sendable () -> Void) {
-        let assets = photos.filter { $0.isAsset }
-        guard !assets.isEmpty else { return ([], {}) }
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("LumenExport-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        var staged: [Photo] = []
-        for photo in assets {
-            guard let url = await writeOriginal(photo, to: dir) else { continue }
-            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-            staged.append(Photo(url: url,
-                                byteSize: Int64(values?.fileSize ?? 0),
-                                // Keep the capture date so a resized export
-                                // still sorts and dates like the original.
-                                creationDate: photo.creationDate,
-                                modificationDate: values?.contentModificationDate))
-        }
-        return (staged, { try? FileManager.default.removeItem(at: dir) })
     }
 
     // MARK: -

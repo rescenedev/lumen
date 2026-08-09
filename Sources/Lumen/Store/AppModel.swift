@@ -2448,61 +2448,131 @@ final class AppModel {
     // and exportResized adds a full decode+encode per photo; a 200-photo NAS
     // export beachballed the app for the whole copy. The count comes back to
     // the main actor as a toast (the result used to be silently discarded).
-    /// Photos-library assets have no file to copy — their bytes come out of
-    /// PhotoKit — so every export path splits the selection and handles each
-    /// half with the mechanism that can actually read it.
-    func exportOriginals(_ photos: [Photo]) {
-        guard !photos.isEmpty else { return }
-        let files = photos.filter { !$0.isAsset }
-        let assets = photos.filter { $0.isAsset }
-        chooseDirectory(prompt: "Export Here") { dir in
-            Task {
-                let copied = await Task.detached(priority: .userInitiated) {
-                    Exporter.copyOriginals(files, to: dir)
-                }.value
-                // Straight into the destination: no staging copy for originals.
-                let written = await PhotosExporter.writeOriginals(assets, to: dir)
-                self.didExport(count: copied + written, of: photos.count, to: dir)
-            }
-        }
-    }
+    /// Progress for a running export. Its own observable, so a per-photo tick
+    /// doesn't re-render the grid.
+    @ObservationIgnored let exportProgress = ExportMonitor()
+    /// Observed mirror, so views can react to an export starting or ending.
+    private(set) var isExporting = false
 
+    func cancelExport() { exportProgress.cancel() }
+
+    // MARK: Export entry points
+
+    func exportOriginals(_ photos: [Photo]) { beginExport(photos, style: .originals) }
     func exportResized(_ photos: [Photo], maxPixel: Int) {
-        guard !photos.isEmpty else { return }
-        let files = photos.filter { !$0.isAsset }
-        let assets = photos.filter { $0.isAsset }
-        chooseDirectory(prompt: "Export Here") { dir in
-            Task {
-                // Assets are materialised as real files first so the shared
-                // downsample path works on them unchanged.
-                let (staged, cleanup) = await PhotosExporter.stage(assets)
-                let exported = await Task.detached(priority: .userInitiated) {
-                    let n = Exporter.exportResized(files + staged, maxPixel: maxPixel, to: dir)
-                    cleanup()   // originals staged to temp are easily gigabytes
-                    return n
-                }.value
-                self.didExport(count: exported, of: photos.count, to: dir)
-            }
+        beginExport(photos, style: .resized(maxPixel: maxPixel))
+    }
+    func exportZip(_ photos: [Photo]) { beginExport(photos, style: .zip) }
+
+    /// Export everything in the Apple Photos library. The assets are fetched
+    /// first — only the open scope is normally loaded, and "export the library"
+    /// must not mean "export the part you happened to look at".
+    func exportPhotosLibrary(style: ExportStyle) {
+        Task {
+            let assets = assetPhotos.isEmpty ? await PhotosLibraryService.fetchAllImages() : assetPhotos
+            beginExport(assets, style: style)
         }
     }
 
-    func exportZip(_ photos: [Photo]) {
-        guard !photos.isEmpty else { return }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Lumen Export.zip"
-        panel.allowedContentTypes = [.zip]
-        if panel.runModal() == .OK, let url = panel.url {
-            let files = photos.filter { !$0.isAsset }
-            let assets = photos.filter { $0.isAsset }
-            Task {
-                let (staged, cleanup) = await PhotosExporter.stage(assets)
-                let ok = await Task.detached(priority: .userInitiated) { () -> Bool in
-                    let ok = Exporter.zip(files + staged, to: url)
-                    cleanup()
-                    return ok
+    /// Export one Apple Photos album, fetching its assets on demand.
+    func exportPhotosAlbum(_ id: String, style: ExportStyle) {
+        Task {
+            let assets = await PhotosLibraryService.fetchAssets(inAlbumId: id)
+            beginExport(assets, style: style)
+        }
+    }
+
+    /// Export a Lumen album by resolving its stored paths back to photos.
+    func exportAlbum(_ id: UUID, style: ExportStyle) {
+        guard let album = albums.first(where: { $0.id == id }) else { return }
+        let index = photoByID
+        let photos = album.photoPaths.compactMap {
+            index[URL(filePath: $0, directoryHint: .notDirectory)]
+        }
+        beginExport(photos, style: style)
+    }
+
+    // MARK: The one export path
+
+    private func beginExport(_ photos: [Photo], style: ExportStyle) {
+        guard !photos.isEmpty else { showToast("Nothing to export"); return }
+        guard !isExporting else { showToast("An export is already running"); return }
+
+        switch style {
+        case .originals, .resized:
+            chooseDirectory(prompt: "Export Here") { dir in
+                self.runExport(photos, style: style, destination: dir)
+            }
+        case .zip:
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "Lumen Export.zip"
+            panel.allowedContentTypes = [.zip]
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            runExport(photos, style: style, destination: url)
+        }
+    }
+
+    /// Photos-library assets have no file to copy — their bytes come out of
+    /// PhotoKit — so each item is routed to whichever mechanism can read it.
+    /// One item at a time: that is what makes progress reportable and the whole
+    /// thing stoppable, which for a 71k-photo library is the difference between
+    /// a feature and a hang.
+    private func runExport(_ photos: [Photo], style: ExportStyle, destination: URL) {
+        let token = exportProgress.begin(total: photos.count, style: style.label)
+        isExporting = true
+
+        Task {
+            // Zip collects into a staging directory and archives at the end;
+            // the other styles write straight to the destination.
+            let workDir: URL
+            let staging: URL?
+            if case .zip = style {
+                let tmp = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("LumenZip-\(UUID().uuidString)", isDirectory: true)
+                try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+                workDir = tmp
+                staging = tmp
+            } else {
+                workDir = destination
+                staging = nil
+            }
+
+            var ok = 0
+            for photo in photos {
+                if token.isCancelled { break }
+                let succeeded: Bool
+                if photo.isAsset {
+                    succeeded = await PhotosExporter.export(photo, style: style, to: workDir)
+                } else {
+                    succeeded = await Task.detached(priority: .userInitiated) { () -> Bool in
+                        switch style {
+                        case .originals, .zip: return Exporter.copyOriginal(photo, to: workDir)
+                        case .resized(let px): return Exporter.exportResized(photo, maxPixel: px, to: workDir)
+                        }
+                    }.value
+                }
+                if succeeded { ok += 1 }
+                exportProgress.advance(token, name: photo.filename, succeeded: succeeded)
+            }
+
+            var archived = true
+            if let staging {
+                let archive = destination
+                archived = await Task.detached(priority: .userInitiated) {
+                    let result = Exporter.archive(directory: staging, to: archive)
+                    try? FileManager.default.removeItem(at: staging)
+                    return result
                 }.value
-                if ok { self.didExport(count: photos.count, of: photos.count, to: url) }
-                else { self.showToast(String(localized: "Couldn’t create the zip archive.", bundle: .lumen)) }
+            }
+
+            exportProgress.finish(token)
+            isExporting = false
+            if !archived {
+                showToast(String(localized: "Couldn’t create the zip archive.", bundle: .lumen))
+            } else if token.isCancelled {
+                showToast("Export stopped — \(ok.formatted()) of \(photos.count.formatted()) exported")
+            } else {
+                didExport(count: ok, of: photos.count, to: destination)
             }
         }
     }

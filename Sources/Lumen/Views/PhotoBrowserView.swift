@@ -217,7 +217,9 @@ struct PhotoBrowserView: View {
                 // Gated on `model.isScanning` — an @Observable property — NOT
                 // on the monitor: ScanMonitor is an ObservableObject, so only
                 // the child holding it with @ObservedObject re-renders on it.
-                if model.isScanning {
+                if model.isExporting {
+                    ExportStatusView(export: model.exportProgress)
+                } else if model.isScanning {
                     ScanStatusView(scan: model.scanProgress) { model.cancelScan() }
                 } else {
                     WarmingStatusView(warming: model.warming)

@@ -83,3 +83,52 @@ struct ThumbnailJobPopover: View {
             onReveal: { model.revealFailure($0) })
     }
 }
+
+struct ExportJobPopover: View {
+    @Environment(AppModel.self) private var model
+    @ObservedObject var export: ExportMonitor
+
+    var body: some View {
+        BackgroundJobPopover(
+            title: "Exporting \(export.styleLabel.lowercased())",
+            currentPath: export.currentName,
+            done: export.done,
+            total: export.total,
+            context: export.failed > 0
+                ? "\(export.failed.formatted()) couldn't be exported" : nil,
+            isRunning: export.isExporting,
+            activity: "Writing",
+            showsFailureSection: false,
+            failures: [],
+            restart: .init(title: export.isStopping ? "Stopping…" : "Stop",
+                           help: "Stop the export; files already written are kept",
+                           enabled: !export.isStopping,
+                           action: { model.cancelExport() }),
+            rebuild: .init(title: "", confirmation: "", detail: "",
+                           confirmLabel: "", action: {}),
+            onRetry: {}, onClear: {}, onReveal: { _ in })
+    }
+}
+
+/// Status-bar row for a running export.
+struct ExportStatusView: View {
+    @Environment(AppModel.self) private var model
+    @ObservedObject var export: ExportMonitor
+
+    var body: some View {
+        if export.isExporting {
+            StatusRowButton {
+                StatusRow(label: export.isStopping ? "Stopping" : "Exporting",
+                          detail: BackgroundWorkText.counts(done: export.done, total: export.total),
+                          context: export.currentName,
+                          failures: export.failed) {
+                    ThinProgressBar(fraction: export.fraction)
+                }
+            } detail: {
+                ExportJobPopover(export: export)
+            }
+            .help("Writing your export. Photos stored only in iCloud are downloaded first, "
+                  + "so this can take a while. Click for details.")
+        }
+    }
+}

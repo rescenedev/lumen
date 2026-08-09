@@ -30,6 +30,13 @@ struct BackgroundJobPopover: View {
     /// Source / throughput, e.g. "NAS · 212/s".
     let context: String?
     let isRunning: Bool
+    /// What the job is doing to the current item — "Reading" for the index,
+    /// "Writing" for an export.
+    var activity: String = "Reading"
+    /// Export tracks its failures as a running count, not a list; showing the
+    /// list's "No photos have failed" next to "3 couldn't be exported" would
+    /// contradict itself.
+    var showsFailureSection = true
     let failures: [JobFailure]
     let restart: RestartAction
     let rebuild: RebuildAction
@@ -43,12 +50,13 @@ struct BackgroundJobPopover: View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            if failures.isEmpty {
-                noFailures
-            } else {
+            if !failures.isEmpty {
                 failureList
+                Divider()
+            } else if showsFailureSection {
+                noFailures
+                Divider()
             }
-            Divider()
             footer
         }
         .frame(width: 420)
@@ -77,7 +85,7 @@ struct BackgroundJobPopover: View {
                 ThinProgressBar(fraction: Double(done) / Double(max(total, 1)), width: 388)
             }
             if let currentPath {
-                LabeledPath(caption: "Reading", path: currentPath)
+                LabeledPath(caption: activity, path: currentPath)
             } else {
                 // "Idle" is only honest when nothing is running. A job that has
                 // started but not yet reported a file is starting, not idle.
@@ -138,8 +146,10 @@ struct BackgroundJobPopover: View {
     /// confirmation.
     private var footer: some View {
         HStack(spacing: 8) {
-            Button(rebuild.title) { confirmingRebuild = true }
-                .help("Discard what has been built and start from zero")
+            if !rebuild.title.isEmpty {
+                Button(rebuild.title) { confirmingRebuild = true }
+                    .help("Discard what has been built and start from zero")
+            }
             Spacer()
             if !failures.isEmpty {
                 Button("Clear", action: onClear)

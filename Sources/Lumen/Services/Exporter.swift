@@ -7,29 +7,37 @@ import UniformTypeIdentifiers
 enum Exporter {
     /// Copy originals into a destination directory.
     static func copyOriginals(_ photos: [Photo], to directory: URL) -> Int {
-        var copied = 0
-        for photo in photos {
-            let dest = uniqueDestination(directory, filename: photo.filename)
-            if (try? FileManager.default.copyItem(at: photo.url, to: dest)) != nil { copied += 1 }
-        }
-        return copied
+        photos.reduce(0) { $0 + (copyOriginal($1, to: directory) ? 1 : 0) }
+    }
+
+    /// One photo at a time, so a long export can report progress and be
+    /// stopped between items instead of running to completion regardless.
+    @discardableResult
+    static func copyOriginal(_ photo: Photo, to directory: URL) -> Bool {
+        let dest = uniqueDestination(directory, filename: photo.filename)
+        return (try? FileManager.default.copyItem(at: photo.url, to: dest)) != nil
     }
 
     /// Export downsized JPEG copies (longest edge = maxPixel) into a directory.
     static func exportResized(_ photos: [Photo], maxPixel: Int, to directory: URL) -> Int {
+        photos.reduce(0) { $0 + (exportResized($1, maxPixel: maxPixel, to: directory) ? 1 : 0) }
+    }
+
+    @discardableResult
+    static func exportResized(_ photo: Photo, maxPixel: Int, to directory: URL) -> Bool {
         var exported = 0
-        for photo in photos {
-            guard let source = CGImageSourceCreateWithURL(photo.url as CFURL, nil) else { continue }
+        do {
+            guard let source = CGImageSourceCreateWithURL(photo.url as CFURL, nil) else { return false }
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceThumbnailMaxPixelSize: maxPixel
             ]
-            guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { continue }
+            guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return false }
             let baseName = (photo.filename as NSString).deletingPathExtension
             let dest = uniqueDestination(directory, filename: "\(baseName).jpg")
             guard let out = CGImageDestinationCreateWithURL(dest as CFURL, UTType.jpeg.identifier as CFString, 1, nil)
-            else { continue }
+            else { return false }
             // Carry capture date / GPS / camera info forward (the thumbnail is
             // already oriented, so metadata orientation is reset to upright).
             var props: [CFString: Any] = ImageEditor.sourceMetadata(for: photo.url) ?? [:]
@@ -37,7 +45,7 @@ enum Exporter {
             CGImageDestinationAddImage(out, cg, props as CFDictionary)
             if CGImageDestinationFinalize(out) { exported += 1 }
         }
-        return exported
+        return exported > 0
     }
 
     /// Create a zip archive of the originals using the system `zip` tool.
@@ -46,12 +54,15 @@ enum Exporter {
             .appendingPathComponent("LumenZip-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
+        for photo in photos { copyOriginal(photo, to: tmp) }
+        return archive(directory: tmp, to: archiveURL)
+    }
 
-        for photo in photos {
-            let dest = uniqueDestination(tmp, filename: photo.filename)
-            try? FileManager.default.copyItem(at: photo.url, to: dest)
-        }
-
+    /// Archive a directory that has already been filled. Split out so a long
+    /// export can stage item by item — reporting progress and staying
+    /// cancellable — and only zip once at the end.
+    static func archive(directory: URL, to archiveURL: URL) -> Bool {
+        let tmp = directory
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
         process.currentDirectoryURL = tmp

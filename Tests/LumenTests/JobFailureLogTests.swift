@@ -413,3 +413,65 @@ func photosExporterTests() {
         checkEqual(PhotosExporter.preferredResource([]) == nil, true)
     }
 }
+
+/// Export as a tracked, stoppable job — a 71,000-photo library cannot be a
+/// fire-and-forget task with a toast at the end.
+func exportJobTests() {
+    test("everyStyleNamesItself") {
+        checkEqual(ExportStyle.originals.label, "Originals")
+        checkEqual(ExportStyle.resized(maxPixel: 2048).label, "Resized 2048px")
+        checkEqual(ExportStyle.zip.label, "Zip")
+    }
+
+    test("monitorTracksProgressAndSeparatesFailures") {
+        MainActor.assumeIsolated {
+            let m = ExportMonitor()
+            check(!m.isExporting)
+            let token = m.begin(total: 4, style: ExportStyle.originals.label)
+            check(m.isExporting)
+            checkEqual(m.total, 4)
+            checkEqual(m.fraction, 0)
+
+            m.advance(token, name: "a.jpg", succeeded: true)
+            m.advance(token, name: "b.jpg", succeeded: false)
+            checkEqual(m.done, 2, "a failure still advances — it was attempted")
+            checkEqual(m.failed, 1)
+            checkEqual(m.currentName, "b.jpg")
+            check(abs(m.fraction - 0.5) < 0.0001)
+
+            m.cancel()
+            check(m.isStopping)
+            check(token.isCancelled, "cancel must reach the token the loop polls")
+
+            m.finish(token)
+            check(!m.isExporting)
+            checkNil(m.currentName)
+        }
+    }
+
+    test("aStaleExportCannotClobberANewerOne") {
+        MainActor.assumeIsolated {
+            let m = ExportMonitor()
+            let first = m.begin(total: 10, style: "Originals")
+            let second = m.begin(total: 3, style: "Zip")
+            checkEqual(m.total, 3)
+            checkEqual(m.styleLabel, "Zip")
+
+            m.advance(first, name: "old.jpg", succeeded: false)
+            checkEqual(m.done, 0, "the finished export must not tick the running one")
+            checkEqual(m.failed, 0)
+
+            m.finish(first)
+            check(m.isExporting, "…nor end it")
+            m.finish(second)
+            check(!m.isExporting)
+        }
+    }
+
+    test("fractionIsSafeBeforeATotalIsKnown") {
+        MainActor.assumeIsolated {
+            let m = ExportMonitor()
+            checkEqual(m.fraction, 0, "no division by zero when nothing is running")
+        }
+    }
+}

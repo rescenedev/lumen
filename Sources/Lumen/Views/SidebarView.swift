@@ -208,6 +208,9 @@ struct SidebarView: View {
                 Image(systemName: SidebarItem.photosLibrary.systemImage).foregroundStyle(Color.accentColor)
             }
             .tag(SidebarItem.photosLibrary)
+            .contextMenu {
+                exportMenu { model.exportPhotosLibrary(style: $0) }
+            }
 
             // Favorites stays pinned; the (often long) user-album list collapses.
             if let faves = model.photosAlbums.first(where: { $0.isFavorites }) {
@@ -250,6 +253,18 @@ struct SidebarView: View {
         }
     }
 
+    /// The same three choices everywhere something can be exported, so the
+    /// menu means one thing whether it hangs off a folder, an album, or the
+    /// whole library.
+    @ViewBuilder
+    private func exportMenu(_ run: @escaping (ExportStyle) -> Void) -> some View {
+        Menu("Export") {
+            Button("Originals…") { run(.originals) }
+            Button("Resized 2048px…") { run(.resized(maxPixel: 2048)) }
+            Button("As Zip…") { run(.zip) }
+        }
+    }
+
     private func photosAlbumRow(_ album: PhotosAlbumRef) -> some View {
         Label {
             HStack {
@@ -262,6 +277,9 @@ struct SidebarView: View {
                 .foregroundStyle(album.isFavorites ? Color.pink : Color.accentColor)
         }
         .tag(SidebarItem.photosAlbum(album.id))
+        .contextMenu {
+            exportMenu { model.exportPhotosAlbum(album.id, style: $0) }
+        }
     }
 
     private var albumsSection: some View {
@@ -270,6 +288,8 @@ struct SidebarView: View {
                 row(.album(album.id), album.name, .accentColor, count: album.photoPaths.count)
                     .contextMenu {
                         Button("Rename…") { renameText = album.name; renamingAlbum = album }
+                        exportMenu { model.exportAlbum(album.id, style: $0) }
+                        Divider()
                         Button("Delete Album", role: .destructive) { model.deleteAlbum(album.id) }
                     }
             }
