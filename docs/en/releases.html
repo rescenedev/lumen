@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.6">
+    <div class="release-head">
+      <h2>0.5.6</h2><span class="date">August 9, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>A disconnected drive can be removed from the library</h3>
+    <ul>
+      <li><b>Folders on a NAS or external drive that is gone can now be removed.</b> Those rows were grayed out and refused both selection and right-click, so a drive that never came back stayed in the sidebar for good. Right-click now offers "Remove from Library" — it only forgets the folder, never touches files, and adding the folder back undoes it.</li>
+      <li><b>Fixed a folder rendering grayed out</b> after being added back at the same path as a previously removed one.</li>
+      <li><b>Removing a folder while its drive is dead no longer freezes the app</b> — checking the remaining folders moved off the main thread.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.5">
     <div class="release-head">
-      <h2>0.5.5</h2><span class="date">July 29, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.5</h2><span class="date">July 29, 2026</span>
     </div>
     <h3>Adding a large folder responds right away</h3>
     <ul>
