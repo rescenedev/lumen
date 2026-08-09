@@ -636,6 +636,11 @@ final class AppModel {
             }
             entries = front + back
         }
+        // One-time: adopt thumbnails built under the old absolute-path key
+        // before deciding what still needs building, or the warm pass would
+        // re-read from the NAS what is already sitting on disk.
+        migrateThumbnailKeysIfNeeded(entries)
+
         // Match the read pace to where the photos actually live: an SMB read
         // spends its time waiting, so a few more concurrent readers overlap
         // that wait instead of queueing behind it.
@@ -649,6 +654,26 @@ final class AppModel {
             self?.warming.update(remaining: remaining, total: total, currentPath: path)
         }
         sweepStaleThumbnailsIfDue(entries)
+    }
+
+    /// Adopt thumbnails built under the pre-0.5.9 absolute-path key. Once per
+    /// install: the rename is cheap but it is a full pass over the library, and
+    /// after it there is nothing left keyed the old way.
+    private static let thumbnailKeyMigrationKey = "lumen.thumbKeyMigration.v1"
+    private func migrateThumbnailKeysIfNeeded(_ entries: [(url: URL, mtime: TimeInterval)]) {
+        guard !entries.isEmpty,
+              !UserDefaults.standard.bool(forKey: Self.thumbnailKeyMigrationKey) else { return }
+        UserDefaults.standard.set(true, forKey: Self.thumbnailKeyMigrationKey)
+        Task.detached(priority: .utility) {
+            let moved = ThumbnailCache.shared.migrateLegacyKeys(entries)
+            guard moved > 0 else { return }
+            await MainActor.run { [weak self] in
+                self?.showToast("Kept \(moved.formatted()) existing thumbnails")
+                // The warm pass was sized before the rename landed; re-run it so
+                // the adopted entries drop out of the todo list.
+                self?.startThumbnailWarming()
+            }
+        }
     }
 
     /// Garbage-collect disk-cache thumbnails the library can no longer
@@ -1886,6 +1911,9 @@ final class AppModel {
     /// reconcile preserves photos under offline roots and re-attaches the
     /// folder watcher to every reachable root (a remounted volume needs both).
     private func volumesDidChange() {
+        // The mount table just changed, so any cached volume→identity mapping
+        // is stale — and cache keys are derived from it.
+        VolumeIdentity.invalidate()
         refreshOfflineRoots()
         rescanRoots()
     }

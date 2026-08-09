@@ -30,12 +30,21 @@ func thumbnailSweepTests() {
 
     // MARK: diskName (the pure key — must match what the cache writes)
 
-    test("diskName: 64-char sha256 hex of path|tier|integer-mtime") {
+    test("diskName: 64-char sha256 hex over the volume key, tier and integer mtime") {
+        // The name is now hashed over VolumeIdentity.key(path), not the raw
+        // path, so a share reachable at a second mount point keeps its
+        // thumbnails. Pinning the literal digest would only pin the scheme —
+        // what must hold is the shape and the mtime truncation.
         let name = ThumbnailCache.diskName(path: "/Volumes/nas/a.jpg", maxPixel: 512, mtime: 1700000000.9)
         checkEqual(name.count, 64)
-        let expected = SHA256.hash(data: Data("/Volumes/nas/a.jpg|512|1700000000".utf8))
+        check(name.allSatisfy { $0.isHexDigit })
+        let expected = SHA256.hash(data: Data(
+            "\(VolumeIdentity.key(for: "/Volumes/nas/a.jpg"))|512|1700000000".utf8))
             .map { String(format: "%02x", $0) }.joined()
         checkEqual(name, expected, "must truncate mtime to Int exactly like the cache key")
+        checkEqual(name,
+                   ThumbnailCache.diskName(path: "/Volumes/nas/a.jpg", maxPixel: 512, mtime: 1700000000.1),
+                   "sub-second mtime jitter must not orphan a thumbnail")
     }
 
     test("diskName: path, tier, and mtime each change the name") {

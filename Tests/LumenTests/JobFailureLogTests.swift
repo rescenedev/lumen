@@ -193,3 +193,71 @@ func jobFailureLogTests() {
         checkEqual(BackgroundWorkText.counts(done: -5, total: 10), "0 of 10")
     }
 }
+
+/// Cache keys that survive the same storage being mounted somewhere else —
+/// the cause of ~68,000 orphaned thumbnails and 26,926 dead EXIF entries on
+/// the reference machine.
+func volumeIdentityTests() {
+    test("aNetworkShareIsIdentifiedByTheShare_notTheMountPointOrTheUser") {
+        // The same share, mounted by a different account, is the same bytes.
+        checkEqual(VolumeIdentity.identity(device: "//zihado@192.168.123.104/zpool", uuid: nil),
+                   "//192.168.123.104/zpool")
+        checkEqual(VolumeIdentity.identity(device: "//other@192.168.123.104/zpool", uuid: nil),
+                   "//192.168.123.104/zpool",
+                   "who mounted it must not change the identity")
+        checkEqual(VolumeIdentity.identity(device: "//192.168.123.104/zpool", uuid: nil),
+                   "//192.168.123.104/zpool", "no user component is fine")
+        checkEqual(VolumeIdentity.identity(device: "//NAS.local/Zpool", uuid: nil),
+                   "//nas.local/zpool", "host and share case must not split the key")
+    }
+
+    test("nfsIsIdentifiedByHostAndExport") {
+        checkEqual(VolumeIdentity.identity(device: "OrbStack:/OrbStack", uuid: nil),
+                   "orbstack:/orbstack")
+    }
+
+    test("aLocalVolumeUsesItsUUID_neverTheDeviceNode") {
+        // /dev/diskNsM shifts between boots and reattachments; keying on it
+        // would invalidate the cache for a disk that simply came back.
+        checkEqual(VolumeIdentity.identity(device: "/dev/disk15s1",
+                                           uuid: "9F315A0C-8AD8-4A03-A1BF-7EE9BCEFD20B"),
+                   "vol:9f315a0c-8ad8-4a03-a1bf-7ee9bcefd20b")
+        checkEqual(VolumeIdentity.identity(device: "/dev/disk15s1", uuid: nil), "/dev/disk15s1",
+                   "no UUID available ⇒ fall back rather than produce no key")
+        checkEqual(VolumeIdentity.identity(device: "/dev/disk15s1", uuid: ""), "/dev/disk15s1")
+    }
+
+    test("keyIsStableAcrossMountPointsForTheSameFile") {
+        // The real-world case: one share seen at two different mount points.
+        let a = VolumeIdentity.identity(device: "//zihado@192.168.123.104/zpool", uuid: nil)
+            + "/photos/2011/a.jpg"
+        let b = VolumeIdentity.identity(device: "//zihado@192.168.123.104/zpool", uuid: nil)
+            + "/photos/2011/a.jpg"
+        checkEqual(a, b)
+        checkNotEqual(a, VolumeIdentity.identity(device: "//192.168.123.104/zpool2", uuid: nil)
+                      + "/photos/2011/a.jpg", "different shares must not collide")
+    }
+
+    test("theBootVolumeResolvesAndTheKeyIsPathIndependentOfNothing") {
+        // Any real path must produce a non-empty key, and two different files
+        // must never collide.
+        let one = VolumeIdentity.key(for: "/Users/zihado/Desktop/a.jpg")
+        let two = VolumeIdentity.key(for: "/Users/zihado/Desktop/b.jpg")
+        check(!one.isEmpty)
+        checkNotEqual(one, two)
+        check(one.hasSuffix("/Users/zihado/Desktop/a.jpg") || one.hasSuffix("Desktop/a.jpg"),
+              "key keeps the path tail: \(one)")
+    }
+
+    test("thumbnailNameChangesWithTheKeySchemeButStaysStablePerFile") {
+        let legacy = ThumbnailCache.legacyDiskName(path: "/Volumes/zpool/a.jpg",
+                                                   maxPixel: 512, mtime: 1)
+        let modern = ThumbnailCache.diskName(path: "/Volumes/zpool/a.jpg", maxPixel: 512, mtime: 1)
+        checkEqual(modern, ThumbnailCache.diskName(path: "/Volumes/zpool/a.jpg",
+                                                   maxPixel: 512, mtime: 1), "deterministic")
+        checkNotEqual(legacy, modern, "the migration has something to move")
+        checkNotEqual(modern, ThumbnailCache.diskName(path: "/Volumes/zpool/a.jpg",
+                                                      maxPixel: 512, mtime: 2),
+                      "an edited file must not reuse a stale thumbnail")
+    }
+}

@@ -123,9 +123,22 @@ final class ThumbnailCache {
 
     /// The disk-cache filename (sans extension) for one photo — pure, so the
     /// stale-entry sweep can compute the CURRENT library's valid-name set.
+    ///
+    /// Keyed by volume identity + relative path, NOT the absolute path: the
+    /// same NAS share reachable at a second mount point used to invalidate
+    /// every thumbnail under it. See `VolumeIdentity`.
     static func diskName(path: String, maxPixel: Int, mtime: TimeInterval) -> String {
-        let raw = "\(path)|\(maxPixel)|\(Int(mtime))"
-        return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
+        hashedName("\(VolumeIdentity.key(for: path))|\(maxPixel)|\(Int(mtime))")
+    }
+
+    /// The pre-0.5.9 name, keyed by absolute path. Only used to find entries
+    /// worth renaming into the new scheme — never written.
+    static func legacyDiskName(path: String, maxPixel: Int, mtime: TimeInterval) -> String {
+        hashedName("\(path)|\(maxPixel)|\(Int(mtime))")
+    }
+
+    private static func hashedName(_ raw: String) -> String {
+        SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     private func diskURL(_ url: URL, _ maxPixel: Int, mtime: TimeInterval) -> URL {
@@ -650,6 +663,38 @@ final class ThumbnailCache {
             }
         }
         return deleted
+    }
+
+    // MARK: - Key migration (absolute path → volume identity)
+
+    /// Rename entries written under the old absolute-path key to the new
+    /// volume-relative one, for photos whose path is unchanged.
+    ///
+    /// A rename, not a re-decode: on the reference library this preserves
+    /// ~33,000 already-built thumbnails that would otherwise be re-read from
+    /// the NAS. Entries whose ORIGINAL path is unknown (the ones orphaned by an
+    /// earlier mount-point change) cannot be recovered — nothing records what
+    /// path they were built under — and the stale sweep reclaims them.
+    ///
+    /// Returns the number migrated. Runs synchronously; call off the main
+    /// thread. Idempotent, so a partial run just resumes.
+    @discardableResult
+    func migrateLegacyKeys(_ entries: [Entry], maxPixel: Int = gridMaxPixel) -> Int {
+        let fm = FileManager.default
+        var moved = 0
+        for entry in entries where entry.url.scheme != Photo.assetScheme {
+            let new = diskURL(entry.url, maxPixel, mtime: entry.mtime)
+            if fm.fileExists(atPath: new.path) { continue }
+            let legacyName = Self.legacyDiskName(path: entry.url.path,
+                                                 maxPixel: maxPixel, mtime: entry.mtime)
+            let legacy = diskDir.appendingPathComponent(String(legacyName.prefix(2)), isDirectory: true)
+                .appendingPathComponent(legacyName).appendingPathExtension("jpg")
+            guard fm.fileExists(atPath: legacy.path) else { continue }
+            try? fm.createDirectory(at: new.deletingLastPathComponent(),
+                                    withIntermediateDirectories: true)
+            if (try? fm.moveItem(at: legacy, to: new)) != nil { moved += 1 }
+        }
+        return moved
     }
 
     /// Instance entry point: sweep this cache's directory against the live
