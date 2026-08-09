@@ -17,15 +17,7 @@ struct WarmingStatusView: View {
                     ThinProgressBar(fraction: warming.fraction)
                 }
             } detail: {
-                BackgroundJobPopover(title: "Building thumbnails",
-                                     currentPath: warming.currentPath,
-                                     done: warming.done,
-                                     total: warming.total,
-                                     context: nil,
-                                     failures: model.failures(.thumbnail),
-                                     onRetry: { model.retryFailures(.thumbnail) },
-                                     onClear: { model.clearFailures(.thumbnail) },
-                                     onReveal: { model.revealFailure($0) })
+                ThumbnailJobPopover(warming: warming)
             }
             .help("Building the thumbnail cache in the background so browsing is instant. "
                   + "Click for details and any photos that failed.")

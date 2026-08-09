@@ -394,6 +394,46 @@ final class AppModel {
         revealFolderInFinder(URL(filePath: failure.path, directoryHint: .notDirectory))
     }
 
+    // MARK: Restart / rebuild
+
+    /// Kick the warm pass again. Cheap: it skips every thumbnail already on
+    /// disk, so this only picks up what is genuinely still missing — the useful
+    /// move when a pass was interrupted or a volume came back.
+    func restartThumbnailWarming() {
+        startThumbnailWarming()
+        showToast("Restarted thumbnail caching")
+    }
+
+    /// Throw the thumbnail cache away and build it again from zero. Hours on a
+    /// NAS — the caller confirms first.
+    func rebuildThumbnailCache() {
+        JobFailureLog.shared.clear(kind: .thumbnail)
+        jobFailures = JobFailureLog.shared.all()
+        ThumbnailCache.shared.cancelWarming()
+        ThumbnailCache.shared.clear()          // memory
+        Task.detached(priority: .utility) {
+            ThumbnailCache.shared.clearDisk()
+            await MainActor.run { self.startThumbnailWarming() }
+        }
+        showToast("Rebuilding every thumbnail — this takes a while")
+    }
+
+    /// Discard the metadata index and read every photo again. Same cost shape
+    /// as the thumbnail rebuild, and the only way to clear out the empty
+    /// entries a failed read leaves behind.
+    func rebuildMetadataIndex() {
+        guard !isIndexingExif else {
+            showToast("Metadata is already being read")
+            return
+        }
+        JobFailureLog.shared.clear(kind: .metadata)
+        jobFailures = JobFailureLog.shared.all()
+        exif = [:]
+        persistExifCache()
+        ensureExifIndex()
+        showToast("Re-reading metadata for every photo")
+    }
+
     // Folder presentation (hierarchical tree by default)
     var folderTreeView = true { didSet { persistSettings() } }
 

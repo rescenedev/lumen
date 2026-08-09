@@ -4,6 +4,24 @@ import SwiftUI
 /// job is on, and which photos it could not process — with a way to run them
 /// again. The row is a button that opens this.
 struct BackgroundJobPopover: View {
+    /// A plain "run it again" action.
+    struct RestartAction {
+        var title: String
+        var help: String
+        var enabled: Bool
+        var action: () -> Void
+    }
+
+    /// The heavy one: throw the cached results away and start from zero. Costs
+    /// hours on a NAS, so unlike everything else here it asks first.
+    struct RebuildAction {
+        var title: String
+        var confirmation: String
+        var detail: String
+        var confirmLabel: String
+        var action: () -> Void
+    }
+
     let title: String
     /// Live position: what it's reading right now, nil when idle.
     let currentPath: String?
@@ -11,10 +29,15 @@ struct BackgroundJobPopover: View {
     let total: Int
     /// Source / throughput, e.g. "NAS · 212/s".
     let context: String?
+    let isRunning: Bool
     let failures: [JobFailure]
+    let restart: RestartAction
+    let rebuild: RebuildAction
     var onRetry: () -> Void
     var onClear: () -> Void
     var onReveal: (JobFailure) -> Void
+
+    @State private var confirmingRebuild = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,11 +47,17 @@ struct BackgroundJobPopover: View {
                 noFailures
             } else {
                 failureList
-                Divider()
-                footer
             }
+            Divider()
+            footer
         }
         .frame(width: 420)
+        .confirmationDialog(rebuild.confirmation, isPresented: $confirmingRebuild) {
+            Button(rebuild.confirmLabel, role: .destructive, action: rebuild.action)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(rebuild.detail)
+        }
     }
 
     // MARK: Header — where it is right now
@@ -50,7 +79,10 @@ struct BackgroundJobPopover: View {
             if let currentPath {
                 LabeledPath(caption: "Reading", path: currentPath)
             } else {
-                Text("Idle").font(.caption).foregroundStyle(.tertiary)
+                // "Idle" is only honest when nothing is running. A job that has
+                // started but not yet reported a file is starting, not idle.
+                Text(isRunning ? "Starting…" : "Idle")
+                    .font(.caption).foregroundStyle(.tertiary)
             }
             if let context, !context.isEmpty {
                 Text(context).font(.caption).foregroundStyle(.tertiary).monospacedDigit()
@@ -101,13 +133,25 @@ struct BackgroundJobPopover: View {
         }
     }
 
+    /// Ordered by how much they cost the user: the cheap, common action on the
+    /// right where the eye lands, the expensive one tucked left behind a
+    /// confirmation.
     private var footer: some View {
-        HStack {
-            Button("Clear", action: onClear)
-                .help("Forget these records without retrying")
+        HStack(spacing: 8) {
+            Button(rebuild.title) { confirmingRebuild = true }
+                .help("Discard what has been built and start from zero")
             Spacer()
-            Button("Retry \(failures.count.formatted())", action: onRetry)
-                .keyboardShortcut(.defaultAction)
+            if !failures.isEmpty {
+                Button("Clear", action: onClear)
+                    .help("Forget these records without retrying")
+                Button("Retry \(failures.count.formatted())", action: onRetry)
+                    .keyboardShortcut(.defaultAction)
+            } else {
+                Button(restart.title, action: restart.action)
+                    .disabled(!restart.enabled)
+                    .help(restart.help)
+                    .keyboardShortcut(.defaultAction)
+            }
         }
         .controlSize(.small)
         .padding(.horizontal, 14)

@@ -239,7 +239,7 @@ struct PhotoBrowserView: View {
                             }
                         }
                     } detail: {
-                        metadataPopover
+                        MetadataJobPopover()
                     }
                     .help("Reading camera & EXIF info so search and the map can find photos. "
                           + "Click for details and any photos that failed.")
@@ -258,7 +258,7 @@ struct PhotoBrowserView: View {
                                 .foregroundStyle(.green)
                         }
                     } detail: {
-                        metadataPopover
+                        MetadataJobPopover()
                     }
                     .transition(.opacity)
                     .help("Photo metadata (camera, date, GPS) is indexed — search and the map are ready")
@@ -288,28 +288,16 @@ struct PhotoBrowserView: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 28)
+        // Belt and braces after the overflow bug: nothing inside the bar may
+        // paint over the grid above it, whatever a future row does.
+        .clipped()
         .background(.bar)
-    }
-
-    private var metadataPopover: some View {
-        BackgroundJobPopover(title: "Reading photo metadata",
-                             currentPath: model.exifIndexCurrentPath,
-                             done: model.exifIndexDone,
-                             total: model.exifIndexTotal,
-                             context: indexingContext,
-                             failures: model.failures(.metadata),
-                             onRetry: { model.retryFailures(.metadata) },
-                             onClear: { model.clearFailures(.metadata) },
-                             onReveal: { model.revealFailure($0) })
     }
 
     /// Where the index is reading from and how fast — the trailing context of
     /// the row, at the same rank as the folder name on the other two jobs.
     private var indexingContext: String? {
-        var parts: [String] = []
-        if !model.exifIndexSource.isEmpty { parts.append(model.exifIndexSource) }
-        if model.exifIndexRate > 0 { parts.append("\(model.exifIndexRate)/s") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        MetadataJobPopover.context(source: model.exifIndexSource, rate: model.exifIndexRate)
     }
 
     private var statusText: String {

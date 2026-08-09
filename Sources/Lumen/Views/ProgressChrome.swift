@@ -75,13 +75,25 @@ struct StatusRow<Indicator: View, Trailing: View>: View {
             indicator
             // Weight, not size, carries the hierarchy — the row has to stay
             // 28pt tall no matter what it says.
+            //
+            // `lineLimit(1)` + `fixedSize` on BOTH of these is load-bearing: in a
+            // narrow window the row gets squeezed, and an unconstrained Text
+            // wraps — at that width, one character per line. The row then grew
+            // several hundred points tall and printed "M e t a d a t a"
+            // vertically straight up out of the status bar. The label and the
+            // count are short and must never wrap; the folder/rate below is the
+            // part that may truncate.
             Text(label)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
             Text(detail)
                 .font(.caption)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize()
             if let context, !context.isEmpty {
                 Text(context)
                     .font(.caption)
@@ -102,7 +114,10 @@ struct StatusRow<Indicator: View, Trailing: View>: View {
             }
             trailing
         }
-        .fixedSize(horizontal: false, vertical: true)
+        // Deliberately NOT `.fixedSize(vertical: true)` — that is permission to
+        // grow taller than the 28pt bar, which is exactly how the wrapped text
+        // escaped it.
+        .lineLimit(1)
     }
 }
 
