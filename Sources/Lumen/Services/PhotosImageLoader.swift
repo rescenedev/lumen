@@ -22,6 +22,10 @@ final class PhotosImageLoader {
         lock.lock(); for (id, asset) in assets { assetsById[id] = asset }; lock.unlock()
     }
 
+    /// The PHAsset behind a synthetic asset URL. Exposed so the exporter can
+    /// reach the asset's resources without duplicating the id→asset cache.
+    func phAsset(for url: URL) -> PHAsset? { asset(for: url) }
+
     private func asset(for url: URL) -> PHAsset? {
         guard let id = url.photosAssetLocalIdentifier else { return nil }
         lock.lock(); let cached = assetsById[id]; lock.unlock()

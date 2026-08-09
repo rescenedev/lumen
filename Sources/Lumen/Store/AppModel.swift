@@ -2448,22 +2448,40 @@ final class AppModel {
     // and exportResized adds a full decode+encode per photo; a 200-photo NAS
     // export beachballed the app for the whole copy. The count comes back to
     // the main actor as a toast (the result used to be silently discarded).
+    /// Photos-library assets have no file to copy — their bytes come out of
+    /// PhotoKit — so every export path splits the selection and handles each
+    /// half with the mechanism that can actually read it.
     func exportOriginals(_ photos: [Photo]) {
         guard !photos.isEmpty else { return }
+        let files = photos.filter { !$0.isAsset }
+        let assets = photos.filter { $0.isAsset }
         chooseDirectory(prompt: "Export Here") { dir in
-            Task.detached(priority: .userInitiated) {
-                let copied = Exporter.copyOriginals(photos, to: dir)
-                await MainActor.run { self.didExport(count: copied, of: photos.count, to: dir) }
+            Task {
+                let copied = await Task.detached(priority: .userInitiated) {
+                    Exporter.copyOriginals(files, to: dir)
+                }.value
+                // Straight into the destination: no staging copy for originals.
+                let written = await PhotosExporter.writeOriginals(assets, to: dir)
+                self.didExport(count: copied + written, of: photos.count, to: dir)
             }
         }
     }
 
     func exportResized(_ photos: [Photo], maxPixel: Int) {
         guard !photos.isEmpty else { return }
+        let files = photos.filter { !$0.isAsset }
+        let assets = photos.filter { $0.isAsset }
         chooseDirectory(prompt: "Export Here") { dir in
-            Task.detached(priority: .userInitiated) {
-                let exported = Exporter.exportResized(photos, maxPixel: maxPixel, to: dir)
-                await MainActor.run { self.didExport(count: exported, of: photos.count, to: dir) }
+            Task {
+                // Assets are materialised as real files first so the shared
+                // downsample path works on them unchanged.
+                let (staged, cleanup) = await PhotosExporter.stage(assets)
+                let exported = await Task.detached(priority: .userInitiated) {
+                    let n = Exporter.exportResized(files + staged, maxPixel: maxPixel, to: dir)
+                    cleanup()   // originals staged to temp are easily gigabytes
+                    return n
+                }.value
+                self.didExport(count: exported, of: photos.count, to: dir)
             }
         }
     }
@@ -2474,12 +2492,17 @@ final class AppModel {
         panel.nameFieldStringValue = "Lumen Export.zip"
         panel.allowedContentTypes = [.zip]
         if panel.runModal() == .OK, let url = panel.url {
-            Task.detached(priority: .userInitiated) {
-                let ok = Exporter.zip(photos, to: url)
-                await MainActor.run {
-                    if ok { self.didExport(count: photos.count, of: photos.count, to: url) }
-                    else { self.showToast(String(localized: "Couldn’t create the zip archive.", bundle: .lumen)) }
-                }
+            let files = photos.filter { !$0.isAsset }
+            let assets = photos.filter { $0.isAsset }
+            Task {
+                let (staged, cleanup) = await PhotosExporter.stage(assets)
+                let ok = await Task.detached(priority: .userInitiated) { () -> Bool in
+                    let ok = Exporter.zip(files + staged, to: url)
+                    cleanup()
+                    return ok
+                }.value
+                if ok { self.didExport(count: photos.count, of: photos.count, to: url) }
+                else { self.showToast(String(localized: "Couldn’t create the zip archive.", bundle: .lumen)) }
             }
         }
     }

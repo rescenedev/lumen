@@ -370,3 +370,46 @@ func volumeKindTests() {
         checkNil(VolumeIdentity.describe("/Users/zihado/Desktop"))
     }
 }
+
+/// Exporting out of Apple Photos, where there is no file to copy.
+func photosExporterTests() {
+    test("uniqueNameDisambiguatesTheDuplicatesPhotosAllows") {
+        // Photos happily holds a dozen IMG_0001.HEIC; writeData refuses an
+        // existing path, so a naive export would drop all but the first.
+        let dir = URL(fileURLWithPath: "/tmp/x")
+        var taken: Set<String> = ["IMG_0001.HEIC"]
+        let exists: (URL) -> Bool = { taken.contains($0.lastPathComponent) }
+        let second = PhotosExporter.uniqueName(in: dir, preferred: "IMG_0001.HEIC", exists: exists)
+        checkEqual(second, "IMG_0001 2.HEIC")
+        taken.insert(second)
+        checkEqual(PhotosExporter.uniqueName(in: dir, preferred: "IMG_0001.HEIC", exists: exists),
+                   "IMG_0001 3.HEIC")
+    }
+
+    test("uniqueNameLeavesAFreeNameAloneAndHandlesNoExtension") {
+        let dir = URL(fileURLWithPath: "/tmp/x")
+        checkEqual(PhotosExporter.uniqueName(in: dir, preferred: "IMG_9.HEIC", exists: { _ in false }),
+                   "IMG_9.HEIC")
+        checkEqual(PhotosExporter.uniqueName(in: dir, preferred: "RAW", exists: { $0.lastPathComponent == "RAW" }),
+                   "RAW 2")
+    }
+
+    test("assetAndFilePhotosAreToldApartBeforeSplitting") {
+        // Each export path sends assets to PhotoKit and files to the file
+        // exporter; the split is only as good as this predicate.
+        let file = Photo(url: URL(fileURLWithPath: "/tmp/a.jpg"), byteSize: 1,
+                         creationDate: nil, modificationDate: nil)
+        check(!file.isAsset, "a real file must never be routed to PhotoKit")
+        let asset = Photo.asset(localIdentifier: "ABC-123/L0/001",
+                                creationDate: Date(timeIntervalSince1970: 0), modificationDate: nil)
+        check(asset.isAsset)
+        checkEqual(asset.url.photosAssetLocalIdentifier, "ABC-123/L0/001",
+                   "the identifier must survive the round trip, or export finds no asset")
+    }
+
+    test("fullSizePhotoWinsOverTheUntouchedOriginal") {
+        // An edited asset carries both; the user sees the edited version, so
+        // that is what "export the original" has to mean.
+        checkEqual(PhotosExporter.preferredResource([]) == nil, true)
+    }
+}

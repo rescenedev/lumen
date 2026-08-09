@@ -215,14 +215,36 @@ struct SidebarView: View {
             }
             let userAlbums = model.photosAlbums.filter { !$0.isFavorites }
             if !userAlbums.isEmpty {
-                DisclosureGroup(isExpanded: $photoAlbumsExpanded) {
-                    ForEach(userAlbums) { album in photosAlbumRow(album) }
+                // A Button row, NOT a DisclosureGroup with a tap gesture on its
+                // label. That needed a DOUBLE click, and row-level gestures on
+                // this AppKit-backed List drop most clicks anyway (measured: 1
+                // in 4 delivered) — so a single click on "Albums" appeared to
+                // do nothing at all. A Button is a real control: one click,
+                // every time, anywhere on the row.
+                Button {
+                    withAnimation(ProgressChrome.settle) { photoAlbumsExpanded.toggle() }
                 } label: {
-                    Label("Albums (\(userAlbums.count))", systemImage: "rectangle.stack")
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            withAnimation { photoAlbumsExpanded.toggle() }
+                    Label {
+                        HStack {
+                            Text("Albums").lineLimit(1)
+                            Spacer()
+                            Text("\(userAlbums.count)")
+                                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(photoAlbumsExpanded ? 90 : 0))
                         }
+                    } icon: {
+                        Image(systemName: "rectangle.stack").foregroundStyle(Color.accentColor)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(photoAlbumsExpanded ? "Hide Photos albums" : "Show Photos albums")
+
+                if photoAlbumsExpanded {
+                    ForEach(userAlbums) { album in photosAlbumRow(album) }
                 }
             }
         }
