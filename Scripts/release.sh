@@ -104,8 +104,13 @@ echo "==> Verifying…"
 assets="$(gh release view "$TAG" --json assets -q '.assets[].name')"
 echo "$assets" | grep -q "^Lumen-$VERSION.zip$" || fail "zip asset missing from $TAG"
 echo "$assets" | grep -q "^Lumen.dmg$" || fail "Lumen.dmg asset missing from $TAG (landing page DMG link would 404)"
-code="$(curl -sIL -o /dev/null -w "%{http_code}" https://github.com/rescenedev/lumen/releases/latest/download/Lumen.dmg)"
-[ "$code" = "200" ] || fail "latest/download/Lumen.dmg returned HTTP $code"
+# `|| echo 000` matters: under `set -e` a curl that can't connect at all (exit
+# 6/7/28 — no DNS, blocked egress) kills the script on the assignment itself,
+# silently, AFTER everything has already been published. Swallow curl's status
+# so the check below reports what happened instead of vanishing.
+code="$(curl -sIL --max-time 30 -o /dev/null -w "%{http_code}" \
+    https://github.com/rescenedev/lumen/releases/latest/download/Lumen.dmg || echo 000)"
+[ "$code" = "200" ] || fail "latest/download/Lumen.dmg returned HTTP $code (000 = curl could not connect; the release is already published — re-check the URL by hand)"
 brew update >/dev/null 2>&1 || true
 brew fetch --cask "rescenedev/tap/lumen-photos" --force >/dev/null \
     && echo "    brew fetch + sha256 ✓" \
