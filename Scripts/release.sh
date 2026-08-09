@@ -108,8 +108,11 @@ echo "$assets" | grep -q "^Lumen.dmg$" || fail "Lumen.dmg asset missing from $TA
 # 6/7/28 — no DNS, blocked egress) kills the script on the assignment itself,
 # silently, AFTER everything has already been published. Swallow curl's status
 # so the check below reports what happened instead of vanishing.
+# `|| true`, not `|| echo 000`: curl already writes its own "000" to stdout on a
+# connection failure, so appending another produced the nonsense "HTTP 000000".
 code="$(curl -sIL --max-time 30 -o /dev/null -w "%{http_code}" \
-    https://github.com/rescenedev/lumen/releases/latest/download/Lumen.dmg || echo 000)"
+    https://github.com/rescenedev/lumen/releases/latest/download/Lumen.dmg || true)"
+code="${code:-000}"
 [ "$code" = "200" ] || fail "latest/download/Lumen.dmg returned HTTP $code (000 = curl could not connect; the release is already published — re-check the URL by hand)"
 brew update >/dev/null 2>&1 || true
 brew fetch --cask "rescenedev/tap/lumen-photos" --force >/dev/null \
