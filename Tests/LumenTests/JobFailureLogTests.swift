@@ -156,6 +156,36 @@ func jobFailureLogTests() {
         check(!(result.failures.first?.reason.isEmpty ?? true), "a failure carries a human reason")
     }
 
+    test("paceReportsRateAndTimeLeftInThatOrder") {
+        // The row could say how far along a job was but never how slow — which
+        // is the only way to answer "is it meant to take this long?".
+        checkEqual(BackgroundWorkText.pace(rate: 2.4, eta: 13_000, place: "2011.Turkey"),
+                   "2.4/s · ~3.6h left · 2011.Turkey")
+        checkEqual(BackgroundWorkText.pace(rate: 212, eta: 120, place: nil), "212/s · ~2m left")
+        checkNil(BackgroundWorkText.pace(rate: 0, eta: nil, place: nil),
+                 "nothing worth saying yet ⇒ no empty separators")
+        checkEqual(BackgroundWorkText.pace(rate: 0, eta: nil, place: "Trip"), "Trip")
+    }
+
+    test("durationStaysCoarseBecauseTheRateSwings") {
+        checkEqual(BackgroundWorkText.duration(1), "1s")
+        checkEqual(BackgroundWorkText.duration(45), "45s")
+        checkEqual(BackgroundWorkText.duration(600), "10m")
+        checkEqual(BackgroundWorkText.duration(3_600), "60m")
+        checkEqual(BackgroundWorkText.duration(13_000), "3.6h")
+        checkEqual(BackgroundWorkText.duration(200_000), "56h")
+        checkNil(BackgroundWorkText.duration(0))
+        checkNil(BackgroundWorkText.duration(.infinity), "an infinite ETA is not a number to show")
+    }
+
+    test("metadataContextSaysWhatItDidNotHaveToRead") {
+        // "8,445 of 8,445" on a 64k library reads as though the library shrank.
+        checkEqual(MetadataJobPopover.context(source: "NAS", rate: 212, cached: 55_809),
+                   "NAS · 212/s · \(55_809.formatted()) already cached")
+        checkEqual(MetadataJobPopover.context(source: "NAS", rate: 0, cached: 0), "NAS")
+        checkNil(MetadataJobPopover.context(source: "", rate: 0, cached: 0))
+    }
+
     test("counterTextClampsANonsenseOverrun") {
         // A late tick from a superseded pass used to print "1,262,045 of 84,254".
         checkEqual(BackgroundWorkText.counts(done: 1_262_045, total: 84_254),

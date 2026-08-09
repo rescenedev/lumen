@@ -25,11 +25,50 @@ final class WarmingMonitor: ObservableObject {
         return ((currentPath as NSString).deletingLastPathComponent as NSString).lastPathComponent
     }
 
+    /// Rolling throughput in thumbnails/sec, and the time left at that rate.
+    /// Without these the row could only say how far along it was, never how
+    /// slow — "is it meant to take this long?" was unanswerable from the UI.
+    @Published private(set) var rate = 0.0
+    private var rateWindowStart: Date?
+    private var rateWindowDone = 0
+
+    /// Seconds left at the current rate, nil until a rate is known.
+    var eta: TimeInterval? {
+        guard rate > 0.01, remaining > 0 else { return nil }
+        return Double(remaining) / rate
+    }
+
     func update(remaining: Int, total: Int, currentPath: String?) {
         // A late tick from a superseded pass can carry a bigger remaining than
         // its own total; clamp so the bar can never run backwards past full.
-        self.total = max(total, remaining)
+        let newTotal = max(total, remaining)
+        // A pass restarting (done goes backwards) invalidates the window.
+        if newTotal != self.total || done < rateWindowDone { resetRateWindow() }
+        self.total = newTotal
         self.remaining = remaining
         self.currentPath = currentPath
+        sampleRate()
+    }
+
+    private func resetRateWindow() {
+        rateWindowStart = nil
+        rateWindowDone = 0
+        rate = 0
+    }
+
+    /// Averaged over a ≥10s window: warming is bursty (it suspends entirely
+    /// while the user is browsing), so a short window swings between 0 and a
+    /// spike and reads as noise.
+    private func sampleRate() {
+        guard let start = rateWindowStart else {
+            rateWindowStart = Date()
+            rateWindowDone = done
+            return
+        }
+        let elapsed = -start.timeIntervalSinceNow
+        guard elapsed >= 10 else { return }
+        rate = Double(done - rateWindowDone) / elapsed
+        rateWindowStart = Date()
+        rateWindowDone = done
     }
 }

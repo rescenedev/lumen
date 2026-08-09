@@ -636,6 +636,15 @@ final class AppModel {
             }
             entries = front + back
         }
+        // Match the read pace to where the photos actually live: an SMB read
+        // spends its time waiting, so a few more concurrent readers overlap
+        // that wait instead of queueing behind it.
+        let networkPrefixes = Self.networkVolumePrefixes()
+        let onNetwork = !networkPrefixes.isEmpty && entries.contains { entry in
+            networkPrefixes.contains { entry.url.path.hasPrefix($0) }
+        }
+        ThumbnailCache.shared.setWarmLanes(onNetwork ? ThumbnailCache.networkWarmLanes
+                                                     : ThumbnailCache.localWarmLanes)
         ThumbnailCache.shared.warmDiskCache(entries) { [weak self] remaining, total, path in
             self?.warming.update(remaining: remaining, total: total, currentPath: path)
         }
@@ -2031,6 +2040,10 @@ final class AppModel {
     /// The file the index is on right now — "exactly where it is reading",
     /// shown in the background-job popover.
     private(set) var exifIndexCurrentPath: String?
+    /// Photos this pass did NOT have to read because the index already covered
+    /// them. Context, not progress — shown in the popover so "8,445 of 8,445"
+    /// doesn't look like the library shrank.
+    private(set) var exifIndexCached = 0
     /// Set briefly when an indexing pass finishes, so the status bar can confirm
     /// "Indexed N photos" before clearing. `exifReadyCount` is the photos covered.
     private(set) var exifIndexJustFinished = false
@@ -2067,13 +2080,18 @@ final class AppModel {
     }
 
     private func startExifIndexing(urls: [URL], localCount: Int) {
-        // Report progress against the WHOLE library, not just this session's
-        // remaining work — so the counter resumes from what's already cached
-        // (e.g. local photos done on a prior launch) instead of restarting at 0.
-        let libraryTotal = allPhotos.count
-        let baseDone = libraryTotal - urls.count
-        exifIndexTotal = libraryTotal
-        exifIndexDone = baseDone
+        // Report THIS PASS's work, not the whole library.
+        //
+        // It used to count from `libraryTotal - remaining` so the number would
+        // "resume" rather than restart at zero. In practice that made a pass
+        // with 8,445 photos left to read display as "55,809 of 64,254" — which
+        // reads as "it is re-doing all 64k, every time", and is the reason the
+        // cache looked broken when it was in fact being reused in full. The
+        // already-cached count is still available, as context, in the popover.
+        exifIndexCached = allPhotos.count - urls.count
+        exifIndexTotal = urls.count
+        exifIndexDone = 0
+        let baseDone = 0
         exifIndexRate = 0
         exifIndexSource = localCount > 0 ? "Local disk" : "NAS"
 
@@ -2139,6 +2157,7 @@ final class AppModel {
             exifIndexRate = 0
             exifIndexSource = ""
             exifIndexCurrentPath = nil
+            exifIndexCached = 0
             refreshJobFailures()
             // Briefly confirm the index is ready, then clear the status indicator.
             exifReadyCount = exif.count

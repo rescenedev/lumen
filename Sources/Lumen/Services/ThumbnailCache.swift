@@ -323,10 +323,32 @@ final class ThumbnailCache {
         let q = OperationQueue()
         // Keep warming gentle (few parallel reads, background priority) so it
         // yields NAS bandwidth + CPU to thumbnails the user is actively viewing.
-        q.maxConcurrentOperationCount = 3
+        q.maxConcurrentOperationCount = localWarmLanes
         q.qualityOfService = .background
         return q
     }()
+
+    /// Lanes for a library on local storage: the disk is the bottleneck and
+    /// more readers just thrash it.
+    static let localWarmLanes = 3
+    /// Lanes for a library on a network share. An SMB read is latency-bound —
+    /// each one spends most of its time waiting, not moving bytes — so a few
+    /// concurrent reads overlap that wait instead of queueing behind it.
+    /// Measured on the reference library: 3 lanes over SMB managed ~2.4
+    /// thumbnails/sec, i.e. hours for a 30k backlog.
+    static let networkWarmLanes = 8
+
+    /// Set by the caller from where the library actually lives. Applied to the
+    /// live queue, so it takes effect on the pass already running.
+    func setWarmLanes(_ lanes: Int) {
+        let clamped = min(max(lanes, 1), 16)
+        fullPaceLanes = clamped
+        guard !trickleMode, warmQueue.maxConcurrentOperationCount != clamped else { return }
+        warmQueue.maxConcurrentOperationCount = clamped
+    }
+    /// The pace to return to when trickle mode ends — NOT a hard-coded 3, or a
+    /// network library would silently drop to local pace after a window close.
+    private var fullPaceLanes = localWarmLanes
 
     /// Trickle mode: the app's window is closed but the app is still running —
     /// keep warming alive at well under 1% CPU (one decode every few seconds,
@@ -338,7 +360,7 @@ final class ThumbnailCache {
     func setTrickleMode(_ on: Bool) {
         guard trickleMode != on else { return }
         trickleMode = on
-        warmQueue.maxConcurrentOperationCount = on ? 1 : 3
+        warmQueue.maxConcurrentOperationCount = on ? 1 : fullPaceLanes
     }
 
     /// Decode + persist a thumbnail to disk for every photo whose disk cache is

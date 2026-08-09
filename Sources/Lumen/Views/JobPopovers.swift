@@ -18,7 +18,8 @@ struct MetadataJobPopover: View {
             currentPath: model.exifIndexCurrentPath,
             done: model.exifIndexDone,
             total: model.exifIndexTotal,
-            context: Self.context(source: model.exifIndexSource, rate: model.exifIndexRate),
+            context: Self.context(source: model.exifIndexSource, rate: model.exifIndexRate,
+                                  cached: model.exifIndexCached),
             isRunning: model.isIndexingExif,
             failures: model.failures(.metadata),
             restart: .init(
@@ -39,11 +40,14 @@ struct MetadataJobPopover: View {
             onReveal: { model.revealFailure($0) })
     }
 
-    /// Source + throughput, e.g. "NAS · 212/s".
-    static func context(source: String, rate: Int) -> String? {
+    /// Source, throughput, and how much this pass did NOT have to read.
+    /// The last part matters: without it "8,445 of 8,445" on a 64k library
+    /// looks like most of the photos went missing.
+    static func context(source: String, rate: Int, cached: Int = 0) -> String? {
         var parts: [String] = []
         if !source.isEmpty { parts.append(source) }
         if rate > 0 { parts.append("\(rate)/s") }
+        if cached > 0 { parts.append("\(cached.formatted()) already cached") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
@@ -58,7 +62,7 @@ struct ThumbnailJobPopover: View {
             currentPath: warming.currentPath,
             done: warming.done,
             total: warming.total,
-            context: nil,
+            context: BackgroundWorkText.pace(rate: warming.rate, eta: warming.eta, place: nil),
             isRunning: warming.remaining > 0,
             failures: model.failures(.thumbnail),
             restart: .init(
