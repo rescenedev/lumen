@@ -97,7 +97,14 @@ final class AppModel {
             let status = await PhotosLibraryService.authorize()
             switch status {
             case .authorized, .limited:
-                PhotosLibraryObserver.shared.start()   // invalidate album cache on library changes
+                // Follow the library, don't just snapshot it: the observer used
+                // to invalidate the service's cache and stop there, so a photo
+                // added or deleted in Apple Photos stayed invisible here until
+                // the next launch.
+                PhotosLibraryObserver.shared.onChange = { [weak self] in
+                    Task { @MainActor [weak self] in self?.schedulePhotosRefresh() }
+                }
+                PhotosLibraryObserver.shared.start()
                 let photos = await PhotosLibraryService.fetchAllImages()
                 self.assetPhotos = photos
                 self.photosAccess = (status == .limited) ? .limited : .authorized
@@ -111,6 +118,52 @@ final class AppModel {
     /// True while a Photos album/library scope is fetching from PhotoKit, so the
     /// grid can show "Loading…" instead of an empty "No Photos" state.
     private(set) var isLoadingAssetScope = false
+
+    // MARK: Photos library refresh
+
+    private(set) var isRefreshingPhotos = false
+    @ObservationIgnored private var photosRefreshWork: DispatchWorkItem?
+
+    /// A PhotoKit change arrived. Debounced: importing a burst into Photos
+    /// fires the observer repeatedly, and each refresh re-fetches the whole
+    /// library.
+    private func schedulePhotosRefresh() {
+        photosRefreshWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.refreshPhotosLibrary(announce: false) }
+        photosRefreshWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+    }
+
+    /// Re-read the Photos library from PhotoKit: the asset list, the album
+    /// list, and whichever album is open. `announce` is false for the automatic
+    /// pass — a toast every time Photos touches its own database would be noise.
+    func refreshPhotosLibrary(announce: Bool = true) {
+        guard photosAccess == .authorized || photosAccess == .limited else {
+            // Never loaded (or denied): the normal load path handles both, and
+            // asking for access is its job, not a refresh's.
+            loadPhotosLibraryIfNeeded()
+            return
+        }
+        guard !isRefreshingPhotos else { return }
+        isRefreshingPhotos = true
+        Task {
+            PhotosLibraryService.invalidateAssetCache()
+            let photos = await PhotosLibraryService.fetchAllImages()
+            let albums = await PhotosLibraryService.fetchAlbums()
+            self.assetPhotos = photos
+            self.photosAlbums = albums
+            // Re-fetch the open album too, or the grid keeps showing the old
+            // contents of the very scope the user is looking at.
+            if let open = self.currentAssetAlbumId {
+                self.currentAssetAlbumId = nil
+                self.loadPhotosAlbum(open)
+            }
+            self.isRefreshingPhotos = false
+            if announce {
+                self.showToast("Photos library refreshed · \(photos.count.formatted()) photos")
+            }
+        }
+    }
 
     /// Load one Photos album's assets on demand (cached per album id).
     func loadPhotosAlbum(_ id: String) {

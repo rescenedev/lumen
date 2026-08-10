@@ -167,6 +167,10 @@ final class PhotosLibraryObserver: NSObject, PHPhotoLibraryChangeObserver {
     static let shared = PhotosLibraryObserver()
     private var registered = false
 
+    /// Called after the caches are dropped, so the app can re-read. Without a
+    /// hook here the observer only cleared a cache nobody re-populated.
+    var onChange: (@Sendable () -> Void)?
+
     func start() {
         guard !registered else { return }
         registered = true
@@ -175,5 +179,6 @@ final class PhotosLibraryObserver: NSObject, PHPhotoLibraryChangeObserver {
 
     func photoLibraryDidChange(_ changeInstance: PHChange) {
         PhotosLibraryService.invalidateAssetCache()
+        onChange?()
     }
 }

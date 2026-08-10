@@ -191,6 +191,8 @@ struct SidebarView: View {
                     Text("Photos Library").lineLimit(1)
                     Spacer()
                     switch model.photosAccess {
+                    case _ where model.isRefreshingPhotos:
+                        ProgressView().controlSize(.small)
                     case .loading:
                         ProgressView().controlSize(.small)
                     case .denied:
@@ -209,6 +211,9 @@ struct SidebarView: View {
             }
             .tag(SidebarItem.photosLibrary)
             .contextMenu {
+                Button("Refresh") { model.refreshPhotosLibrary() }
+                    .disabled(model.isRefreshingPhotos)
+                Divider()
                 exportMenu { model.exportPhotosLibrary(style: $0) }
             }
 

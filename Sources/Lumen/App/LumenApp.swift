@@ -26,6 +26,9 @@ struct LumenApp: App {
 
             // File menu additions
             CommandGroup(after: .newItem) {
+                Button("Refresh Photos Library") { model.refreshPhotosLibrary() }
+                    .keyboardShortcut("r", modifiers: .command)
+
                 Button("Add to Library…") { model.presentOpenPanel() }
                     .keyboardShortcut("o", modifiers: .command)
                 Button("Clear Library") { model.clearLibrary() }
