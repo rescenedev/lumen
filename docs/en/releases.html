@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.15">
+    <div class="release-head">
+      <h2>0.5.15</h2><span class="date">August 11, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Fixed thumbnails never being built at all</h3>
+    <ul>
+      <li><b>Folder-watcher rescans no longer overlap.</b> A rescan walks the entire library — 107,000 photos across three SMB shares on the reference machine — and filesystem events arrive far faster than that finishes, so passes piled up: <b>13 concurrent walker threads, 37% CPU, 3GB resident</b>, and <b>not one thumbnail produced</b>, because each new pass restarted the thumbnail work before the previous one could finish anything.</li>
+      <li><b>Thumbnail restarts are coalesced too.</b> Sizing a pass hashes every photo in the library (~3s at 107,000), so a run of library changes spent all its time re-sizing the work and none doing it.</li>
+      <li>A change that lands mid-scan is replayed once afterwards rather than lost.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.14">
     <div class="release-head">
-      <h2>0.5.14</h2><span class="date">August 10, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.14</h2><span class="date">August 10, 2026</span>
     </div>
     <h3>Refresh the Photos library</h3>
     <ul>

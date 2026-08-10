@@ -475,3 +475,40 @@ func exportJobTests() {
         }
     }
 }
+
+/// Coalescing rules for the two whole-library passes. Both were re-entered by
+/// filesystem events faster than they could finish, which on a 107k-photo
+/// library across three SMB shares meant 13 concurrent walkers, 37% CPU, and
+/// zero thumbnails produced — every pass restarted the next before it worked.
+func reconcileCoalescingTests() {
+    /// The single-flight rule as a pure decision, so it can be pinned without
+    /// driving a live AppModel.
+    func decide(running: Bool, deferred: Bool) -> (start: Bool, deferAfter: Bool) {
+        if running { return (false, true) }
+        return (true, deferred)
+    }
+
+    test("aSecondEventDuringAScanIsHeld_notRun") {
+        let d = decide(running: true, deferred: false)
+        check(!d.start, "a concurrent full-library walk is what caused the pile-up")
+        check(d.deferAfter, "but the change must not be lost")
+    }
+
+    test("anIdleModelStartsImmediately") {
+        let d = decide(running: false, deferred: false)
+        check(d.start)
+        check(!d.deferAfter)
+    }
+
+    test("manyEventsDuringOneScanCollapseToASingleReplay") {
+        // Ten events land mid-scan; exactly one replay must follow — the tenth
+        // event is already covered by the pass the first one scheduled.
+        var deferred = false
+        for _ in 0..<10 { if decide(running: true, deferred: deferred).deferAfter { deferred = true } }
+        check(deferred, "something must be replayed")
+        // After the replay consumes the flag, nothing further is queued.
+        deferred = false
+        check(!decide(running: false, deferred: deferred).deferAfter,
+              "the replay must not schedule yet another one — that is the endless chain")
+    }
+}

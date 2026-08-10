@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.15">
+    <div class="release-head">
+      <h2>0.5.15</h2><span class="date">2026년 8월 11일</span><span class="tag">최신</span>
+    </div>
+    <h3>썸네일이 아예 안 만들어지던 문제 수정</h3>
+    <ul>
+      <li><b>폴더 감시 재스캔이 겹쳐서 돌던 것을 한 번에 하나로 제한했습니다.</b> 재스캔은 라이브러리 전체를 훑는데(실측 10만 7천 장, SMB 공유 3개), 파일시스템 이벤트는 그보다 훨씬 빨리 옵니다. 그래서 스캔이 계속 쌓여 <b>동시 13개 스레드 · CPU 37% · 메모리 3GB</b>를 쓰면서도 썸네일은 <b>단 한 장도 만들어지지 않았습니다</b> — 새 스캔이 매번 썸네일 작업을 처음부터 다시 시작시켰기 때문입니다.</li>
+      <li><b>썸네일 작업 재시작도 묶어서 처리합니다.</b> 재시작할 때마다 라이브러리 전체의 캐시 여부를 다시 계산하는데(10만 장 기준 약 3초), 라이브러리가 연달아 바뀌면 그 계산만 반복하다 끝났습니다.</li>
+      <li>스캔 중에 들어온 변경은 잃지 않고 스캔이 끝난 뒤 한 번 처리합니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.14">
     <div class="release-head">
-      <h2>0.5.14</h2><span class="date">2026년 8월 10일</span><span class="tag">최신</span>
+      <h2>0.5.14</h2><span class="date">2026년 8월 10일</span>
     </div>
     <h3>Photos 라이브러리 새로고침</h3>
     <ul>

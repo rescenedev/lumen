@@ -676,6 +676,19 @@ final class AppModel {
     /// Kick off background warming of the on-disk thumbnail cache for every
     /// photo, so navigating to any folder is instant even on a NAS. The scope
     /// the user is currently looking at warms first, then the rest of the library.
+    @ObservationIgnored private var warmRestartWork: DispatchWorkItem?
+
+    /// Restart warming, but not more than once per burst. Sizing a pass hashes
+    /// every entry in the library (~3s at 107k), and it cancels whatever the
+    /// warm queue was doing — so a run of library changes that each called this
+    /// directly meant warming was perpetually re-sized and never ran.
+    private func scheduleThumbnailWarming() {
+        warmRestartWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.startThumbnailWarming() }
+        warmRestartWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+    }
+
     private func startThumbnailWarming() {
         var entries = allPhotos.map { (url: $0.url, mtime: $0.cacheMtime) }
         let visible = gatherUnsorted()
@@ -1723,9 +1736,10 @@ final class AppModel {
         if rescanDeferred { rescanDeferred = false; rescanRoots() }
     }
 
-    /// A folder-watcher event arrived while an import was walking the disk, and
-    /// was held back — see `rescanRoots`.
+    /// A folder-watcher event arrived while an import or another reconcile was
+    /// walking the disk, and was held back — see `rescanRoots`.
     @ObservationIgnored private var rescanDeferred = false
+    @ObservationIgnored private var isReconciling = false
 
     /// Import walks stream their results back: enumerating a 30k-photo folder on
     /// an SMB share takes minutes, and the old path published *nothing* until it
@@ -1840,7 +1854,7 @@ final class AppModel {
                   : "Stopped — added \(added.count.formatted()) photos")
 
         if !exif.isEmpty { await indexExif(for: added) }  // full index is deferred until needed
-        startThumbnailWarming()
+        scheduleThumbnailWarming()
     }
 
     /// Append a freshly scanned batch and EXTEND the derived caches in place,
@@ -2106,7 +2120,7 @@ final class AppModel {
         watcher?.watch(roots)
 
         if !exif.isEmpty, !added.isEmpty { await indexExif(for: added) }
-        startThumbnailWarming()
+        scheduleThumbnailWarming()
     }
 
     /// What an index pass can skip because the same FILE is already covered
@@ -2391,6 +2405,15 @@ final class AppModel {
         // "never apply a stale diff" guard. Hold the event and replay it once
         // the import (and its folder-mtime write) has settled.
         guard !isScanning else { rescanDeferred = true; return }
+        // Single-flight. A reconcile walks the WHOLE library — 107k files across
+        // three SMB shares on the reference machine — and FSEvents fires far
+        // faster than that completes, so overlapping passes piled up: measured
+        // 13 concurrent walker threads, 37% CPU, 3GB resident, and zero
+        // thumbnails produced because each pass restarted the warm queue before
+        // the last could finish anything. Coalesce instead: one runs, one is
+        // remembered, everything else is already covered by the one that will.
+        guard !isReconciling else { rescanDeferred = true; return }
+        isReconciling = true
 
         // Stat the roots off the main actor: an FS change on a stalled-but-mounted
         // SMB share would otherwise block the main thread on fileExists until the
@@ -2401,6 +2424,14 @@ final class AppModel {
                 roots.filter { FileManager.default.fileExists(atPath: $0.path) }
             }.value
             await self?.reconcile(roots: available)
+            guard let self else { return }
+            self.isReconciling = false
+            // Replay exactly one held event, so a change that landed mid-scan
+            // isn't lost — without turning that into an endless chain.
+            if self.rescanDeferred {
+                self.rescanDeferred = false
+                self.rescanRoots()
+            }
         }
     }
 
