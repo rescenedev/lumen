@@ -2286,7 +2286,22 @@ final class AppModel {
             while start < urls.count {
                 let end = min(start + chunkSize, urls.count)
                 let chunk = Array(urls[start..<end])
-                let result = await Task.detached(priority: .utility) { ExifIndexer.index(chunk) }.value
+                // Read in the lumen-meta-bg helper process. A malformed file
+                // that aborts ImageIO then costs one photo — recorded by name —
+                // instead of taking the app down mid-pass. The client falls
+                // back to in-process reading when the helper isn't present.
+                let result = await Task.detached(priority: .utility) { () -> ExifIndexer.Result in
+                    var out = ExifIndexer.Result()
+                    let now = Date()
+                    MetadataHelperClient.index(chunk) { path, info, failure in
+                        out.info[path] = info
+                        if let failure {
+                            out.failures.append(JobFailure(kind: .metadata, path: path,
+                                                           reason: failure, date: now))
+                        }
+                    }
+                    return out
+                }.value
                 pending.merge(result.info) { _, new in new }
                 if !result.failures.isEmpty {
                     JobFailureLog.shared.record(result.failures)

@@ -25,6 +25,14 @@ let package = Package(
             dependencies: ["LumenKit"],
             path: "Sources/LumenMain"
         ),
+        // Metadata reader, in a process of its own. ImageIO can abort on a
+        // malformed file; out here that costs one photo instead of the app.
+        // Shipped inside Lumen.app/Contents/MacOS/ by Scripts/make_app.sh.
+        .executableTarget(
+            name: "lumen-meta-bg",
+            dependencies: ["LumenKit"],
+            path: "Sources/LumenMetaBG"
+        ),
         // Test runner. macOS Command Line Tools (no full Xcode) ship neither
         // XCTest nor swift-testing, so `swift test` can't run here. Instead this
         // is a plain executable with a tiny zero-dependency assertion harness:

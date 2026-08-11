@@ -512,3 +512,86 @@ func reconcileCoalescingTests() {
               "the replay must not schedule yet another one — that is the endless chain")
     }
 }
+
+/// The wire format between Lumen and the lumen-meta-bg helper. Both sides
+/// depend on it, and a framing bug here loses photos silently.
+func metadataHelperProtocolTests() {
+    test("replyRoundTripsEveryField") {
+        var info = ExifInfo()
+        info.pixelWidth = 6000; info.pixelHeight = 4000
+        info.cameraMake = "FUJIFILM"; info.cameraModel = "X-T5"
+        info.dateTaken = Date(timeIntervalSince1970: 1_700_000_000)
+        info.latitude = -33.8688; info.longitude = 151.2093
+
+        let reply = MetadataHelper.Reply(path: "/Volumes/nas/한글 폴더/a.HEIC",
+                                         info: info, failure: nil)
+        guard let data = MetadataHelper.encode(reply) else { check(false, "encode failed"); return }
+        checkEqual(data.last, 0x0A, "every reply must be newline-framed")
+        guard let back = MetadataHelper.decode(line: data.dropLast()) else {
+            check(false, "decode failed"); return
+        }
+        checkEqual(back, reply)
+        let round = back.info
+        checkEqual(round.pixelWidth, 6000)
+        checkEqual(round.cameraModel, "X-T5")
+        checkEqual(round.dateTaken, info.dateTaken)
+        checkEqual(round.latitude, -33.8688, "a southern coordinate must keep its sign")
+    }
+
+    test("aFailureCrossesTheWireAsAFailure_notAsEmptyMetadata") {
+        // "read fine, no EXIF" and "could not read" are the same shape unless
+        // the reason survives the trip.
+        let reply = MetadataHelper.Reply(path: "/a.jpg", info: ExifInfo(),
+                                         failure: "Could not open the file")
+        let data = MetadataHelper.encode(reply)!
+        checkEqual(MetadataHelper.decode(line: data.dropLast())?.e, "Could not open the file")
+        let ok = MetadataHelper.Reply(path: "/b.jpg", info: ExifInfo(), failure: nil)
+        checkNil(MetadataHelper.decode(line: MetadataHelper.encode(ok)!.dropLast())?.e)
+    }
+
+    test("requestSurvivesFilenamesContainingNewlines") {
+        // A filename may legally contain a newline; only NUL is impossible, and
+        // that is why the request is NUL-separated.
+        let paths = ["/a/normal.jpg", "/a/we\nird.jpg", "/a/한글 사진.HEIC", "/a/tab\there.png"]
+        checkEqual(MetadataHelper.decodeRequest(MetadataHelper.encodeRequest(paths)), paths)
+    }
+
+    test("lineFramingKeepsAPartialReplyForTheNextRead") {
+        // A pipe read lands mid-object all the time; treating the tail as a
+        // frame would drop that photo.
+        let a = MetadataHelper.encode(.init(path: "/a.jpg", info: ExifInfo(), failure: nil))!
+        let b = MetadataHelper.encode(.init(path: "/b.jpg", info: ExifInfo(), failure: nil))!
+        var buffer = a + b.prefix(b.count / 2)
+        let first = MetadataHelper.lines(from: &buffer)
+        checkEqual(first.count, 1, "only the complete reply may be consumed")
+        checkEqual(MetadataHelper.decode(line: first[0])?.p, "/a.jpg")
+        check(!buffer.isEmpty, "the partial reply must be kept")
+
+        buffer.append(b.suffix(b.count - b.count / 2))
+        let second = MetadataHelper.lines(from: &buffer)
+        checkEqual(second.count, 1)
+        checkEqual(MetadataHelper.decode(line: second[0])?.p, "/b.jpg")
+        check(buffer.isEmpty, "a fully consumed buffer leaves no tail")
+    }
+
+    test("emptyAndGarbageFramesAreIgnored_notCrashed") {
+        checkNil(MetadataHelper.decode(line: Data()))
+        checkNil(MetadataHelper.decode(line: Data("not json".utf8)))
+        checkEqual(MetadataHelper.decodeRequest(Data()), [])
+    }
+
+    test("theHelperIsOptional_theClientStillIndexes") {
+        // A dev build has no bundled helper; metadata must still be read.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lumen-helper-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let broken = dir.appendingPathComponent("broken.jpg")
+        FileManager.default.createFile(atPath: broken.path, contents: Data("nope".utf8))
+
+        var seen: [String: String?] = [:]
+        MetadataHelperClient.index([broken]) { path, _, failure in seen[path] = failure }
+        checkEqual(seen.count, 1, "every requested path must come back with an outcome")
+        check((seen[broken.path] ?? nil) != nil, "an unreadable file reports a reason")
+    }
+}

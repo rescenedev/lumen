@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.16">
+    <div class="release-head">
+      <h2>0.5.16</h2><span class="date">2026년 8월 11일</span><span class="tag">최신</span>
+    </div>
+    <h3>메타데이터를 별도 프로세스에서 읽습니다</h3>
+    <ul>
+      <li><b>사진 메타데이터 읽기가 <code>lumen-meta-bg</code>라는 별도 프로세스로 분리됐습니다.</b> 시스템 이미지 디코더는 손상된 파일에서 프로세스째 죽을 수 있는데, 예전에는 그게 곧 Lumen이 사진 보는 중에 통째로 종료된다는 뜻이었고 그 회차 작업도 다 날아갔습니다. 이제 헬퍼만 죽고, <b>죽인 파일이 이름으로 기록되며</b>, 다음 사진부터 이어서 진행합니다.</li>
+      <li>사고를 일으킨 파일을 특정할 수 있게 된 것 자체가 이득입니다 — 상태바 메타데이터 항목을 눌러 목록과 사유를 보고 다시 시도할 수 있습니다.</li>
+      <li>헬퍼가 없으면 예전처럼 앱 안에서 읽습니다. 기능이 사라지지는 않습니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.15">
     <div class="release-head">
-      <h2>0.5.15</h2><span class="date">2026년 8월 11일</span><span class="tag">최신</span>
+      <h2>0.5.15</h2><span class="date">2026년 8월 11일</span>
     </div>
     <h3>썸네일이 아예 안 만들어지던 문제 수정</h3>
     <ul>

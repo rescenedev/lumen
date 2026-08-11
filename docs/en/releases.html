@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.16">
+    <div class="release-head">
+      <h2>0.5.16</h2><span class="date">August 11, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Metadata is read in a separate process</h3>
+    <ul>
+      <li><b>Photo metadata is now read by a helper process, <code>lumen-meta-bg</code>.</b> The system image decoder can abort the whole process on a malformed file — which used to mean Lumen itself died mid-browse and lost the pass. Now only the helper dies, <b>the file that killed it is recorded by name</b>, and indexing resumes at the next photo.</li>
+      <li>Being able to name the offending file is the real win: open the metadata item in the status bar to see the list with reasons, and retry.</li>
+      <li>If the helper is missing, metadata is read in-process exactly as before — the feature degrades, it never disappears.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.15">
     <div class="release-head">
-      <h2>0.5.15</h2><span class="date">August 11, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.15</h2><span class="date">August 11, 2026</span>
     </div>
     <h3>Fixed thumbnails never being built at all</h3>
     <ul>
