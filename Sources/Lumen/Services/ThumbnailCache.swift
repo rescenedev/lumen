@@ -412,9 +412,15 @@ final class ThumbnailCache {
             let chunks = Self.warmChunkRanges(total: total, chunkSize: Self.warmChunkSize)
             func enqueueChunk(_ index: Int) {
                 guard self.warmGeneration.value == generation, index < chunks.count else { return }
-                let pending = Counter(chunks[index].count)
-                for entry in todo[chunks[index]] {
-                    let disk = self.diskURL(entry.url, maxPixel, mtime: entry.mtime)
+                // One operation per GROUP of photos, not per photo: the decode
+                // now happens in the lumen-thumb-bg worker, and a process per
+                // photo would cost ~10ms each — 17 minutes of pure spawn
+                // overhead across a 100k-photo library. Per group it is ~20s.
+                let slice = Array(todo[chunks[index]])
+                let groups = stride(from: 0, to: slice.count, by: Self.helperBatch)
+                    .map { Array(slice[$0..<min($0 + Self.helperBatch, slice.count)]) }
+                let pendingGroups = Counter(groups.count)
+                for group in groups {
                     let op = BlockOperation()
                     op.queuePriority = .low
                     op.addExecutionBlock { [weak self, weak op] in
@@ -425,41 +431,32 @@ final class ThumbnailCache {
                             Thread.sleep(forTimeInterval: self.trickleDelay)
                             guard op?.isCancelled == false else { return }
                         }
-                        if !FileManager.default.fileExists(atPath: disk.path) {
-                            // Dedupe against the display/prefetch lanes: if one of
-                            // them is decoding this file right now, wait it out and
-                            // re-check instead of issuing a duplicate NAS read.
-                            let owned = self.decodeGate.acquireOrWait(entry.url.path)
-                            defer { if owned { self.decodeGate.release(entry.url.path) } }
-                            if !FileManager.default.fileExists(atPath: disk.path) {
-                                var image = Self.downsample(url: entry.url, maxPixel: maxPixel)
-                                if image == nil { image = QuickLookThumbnailer.thumbnail(for: entry.url, maxPixel: maxPixel) }
-                                if let image {
-                                    self.writeDisk(image, to: disk)   // disk only — don't evict memory
-                                } else {
-                                    // Both decoders declined: a corrupt file, an
-                                    // unsupported format, or the volume went away
-                                    // mid-pass. Recorded so the status popover can
-                                    // show which photos never got a thumbnail
-                                    // instead of them just staying blank forever.
-                                    JobFailureLog.shared.record(
-                                        kind: .thumbnail, path: entry.url.path,
-                                        reason: FileManager.default.fileExists(atPath: entry.url.path)
-                                            ? "Could not decode the image"
-                                            : "File not reachable")
-                                }
-                            }
+                        let items = group.map {
+                            ThumbnailHelper.Item(path: $0.url.path, mtime: $0.mtime)
                         }
-                        let (left, push) = counter.tick()
-                        if push || left == 0 {
-                            let path = entry.url.path
-                            DispatchQueue.main.async { progress(left, total, left == 0 ? nil : path) }
+                        // The worker re-checks the disk before decoding, which
+                        // is what keeps this from duplicating a display lane's
+                        // work now that the in-process decode gate can't span
+                        // the process boundary.
+                        ThumbnailHelperClient.build(
+                            items, maxPixel: maxPixel,
+                            isCancelled: { [weak self, weak op] in
+                                op?.isCancelled != false || self?.warmGeneration.value != generation
+                            }
+                        ) { path, failure in
+                            if let failure {
+                                JobFailureLog.shared.record(kind: .thumbnail, path: path, reason: failure)
+                            }
+                            let (left, push) = counter.tick()
+                            if push || left == 0 {
+                                DispatchQueue.main.async { progress(left, total, left == 0 ? nil : path) }
+                            }
                         }
                     }
                     op.completionBlock = {
                         // Fires for cancelled ops too, so the chain can't stall;
                         // the generation guard above stops a dead pass instead.
-                        let (left, _) = pending.tick()
+                        let (left, _) = pendingGroups.tick()
                         if left == 0 {
                             DispatchQueue.global(qos: .utility).async { enqueueChunk(index + 1) }
                         }
@@ -476,6 +473,11 @@ final class ThumbnailCache {
     /// between chunk hand-offs, small enough that resident operations stay
     /// bounded (~400 instead of the whole library).
     private static let warmChunkSize = 400
+
+    /// Photos handed to one lumen-thumb-bg invocation. Large enough that the
+    /// ~10ms process spawn disappears against the decodes, small enough that a
+    /// worker killed for hanging loses little finished work.
+    private static let helperBatch = 50
 
     /// Chunk boundaries for a warm pass — pure helper, unit-tested.
     static func warmChunkRanges(total: Int, chunkSize: Int) -> [Range<Int>] {
@@ -615,6 +617,27 @@ final class ThumbnailCache {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
+    }
+
+    /// Build and store one thumbnail. Exposed so the `lumen-thumb-bg` helper
+    /// performs the EXACT operation the in-process path would — same cache key,
+    /// same encoder, same destination. A helper that derived any of that itself
+    /// would write files the app never looks up.
+    /// Returns nil on success, or a human reason on failure.
+    func buildThumbnail(path: String, mtime: TimeInterval, maxPixel: Int) -> String? {
+        let url = URL(fileURLWithPath: path)
+        let disk = diskURL(url, maxPixel, mtime: mtime)
+        if FileManager.default.fileExists(atPath: disk.path) { return nil }
+        // Check the source exists BEFORE the decoders. QuickLook waits up to
+        // 15s per call, so an offline root — thousands of paths that are simply
+        // not there — would otherwise stall the whole pass one 15-second
+        // timeout at a time.
+        guard FileManager.default.fileExists(atPath: path) else { return "File not reachable" }
+        var image = Self.downsample(url: url, maxPixel: maxPixel)
+        if image == nil { image = QuickLookThumbnailer.thumbnail(for: url, maxPixel: maxPixel) }
+        guard let image else { return "Could not decode the image" }
+        writeDisk(image, to: disk)
+        return nil
     }
 
     private static func downsample(url: URL, maxPixel: Int) -> NSImage? {

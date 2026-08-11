@@ -33,6 +33,14 @@ let package = Package(
             dependencies: ["LumenKit"],
             path: "Sources/LumenMetaBG"
         ),
+        // Thumbnail builder, in a process of its own. The decode path falls
+        // back to QuickLook, which can block forever on a wedged mount — out
+        // here the parent can kill it and carry on.
+        .executableTarget(
+            name: "lumen-thumb-bg",
+            dependencies: ["LumenKit"],
+            path: "Sources/LumenThumbBG"
+        ),
         // Test runner. macOS Command Line Tools (no full Xcode) ship neither
         // XCTest nor swift-testing, so `swift test` can't run here. Instead this
         // is a plain executable with a tiny zero-dependency assertion harness:

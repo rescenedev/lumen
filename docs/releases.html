@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.17">
+    <div class="release-head">
+      <h2>0.5.17</h2><span class="date">2026년 8월 11일</span><span class="tag">최신</span>
+    </div>
+    <h3>썸네일도 별도 프로세스에서 만듭니다</h3>
+    <ul>
+      <li><b>썸네일 생성이 <code>lumen-thumb-bg</code> 프로세스로 분리됐습니다.</b> 메타데이터보다 격리 효과가 큽니다 — 썸네일 경로는 QuickLook까지 부르는데, 마운트가 먹통이면 <b>영영 돌아오지 않습니다.</b> 앱 안에서는 그렇게 물린 작업 슬롯을 회수할 방법이 없었지만, 이제 응답이 끊긴 작업자를 죽이고 그 사진을 기록한 뒤 다음으로 넘어갑니다.</li>
+      <li><b>없는 파일에 QuickLook을 부르지 않습니다.</b> QuickLook은 호출당 최대 15초를 기다리는데, 연결이 끊긴 폴더에는 없는 경로가 수천 개라 그것만으로 작업 전체가 멈췄습니다. 이제 즉시 "파일에 접근할 수 없음"으로 처리합니다.</li>
+      <li>디코딩 버퍼가 앱이 아니라 작업자 프로세스에 쌓이고, 작업이 끝나면 프로세스와 함께 사라집니다.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.16">
     <div class="release-head">
-      <h2>0.5.16</h2><span class="date">2026년 8월 11일</span><span class="tag">최신</span>
+      <h2>0.5.16</h2><span class="date">2026년 8월 11일</span>
     </div>
     <h3>메타데이터를 별도 프로세스에서 읽습니다</h3>
     <ul>

@@ -15,6 +15,7 @@ echo "==> Building release binary…"
 # LumenTests target, which uses `@testable import` and can't build in release.
 swift build -c release --product Lumen
 swift build -c release --product lumen-meta-bg
+swift build -c release --product lumen-thumb-bg
 
 echo "==> Assembling app bundle…"
 rm -rf "$APP_BUNDLE"
@@ -24,6 +25,7 @@ cp "$BUILD_DIR/$APP_NAME" "$CONTENTS/MacOS/$APP_NAME"
 # Metadata helper — a separate process so a file that crashes ImageIO costs one
 # photo, not the app. Signed with the app below (nested code, inner first).
 cp "$BUILD_DIR/lumen-meta-bg" "$CONTENTS/MacOS/lumen-meta-bg"
+cp "$BUILD_DIR/lumen-thumb-bg" "$CONTENTS/MacOS/lumen-thumb-bg"
 cp "$ROOT/Scripts/Info.plist" "$CONTENTS/Info.plist"
 
 # LumenKit's processed resources (String Catalog → toast localization).
@@ -77,6 +79,7 @@ if [ "$have_developer_id" = true ]; then
     # Nested code must be signed before the bundle that contains it, or the
     # outer signature seals an unsigned binary and notarization rejects it.
     codesign "${sign_args[@]}" "$CONTENTS/MacOS/lumen-meta-bg"
+    codesign "${sign_args[@]}" "$CONTENTS/MacOS/lumen-thumb-bg"
     codesign "${sign_args[@]}" "$APP_BUNDLE"
 
     if [ -n "${NOTARY_PROFILE:-}" ]; then
@@ -99,6 +102,7 @@ else
     # --- Ad-hoc signature (lets the app launch locally without Gatekeeper fuss) ---
     echo "==> Ad-hoc signing (no Developer ID — set DEVELOPER_ID to notarize)…"
     codesign --force --sign - "$CONTENTS/MacOS/lumen-meta-bg" 2>/dev/null || true
+    codesign --force --sign - "$CONTENTS/MacOS/lumen-thumb-bg" 2>/dev/null || true
     codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null || \
         echo "    (codesign skipped — app will still run locally)"
 fi

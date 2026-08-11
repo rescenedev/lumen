@@ -595,3 +595,65 @@ func metadataHelperProtocolTests() {
         check((seen[broken.path] ?? nil) != nil, "an unreadable file reports a reason")
     }
 }
+
+/// The lumen-thumb-bg wire format. A framing or pairing bug here writes cache
+/// entries under keys nothing ever looks up — silent, and expensive to notice.
+func thumbnailHelperProtocolTests() {
+    test("requestRoundTripsPathsAndModificationTimes") {
+        let items = [ThumbnailHelper.Item(path: "/Volumes/nas/한글 폴더/a.HEIC", mtime: 1_700_000_000),
+                     ThumbnailHelper.Item(path: "/a/we\nird.jpg", mtime: 0),
+                     ThumbnailHelper.Item(path: "/b.png", mtime: 1.5)]
+        let back = ThumbnailHelper.decodeRequest(ThumbnailHelper.encodeRequest(items))
+        checkEqual(back, items, "a newline in a filename must survive — hence NUL separators")
+    }
+
+    test("aDanglingHalfPairIsDropped_notGuessed") {
+        // A truncated write must not produce an item with an invented mtime:
+        // that would key the thumbnail somewhere nothing looks it up.
+        var data = ThumbnailHelper.encodeRequest([.init(path: "/a.jpg", mtime: 5)])
+        data.append(contentsOf: Array("/b.jpg".utf8))
+        data.append(0x00)   // path, but no mtime field after it
+        let back = ThumbnailHelper.decodeRequest(data)
+        checkEqual(back.count, 1)
+        checkEqual(back.first?.path, "/a.jpg")
+    }
+
+    test("aNonNumericMtimeIsRejected") {
+        var data = Data("/a.jpg".utf8); data.append(0x00)
+        data.append(contentsOf: Array("not-a-number".utf8)); data.append(0x00)
+        check(ThumbnailHelper.decodeRequest(data).isEmpty)
+    }
+
+    test("replyDistinguishesSuccessFromFailure") {
+        let ok = ThumbnailHelper.Reply(p: "/a.jpg", e: nil)
+        let bad = ThumbnailHelper.Reply(p: "/b.jpg", e: "Could not decode the image")
+        checkNil(ThumbnailHelper.decode(line: ThumbnailHelper.encode(ok)!.dropLast())?.e)
+        checkEqual(ThumbnailHelper.decode(line: ThumbnailHelper.encode(bad)!.dropLast())?.e,
+                   "Could not decode the image")
+    }
+
+    test("lineFramingKeepsAPartialReply") {
+        let a = ThumbnailHelper.encode(.init(p: "/a.jpg", e: nil))!
+        let b = ThumbnailHelper.encode(.init(p: "/b.jpg", e: nil))!
+        var buffer = a + b.prefix(b.count / 2)
+        checkEqual(ThumbnailHelper.lines(from: &buffer).count, 1)
+        check(!buffer.isEmpty)
+        buffer.append(b.suffix(b.count - b.count / 2))
+        checkEqual(ThumbnailHelper.lines(from: &buffer).count, 1)
+        check(buffer.isEmpty)
+    }
+
+    test("theHelperIsOptional_theClientStillBuilds") {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lumen-thumb-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let broken = dir.appendingPathComponent("broken.jpg")
+        FileManager.default.createFile(atPath: broken.path, contents: Data("nope".utf8))
+
+        var seen: [String: String?] = [:]
+        ThumbnailHelperClient.build([.init(path: broken.path, mtime: 1)],
+                                    maxPixel: 128, isCancelled: { false }) { p, e in seen[p] = e }
+        checkEqual(seen.count, 1, "every requested photo must come back with an outcome")
+    }
+}

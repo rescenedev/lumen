@@ -106,9 +106,21 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.17">
+    <div class="release-head">
+      <h2>0.5.17</h2><span class="date">August 11, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Thumbnails are built in a separate process too</h3>
+    <ul>
+      <li><b>Thumbnail building moved to a <code>lumen-thumb-bg</code> worker.</b> It gains more from isolation than metadata did: the thumbnail path falls back to QuickLook, which on a wedged mount <b>never returns at all</b>. In-process there was no way to reclaim a lane pinned like that; now a worker that stops answering is killed, the photo is recorded, and the pass continues.</li>
+      <li><b>QuickLook is no longer called for files that aren't there.</b> It waits up to 15 seconds per call, and a disconnected folder is thousands of missing paths — enough to stall the whole pass by itself. Those are now reported immediately as unreachable.</li>
+      <li>Decode buffers now accumulate in the worker rather than the app, and go away when it exits.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.16">
     <div class="release-head">
-      <h2>0.5.16</h2><span class="date">August 11, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.16</h2><span class="date">August 11, 2026</span>
     </div>
     <h3>Metadata is read in a separate process</h3>
     <ul>
