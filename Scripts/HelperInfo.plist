@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Embedded into the helper binaries' __TEXT,__info_plist section.
+       They link AppKit (NSImage, QuickLook), which by default registers a
+       plain executable as a regular foreground app — so every warm worker
+       showed up in the Cmd-Tab switcher, eight at a time. LSBackgroundOnly
+       keeps them out of the switcher and the Dock entirely; they have no UI
+       and must never be able to come forward. -->
+  <key>LSBackgroundOnly</key>
+  <true/>
+  <key>CFBundleIdentifier</key>
+  <string>com.prototype.lumen.helper</string>
+  <key>CFBundleName</key>
+  <string>Lumen Helper</string>
+</dict>
+</plist>

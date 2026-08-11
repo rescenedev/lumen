@@ -106,9 +106,19 @@
 
 <main class="wrap">
 
+  <article class="release" id="v0.5.18">
+    <div class="release-head">
+      <h2>0.5.18</h2><span class="date">August 11, 2026</span><span class="tag">Latest</span>
+    </div>
+    <h3>Background workers no longer appear in the app switcher</h3>
+    <ul>
+      <li><b>Fixed Lumen showing up many times in Cmd-Tab.</b> The metadata and thumbnail workers split out in 0.5.16 and 0.5.17 were registered as ordinary apps, so with eight thumbnail workers running you got eight icons in the switcher. They are now marked background-only and appear in neither the switcher nor the Dock.</li>
+    </ul>
+  </article>
+
   <article class="release" id="v0.5.17">
     <div class="release-head">
-      <h2>0.5.17</h2><span class="date">August 11, 2026</span><span class="tag">Latest</span>
+      <h2>0.5.17</h2><span class="date">August 11, 2026</span>
     </div>
     <h3>Thumbnails are built in a separate process too</h3>
     <ul>

@@ -31,7 +31,17 @@ let package = Package(
         .executableTarget(
             name: "lumen-meta-bg",
             dependencies: ["LumenKit"],
-            path: "Sources/LumenMetaBG"
+            path: "Sources/LumenMetaBG",
+            linkerSettings: [
+                // Embed LSBackgroundOnly so these never appear in the Dock or
+                // the Cmd-Tab switcher. A plain executable that links AppKit is
+                // otherwise registered as a regular app — with eight warm
+                // workers running, that meant eight icons in the switcher.
+                .unsafeFlags(["-Xlinker", "-sectcreate",
+                              "-Xlinker", "__TEXT",
+                              "-Xlinker", "__info_plist",
+                              "-Xlinker", "Scripts/HelperInfo.plist"])
+            ]
         ),
         // Thumbnail builder, in a process of its own. The decode path falls
         // back to QuickLook, which can block forever on a wedged mount — out
@@ -39,7 +49,17 @@ let package = Package(
         .executableTarget(
             name: "lumen-thumb-bg",
             dependencies: ["LumenKit"],
-            path: "Sources/LumenThumbBG"
+            path: "Sources/LumenThumbBG",
+            linkerSettings: [
+                // Embed LSBackgroundOnly so these never appear in the Dock or
+                // the Cmd-Tab switcher. A plain executable that links AppKit is
+                // otherwise registered as a regular app — with eight warm
+                // workers running, that meant eight icons in the switcher.
+                .unsafeFlags(["-Xlinker", "-sectcreate",
+                              "-Xlinker", "__TEXT",
+                              "-Xlinker", "__info_plist",
+                              "-Xlinker", "Scripts/HelperInfo.plist"])
+            ]
         ),
         // Test runner. macOS Command Line Tools (no full Xcode) ship neither
         // XCTest nor swift-testing, so `swift test` can't run here. Instead this
