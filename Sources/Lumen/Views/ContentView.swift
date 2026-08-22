@@ -65,7 +65,6 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $model.showAbout) { AboutView() }
-        .sheet(isPresented: $model.showShortcuts) { ShortcutsView() }
         .sheet(isPresented: $model.showHistory) { HistoryView() }
         .sheet(isPresented: $model.showEditor) {
             if let target = model.editTarget { CropResizeView(photo: target) }
@@ -76,6 +75,13 @@ struct ContentView: View {
         .sheet(isPresented: $model.showBatchResize) {
             BatchResizeView(photos: model.batchTargets)
         }
+        .shortcutsPaletteKey()
+        .overlay {
+            if model.showShortcuts {
+                ShortcutsPalette { model.showShortcuts = false }
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: model.showShortcuts)
         .overlay(alignment: .bottom) { toastBanner }
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: model.toast)
         .task { model.checkForUpdates() }

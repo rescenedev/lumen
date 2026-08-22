@@ -24,6 +24,10 @@ struct ViewerView: View {
     @State private var containerSize: CGSize = .zero
     @State private var loadedImageSize: CGSize?   // actual pixel size of the shown image
 
+    // "V" toggles the neighbouring photo previews at the left/right edges so
+    // the viewer shows a single image. Persisted across launches.
+    @AppStorage("lumen.viewerEdgePreviews") private var edgePreviewsEnabled = true
+
     // One-time culling-shortcuts hint, shown on the very first viewer open.
     @State private var showCullingHint = false
     private static let cullingHintKey = "lumen.cullingHintShown"
@@ -47,6 +51,10 @@ struct ViewerView: View {
 
                 if model.showExifOverlay {
                     exifOverlay(for: photo)
+                }
+
+                if isPlaying {
+                    slideshowIndicator
                 }
 
                 if chromeVisible {
@@ -84,7 +92,10 @@ struct ViewerView: View {
             lastAdvance = now
             advanceSlideshow()
         }
-        .onKeyPress(.escape) { model.closeViewer(); return .handled }
+        .onKeyPress(.escape) {
+            if model.showShortcuts { model.showShortcuts = false } else { model.closeViewer() }
+            return .handled
+        }
         .onKeyPress(.leftArrow) { model.viewerStep(-1); return .handled }
         .onKeyPress(.rightArrow) { model.viewerStep(1); return .handled }
         .onKeyPress(.space) { model.favoriteAndAdvanceViewer(); return .handled }
@@ -95,6 +106,10 @@ struct ViewerView: View {
         .onKeyPress(KeyEquivalent("f")) { favoriteCurrent(); return .handled }
         .onKeyPress(KeyEquivalent("x")) { rejectCurrent(); return .handled }
         .onKeyPress(KeyEquivalent("i")) { model.showExifOverlay.toggle(); return .handled }
+        .onKeyPress(KeyEquivalent("v")) {
+            withAnimation(.easeInOut(duration: 0.2)) { edgePreviewsEnabled.toggle() }
+            return .handled
+        }
         // Backspace arrives as DEL (\u{7F}), not KeyEquivalent.delete (\u{8}) —
         // match every delete variant or the key looks dead.
         .onKeyPress(keys: [.delete, .deleteForward, KeyEquivalent("\u{7F}")]) { _ in
@@ -262,7 +277,7 @@ struct ViewerView: View {
 
     /// Only show the preview thumbnail when the side margin can hold it without
     /// overlapping the main photo; otherwise show just the chevron button.
-    private var showEdgeThumb: Bool { sideMargin >= 150 }
+    private var showEdgeThumb: Bool { edgePreviewsEnabled && sideMargin >= 150 }
 
     private func edgeButton(photo: Photo?, chevron: String, enabled: Bool,
                             action: @escaping () -> Void) -> some View {
@@ -340,7 +355,9 @@ struct ViewerView: View {
 
             Divider().frame(height: 22).overlay(.white.opacity(0.3))
 
-            toolButton(isPlaying ? "pause.fill" : "play.fill") { toggleSlideshow() }
+            toolButton(isPlaying ? "pause.fill" : "play.fill",
+                       tint: isPlaying ? .yellow : .white) { toggleSlideshow() }
+                .help(isPlaying ? "Pause slideshow (P)" : "Start slideshow (P)")
             toolButton("magnifyingglass") {
                 QuickLookPreview.shared.show(urls: [photo.url], startAt: 0)
             }
@@ -358,13 +375,57 @@ struct ViewerView: View {
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
 
-    private func toolButton(_ systemImage: String, action: @escaping () -> Void) -> some View {
+    private func toolButton(_ systemImage: String, tint: Color = .white,
+                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.title3)
-                .foregroundStyle(.white)
+                .foregroundStyle(tint)
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Slideshow indicator
+
+    /// Badge pinned to the top edge while the slideshow runs — it stays up even
+    /// when the chrome is hidden, so the mode is never invisible. The ring
+    /// drains over the user's interval, previewing the next advance.
+    private var slideshowIndicator: some View {
+        TimelineView(.animation(minimumInterval: 1 / 20)) { context in
+            let elapsed = context.date.timeIntervalSince(lastAdvance)
+            let progress = min(max(elapsed / max(model.slideshowInterval, 0.1), 0), 1)
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.25), lineWidth: 2.5)
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(.yellow, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.yellow)
+                }
+                .frame(width: 20, height: 20)
+
+                Text("Slideshow")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text(String(format: "%.1fs", model.slideshowInterval))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.65))
+                Text("P to stop")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(.horizontal, 16).padding(.vertical, 9)
+            .background(.black.opacity(0.55), in: Capsule())
+            .overlay(Capsule().strokeBorder(.yellow.opacity(0.35)))
+        }
+        .padding(.top, 22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+        .allowsHitTesting(false)
     }
 
     // MARK: - Actions
@@ -391,8 +452,9 @@ struct ViewerView: View {
     }
 
     private func toggleSlideshow() {
-        isPlaying.toggle()
+        withAnimation(.easeInOut(duration: 0.2)) { isPlaying.toggle() }
         if isPlaying { resetZoom(); lastAdvance = Date() }
+        model.showToast(isPlaying ? "Slideshow started" : "Slideshow stopped")
     }
 
     private func advanceSlideshow() {

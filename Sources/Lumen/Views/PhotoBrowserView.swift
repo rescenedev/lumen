@@ -326,6 +326,7 @@ struct BrowserKeyHandlers: ViewModifier {
                 return .handled
             }
             .onKeyPress(.escape) {
+                if model.showShortcuts { model.showShortcuts = false; return .handled }
                 guard !model.selection.isEmpty else { return .ignored }
                 model.clearSelection()
                 return .handled
