@@ -6,7 +6,7 @@
 
 macOS 14(Sonoma) 이상 · Swift 6.3 (개발/테스트는 macOS 26 “Tahoe”).
 
-🔗 랜딩 페이지: https://rescenedev.github.io/lumen
+🔗 랜딩 페이지: https://rescenedev.github.io/lumen · [릴리스 노트](https://rescenedev.github.io/lumen/releases.html)
 
 ## 기능
 
